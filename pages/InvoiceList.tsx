@@ -333,52 +333,71 @@ const InvoiceList = () => {
                       <th className="p-3 text-slate-800 font-bold text-right">Price</th>
                       <th className="p-3 text-slate-800 font-bold text-center">Qty</th>
                       <th className="p-3 text-slate-800 font-bold text-center">Bonus</th>
-                      <th className="p-3 text-slate-800 font-bold text-center">Disc.</th>
+                      <th className="p-3 text-slate-800 font-bold text-center">Disc %</th>
+                      <th className="p-3 text-slate-800 font-bold text-center">Disc Amt</th>
                       <th className="p-3 text-slate-800 font-bold text-right">Total</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {selectedOrder.items.map((item, idx) => (
+                    {selectedOrder.items.map((item, idx) => {
+                      const gross = item.unitPrice * item.quantity;
+                      const percent = item.discountPercent || (gross > 0 ? (item.discount / gross) * 100 : 0);
+                      
+                      return (
                       <tr key={idx}>
                         <td className="p-3 font-medium text-slate-800">{item.productName}</td>
                         <td className="p-3 text-right">{item.unitPrice}</td>
                         <td className="p-3 text-center">{item.quantity}</td>
                         <td className="p-3 text-center">{item.bonusQuantity > 0 ? item.bonusQuantity : '-'}</td>
+                        <td className="p-3 text-center text-slate-600">
+                          {percent > 0.01 ? percent.toFixed(2) + '%' : '-'}
+                        </td>
                         <td className="p-3 text-center">
                           {item.discount > 0 ? item.discount.toFixed(2) : '-'}
                         </td>
                         <td className="p-3 text-right font-bold">{item.subtotal.toFixed(2)}</td>
                       </tr>
-                    ))}
+                    )})}
                   </tbody>
                 </table>
               </div>
 
               <div className="flex flex-col items-end pt-4 border-t border-slate-300 gap-1">
-                 <div className="w-48 flex justify-between text-sm">
-                   <span className="text-slate-600">Subtotal:</span>
-                   <span className="font-medium">
-                     {formatCurrency(selectedOrder.items.reduce((s, i) => s + (i.unitPrice * i.quantity), 0))}
-                   </span>
-                 </div>
-                 <div className="w-48 flex justify-between text-sm">
-                   <span className="text-slate-600">Discount:</span>
-                   <span className="text-red-500 font-medium">
-                     - {formatCurrency(selectedOrder.items.reduce((s, i) => s + (i.discount || 0), 0))}
-                   </span>
-                 </div>
-                 <div className="w-48 flex justify-between text-lg font-bold border-t border-slate-300 pt-2 mt-2">
-                   <span>Total:</span>
-                   <span>{formatCurrency(selectedOrder.totalAmount)}</span>
-                 </div>
-                 <div className="w-48 flex justify-between text-sm pt-1">
-                   <span className="text-slate-500">Paid:</span>
-                   <span className="text-green-600 font-medium">{formatCurrency(selectedOrder.paidAmount)}</span>
-                 </div>
-                 <div className="w-48 flex justify-between text-sm pt-1">
-                   <span className="text-slate-500">Balance:</span>
-                   <span className="text-red-600 font-bold">{formatCurrency(selectedOrder.totalAmount - selectedOrder.paidAmount)}</span>
-                 </div>
+                {(() => {
+                   const subTotal = selectedOrder.items.reduce((s, i) => s + (i.unitPrice * i.quantity), 0);
+                   const totalDiscount = selectedOrder.items.reduce((s, i) => s + (i.discount || 0), 0);
+                   const totalPercent = subTotal > 0 ? (totalDiscount / subTotal) * 100 : 0;
+                   
+                   return (
+                   <>
+                     <div className="w-64 flex justify-between text-sm">
+                       <span className="text-slate-600">Subtotal:</span>
+                       <span className="font-medium">
+                         {formatCurrency(subTotal)}
+                       </span>
+                     </div>
+                     <div className="w-64 flex justify-between text-sm">
+                       <span className="text-slate-600">Discount:</span>
+                       <span className="text-red-500 font-medium flex items-center gap-2">
+                         {totalDiscount > 0 && <span className="text-xs text-slate-500">({totalPercent.toFixed(2)}%)</span>}
+                         <span>- {formatCurrency(totalDiscount)}</span>
+                       </span>
+                     </div>
+                     <div className="w-64 flex justify-between text-lg font-bold border-t border-slate-300 pt-2 mt-2">
+                       <span>Total:</span>
+                       <span>{formatCurrency(selectedOrder.totalAmount)}</span>
+                     </div>
+                     <div className="w-64 flex justify-between text-sm pt-1">
+                       <span className="text-slate-500">Paid:</span>
+                       <span className="text-green-600 font-medium">{formatCurrency(selectedOrder.paidAmount)}</span>
+                     </div>
+                     <div className="w-64 flex justify-between text-sm pt-1">
+                       <span className="text-slate-500">Balance:</span>
+                       <span className="text-red-600 font-bold">{formatCurrency(selectedOrder.totalAmount - selectedOrder.paidAmount)}</span>
+                     </div>
+                   </>
+                   );
+                })()}
               </div>
 
               {/* Print Footer */}

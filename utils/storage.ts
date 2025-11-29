@@ -1,0 +1,257 @@
+import { Product, Customer, Order, Transaction, OrderStatus, TransactionType } from '../types';
+import { INITIAL_PRODUCTS, INITIAL_CUSTOMERS } from '../constants';
+import { supabase, isSupabaseEnabled } from '../services/supabaseClient';
+
+const STORAGE_KEYS = {
+  PRODUCTS: 'emad_products',
+  CUSTOMERS: 'emad_customers',
+  ORDERS: 'emad_orders',
+  TRANSACTIONS: 'emad_transactions',
+};
+
+// Initialize Storage (Seed Supabase or Local Storage if empty)
+export const initStorage = async () => {
+  if (isSupabaseEnabled && supabase) {
+    try {
+      // Check if products exist in DB
+      const { count: productCount, error: pError } = await supabase
+        .from('products')
+        .select('*', { count: 'exact', head: true });
+
+      if (!pError && productCount === 0) {
+        console.log("Seeding Supabase Products...");
+        const dbProducts = INITIAL_PRODUCTS.map(p => ({
+          id: p.id,
+          name: p.name,
+          base_price: p.basePrice,
+          stock: p.stock
+        }));
+        await supabase.from('products').insert(dbProducts);
+      }
+
+      // Check if customers exist in DB
+      const { count: customerCount, error: cError } = await supabase
+        .from('customers')
+        .select('*', { count: 'exact', head: true });
+
+      if (!cError && customerCount === 0) {
+        console.log("Seeding Supabase Customers...");
+        const dbCustomers = INITIAL_CUSTOMERS.map(c => ({
+          id: c.id,
+          name: c.name,
+          type: c.type,
+          address: c.address
+        }));
+        await supabase.from('customers').insert(dbCustomers);
+      }
+    } catch (err) {
+      console.error("Error seeding Supabase:", err);
+    }
+  } else {
+    // Local Storage Fallback
+    if (!localStorage.getItem(STORAGE_KEYS.PRODUCTS)) {
+      localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(INITIAL_PRODUCTS));
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.CUSTOMERS)) {
+      localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(INITIAL_CUSTOMERS));
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.ORDERS)) {
+      localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify([]));
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.TRANSACTIONS)) {
+      localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify([]));
+    }
+  }
+};
+
+// --- DATA ACCESS LAYER ---
+
+export const getProducts = async (): Promise<Product[]> => {
+  if (isSupabaseEnabled && supabase) {
+    const { data, error } = await supabase.from('products').select('*');
+    if (error) {
+      console.error('Supabase error fetching products:', error);
+      return [];
+    }
+    return (data as any[])?.map(p => ({
+      id: p.id,
+      name: p.name,
+      basePrice: Number(p.base_price),
+      stock: p.stock
+    })) || [];
+  }
+  return JSON.parse(localStorage.getItem(STORAGE_KEYS.PRODUCTS) || '[]');
+};
+
+export const getCustomers = async (): Promise<Customer[]> => {
+  if (isSupabaseEnabled && supabase) {
+    const { data, error } = await supabase.from('customers').select('*');
+    if (error) {
+      console.error('Supabase error fetching customers:', error);
+      return [];
+    }
+    return data || [];
+  }
+  return JSON.parse(localStorage.getItem(STORAGE_KEYS.CUSTOMERS) || '[]');
+};
+
+export const getOrders = async (): Promise<Order[]> => {
+  if (isSupabaseEnabled && supabase) {
+    const { data, error } = await supabase.from('orders').select('*');
+    if (error) {
+      console.error('Supabase error fetching orders:', error);
+      return [];
+    }
+    return (data as any[])?.map(o => ({
+      ...o,
+      totalAmount: Number(o.total_amount), 
+      paidAmount: Number(o.paid_amount),
+      customerName: o.customer_name,
+      customerId: o.customer_id
+    })) || [];
+  }
+  return JSON.parse(localStorage.getItem(STORAGE_KEYS.ORDERS) || '[]');
+};
+
+export const getTransactions = async (): Promise<Transaction[]> => {
+  if (isSupabaseEnabled && supabase) {
+    const { data, error } = await supabase.from('transactions').select('*');
+    if (error) {
+      console.error('Supabase error fetching transactions:', error);
+      return [];
+    }
+    return (data as any[])?.map(t => ({
+      ...t,
+      amount: Number(t.amount),
+      referenceId: t.reference_id
+    })) || [];
+  }
+  return JSON.parse(localStorage.getItem(STORAGE_KEYS.TRANSACTIONS) || '[]');
+};
+
+// --- ACTIONS ---
+
+export const saveOrder = async (order: Order) => {
+  if (isSupabaseEnabled && supabase) {
+    // Map to DB columns
+    const dbOrder = {
+      id: order.id,
+      customer_id: order.customerId,
+      customer_name: order.customerName,
+      date: order.date,
+      items: order.items, // Stored as JSONB
+      total_amount: order.totalAmount,
+      paid_amount: order.paidAmount,
+      status: order.status,
+      notes: order.notes
+    };
+    
+    // Upsert Order
+    const { error } = await supabase.from('orders').upsert(dbOrder);
+    if (error) throw error;
+
+    // Decrease Stock
+    for (const item of order.items) {
+       // Fetch current stock
+       const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
+       if (prod) {
+         await supabase.from('products').update({ stock: prod.stock - item.quantity }).eq('id', item.productId);
+       }
+    }
+
+  } else {
+    // Local Storage Fallback
+    const orders = await getOrders();
+    const index = orders.findIndex(o => o.id === order.id);
+    if (index >= 0) {
+      orders[index] = order;
+    } else {
+      orders.push(order);
+    }
+    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    
+    // Update stock if new
+    if (index === -1) {
+      const products = await getProducts();
+      order.items.forEach(item => {
+        const pIndex = products.findIndex(p => p.id === item.productId);
+        if (pIndex >= 0) {
+          products[pIndex].stock -= item.quantity;
+        }
+      });
+      localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+    }
+  }
+};
+
+export const addTransaction = async (transaction: Transaction) => {
+  if (isSupabaseEnabled && supabase) {
+     const dbTxn = {
+       id: transaction.id,
+       type: transaction.type,
+       amount: transaction.amount,
+       date: transaction.date,
+       reference_id: transaction.referenceId,
+       description: transaction.description
+     };
+     
+     const { error } = await supabase.from('transactions').insert(dbTxn);
+     if (error) throw error;
+
+     if (transaction.type === TransactionType.PAYMENT_RECEIVED && transaction.referenceId) {
+        // Fetch current order to update status
+        const { data: order } = await supabase.from('orders').select('*').eq('id', transaction.referenceId).single();
+        if (order) {
+           const newPaid = (Number(order.paid_amount) || 0) + transaction.amount;
+           let newStatus = order.status;
+           if (newPaid >= Number(order.total_amount)) newStatus = OrderStatus.PAID;
+           else if (newPaid > 0) newStatus = OrderStatus.PARTIAL;
+
+           await supabase.from('orders').update({ paid_amount: newPaid, status: newStatus }).eq('id', transaction.referenceId);
+        }
+     }
+
+  } else {
+    // Local Storage Fallback
+    const transactions = await getTransactions();
+    transactions.push(transaction);
+    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
+
+    if (transaction.type === TransactionType.PAYMENT_RECEIVED && transaction.referenceId) {
+      const orders = await getOrders();
+      const orderIndex = orders.findIndex(o => o.id === transaction.referenceId);
+      if (orderIndex >= 0) {
+        const order = orders[orderIndex];
+        order.paidAmount += transaction.amount;
+        if (order.paidAmount >= order.totalAmount) {
+          order.status = OrderStatus.PAID;
+        } else if (order.paidAmount > 0) {
+          order.status = OrderStatus.PARTIAL;
+        }
+        localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+      }
+    }
+  }
+};
+
+export const getFinancialStats = async () => {
+  const transactions = await getTransactions();
+  let repCashOnHand = 0;
+  let transferredToHQ = 0;
+  let totalCollected = 0;
+
+  transactions.forEach(t => {
+    if (t.type === TransactionType.PAYMENT_RECEIVED) {
+      repCashOnHand += t.amount;
+      totalCollected += t.amount;
+    } else if (t.type === TransactionType.DEPOSIT_TO_HQ) {
+      repCashOnHand -= t.amount;
+      transferredToHQ += t.amount;
+    }
+  });
+
+  const orders = await getOrders();
+  const totalSales = orders.reduce((sum, o) => sum + o.totalAmount, 0);
+
+  return { repCashOnHand, transferredToHQ, totalCollected, totalSales };
+};

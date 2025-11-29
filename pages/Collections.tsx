@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { getOrders, addTransaction, getFinancialStats, updateOrder, getTransactions, deleteTransaction, updateTransaction } from '../utils/storage';
 import { Order, TransactionType, OrderStatus, DashboardStats, Transaction, PaymentMethod } from '../types';
-import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search, Calendar, CheckSquare, X, History, FileText, Trash2, Edit2, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search, Calendar, CheckSquare, X, History, FileText, Trash2, Edit2, TrendingDown, TrendingUp, Eye } from 'lucide-react';
 import { formatDate, formatCurrency } from '../utils/helpers';
 
 const Collections = () => {
@@ -15,6 +15,10 @@ const Collections = () => {
   // Filters for History
   const [searchHistory, setSearchHistory] = useState('');
   const [historyMonth, setHistoryMonth] = useState('');
+
+  // Filters for Statement
+  const [searchStatement, setSearchStatement] = useState('');
+  const [viewTxn, setViewTxn] = useState<Transaction | null>(null);
 
   // HQ Transfer State
   const [showTransferModal, setShowTransferModal] = useState(false);
@@ -50,6 +54,15 @@ const Collections = () => {
     setTransactions(fetchedTxns.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     setLoading(false);
   };
+
+  /* --- DATA PROCESSING --- */
+  
+  // Lookup map for fast Customer Name access by Order ID
+  const orderLookup = useMemo(() => {
+    const map: Record<string, string> = {};
+    orders.forEach(o => { map[o.id] = o.customerName; });
+    return map;
+  }, [orders]);
 
   /* --- PAYMENT LOGIC --- */
   const openPaymentModal = (order: Order) => {
@@ -193,7 +206,7 @@ const Collections = () => {
     }
   }
 
-  /* --- DATA FILTERS --- */
+  /* --- DATA FILTERS & CALCULATIONS --- */
   const unpaidOrders = orders
     .filter(o => o.status !== OrderStatus.PAID)
     .filter(o => {
@@ -211,7 +224,6 @@ const Collections = () => {
   const collectionHistory = transactions
     .filter(t => t.type === TransactionType.PAYMENT_RECEIVED)
     .filter(t => {
-      // Find customer name from order ref if possible, or just search description/id
       const order = orders.find(o => o.id === t.referenceId);
       const customerName = order?.customerName || '';
       
@@ -226,15 +238,53 @@ const Collections = () => {
   // Deposits History
   const depositHistory = transactions.filter(t => t.type === TransactionType.DEPOSIT_TO_HQ);
   
-  // Statement Data: All transactions affecting Rep Cash
-  // (Collections + Deposits + Cash Expenses)
-  const statementData = transactions
+  // Statement Data Preparation
+  // 1. Get raw chronological transactions
+  const rawStatementTxns = transactions
     .filter(t => 
       t.type === TransactionType.PAYMENT_RECEIVED || 
       t.type === TransactionType.DEPOSIT_TO_HQ || 
       (t.type === TransactionType.EXPENSE && t.paymentMethod === PaymentMethod.CASH)
     )
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()); // Chronological for ledger
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()); // Ascending for balance calc
+
+  // 2. Calculate Balance & Enrich Data
+  let runningBalance = 0;
+  const enrichedStatementData = rawStatementTxns.map(txn => {
+    const isCredit = txn.type === TransactionType.PAYMENT_RECEIVED;
+    const amount = txn.amount;
+    
+    if (isCredit) runningBalance += amount;
+    else runningBalance -= amount;
+
+    // Determine Display Name (Customer or Provider or Type)
+    let mainLabel = '';
+    if (txn.type === TransactionType.PAYMENT_RECEIVED) {
+      mainLabel = txn.referenceId && orderLookup[txn.referenceId] ? orderLookup[txn.referenceId] : 'Customer Payment';
+    } else if (txn.type === TransactionType.EXPENSE) {
+      mainLabel = txn.providerName ? txn.providerName : 'Cash Expense';
+    } else if (txn.type === TransactionType.DEPOSIT_TO_HQ) {
+      mainLabel = 'Deposit to HQ';
+    }
+
+    return {
+      ...txn,
+      balanceSnapshot: runningBalance,
+      mainLabel
+    };
+  });
+
+  // 3. Apply Filters (Reverse chronological for display usually, but ledger often better chronological. Let's keep existing order or reverse?)
+  // Usually statements show latest first? No, ledgers show chronological. Existing was chronological.
+  const filteredStatementData = enrichedStatementData.filter(txn => {
+    const search = searchStatement.toLowerCase();
+    return (
+      txn.mainLabel.toLowerCase().includes(search) ||
+      txn.description.toLowerCase().includes(search) ||
+      txn.amount.toString().includes(search) ||
+      formatDate(txn.date).includes(search)
+    );
+  });
 
   // Calculate Monthly Report Stats
   const getMonthlyReport = () => {
@@ -510,10 +560,22 @@ const Collections = () => {
       {/* TAB CONTENT: STATEMENT */}
       {activeTab === 'statement' && (
          <div className="space-y-6">
-            <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                <h3 className="font-bold text-slate-800">Cash Statement Report</h3>
-                <div className="text-sm text-slate-500">
-                   Running Balance for Rep Cash on Hand
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-4 items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-slate-800">Cash Statement Report</h3>
+                  <div className="text-sm text-slate-500">Running Balance for Rep Cash on Hand</div>
+                </div>
+                
+                {/* Statement Search */}
+                <div className="relative min-w-[250px]">
+                   <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                   <input 
+                     type="text" 
+                     placeholder="Search Statement..." 
+                     value={searchStatement}
+                     onChange={(e) => setSearchStatement(e.target.value)}
+                     className="pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg w-full focus:ring-2 focus:ring-primary outline-none"
+                   />
                 </div>
             </div>
 
@@ -521,47 +583,122 @@ const Collections = () => {
                <table className="w-full text-left text-sm">
                   <thead className="bg-slate-50 border-b border-slate-200">
                      <tr>
-                        <th className="p-3 font-medium text-slate-600">Date</th>
+                        <th className="p-3 font-medium text-slate-600 w-28">Date</th>
                         <th className="p-3 font-medium text-slate-600">Description</th>
-                        <th className="p-3 font-medium text-slate-600 text-center">Type</th>
-                        <th className="p-3 font-medium text-slate-600 text-right">Debit (Out)</th>
-                        <th className="p-3 font-medium text-slate-600 text-right">Credit (In)</th>
-                        <th className="p-3 font-medium text-slate-600 text-right">Balance</th>
+                        <th className="p-3 font-medium text-slate-600 text-center w-24">Type</th>
+                        <th className="p-3 font-medium text-slate-600 text-right w-28">Debit (Out)</th>
+                        <th className="p-3 font-medium text-slate-600 text-right w-28">Credit (In)</th>
+                        <th className="p-3 font-medium text-slate-600 text-right w-28">Balance</th>
+                        <th className="p-3 font-medium text-slate-600 text-center w-16">View</th>
                      </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                     {(() => {
-                        let balance = 0;
-                        if (statementData.length === 0) return <tr><td colSpan={6} className="p-8 text-center text-slate-400">No transactions recorded.</td></tr>;
-
-                        return statementData.map(txn => {
+                     {filteredStatementData.length === 0 ? (
+                        <tr><td colSpan={7} className="p-8 text-center text-slate-400">No transactions recorded.</td></tr>
+                     ) : (
+                        filteredStatementData.map(txn => {
                            const isCredit = txn.type === TransactionType.PAYMENT_RECEIVED;
-                           // Calculate Balance
-                           if (isCredit) balance += txn.amount;
-                           else balance -= txn.amount;
-
                            return (
                               <tr key={txn.id} className="hover:bg-slate-50">
-                                 <td className="p-3 text-slate-600">{formatDate(txn.date)}</td>
-                                 <td className="p-3 text-slate-800">{txn.description}</td>
-                                 <td className="p-3 text-center">
-                                    {txn.type === TransactionType.PAYMENT_RECEIVED && <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs">Collection</span>}
-                                    {txn.type === TransactionType.DEPOSIT_TO_HQ && <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">Deposit</span>}
-                                    {txn.type === TransactionType.EXPENSE && <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-xs">Expense</span>}
+                                 <td className="p-3 text-slate-600 align-top pt-4">{formatDate(txn.date)}</td>
+                                 <td className="p-3 align-top">
+                                    <div className="flex flex-col">
+                                       <span className="font-bold text-slate-800 text-sm">
+                                          {txn.mainLabel}
+                                       </span>
+                                       <span className="text-xs text-slate-500 mt-0.5 line-clamp-1">
+                                          {txn.description}
+                                       </span>
+                                    </div>
                                  </td>
-                                 <td className="p-3 text-right text-slate-500">
+                                 <td className="p-3 text-center align-top pt-4">
+                                    {txn.type === TransactionType.PAYMENT_RECEIVED && <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">Coll.</span>}
+                                    {txn.type === TransactionType.DEPOSIT_TO_HQ && <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">Dep.</span>}
+                                    {txn.type === TransactionType.EXPENSE && <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">Exp.</span>}
+                                 </td>
+                                 <td className="p-3 text-right text-slate-500 align-top pt-4">
                                     {!isCredit ? formatCurrency(txn.amount) : '-'}
                                  </td>
-                                 <td className="p-3 text-right text-slate-500">
+                                 <td className="p-3 text-right text-slate-500 align-top pt-4">
                                     {isCredit ? formatCurrency(txn.amount) : '-'}
                                  </td>
-                                 <td className="p-3 text-right font-bold text-slate-800">{formatCurrency(balance)}</td>
+                                 <td className="p-3 text-right font-bold text-slate-800 align-top pt-4">{formatCurrency(txn.balanceSnapshot)}</td>
+                                 <td className="p-3 text-center align-top pt-3">
+                                    <button 
+                                      onClick={() => setViewTxn(txn)}
+                                      className="text-slate-400 hover:text-primary transition-colors p-1"
+                                      title="View Full Details"
+                                    >
+                                       <Eye size={16}/>
+                                    </button>
+                                 </td>
                               </tr>
                            );
-                        });
-                     })()}
+                        })
+                     )}
                   </tbody>
                </table>
+            </div>
+         </div>
+      )}
+
+      {/* Transaction Details Modal */}
+      {viewTxn && (
+         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl w-full max-w-md shadow-2xl p-6 relative">
+               <button 
+                 onClick={() => setViewTxn(null)} 
+                 className="absolute right-4 top-4 text-slate-400 hover:text-slate-600"
+               >
+                  <X size={20}/>
+               </button>
+               
+               <h3 className="text-xl font-bold text-slate-800 mb-1">Transaction Details</h3>
+               <p className="text-sm text-slate-500 mb-6 font-mono">{viewTxn.id}</p>
+
+               <div className="space-y-4">
+                  <div className="flex justify-between border-b border-slate-100 pb-2">
+                     <span className="text-slate-500 text-sm">Date</span>
+                     <span className="font-medium text-slate-800">{formatDate(viewTxn.date)}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-100 pb-2">
+                     <span className="text-slate-500 text-sm">Type</span>
+                     <span className="font-medium text-slate-800">{viewTxn.type.replace(/_/g, ' ')}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-100 pb-2">
+                     <span className="text-slate-500 text-sm">Amount</span>
+                     <span className="font-bold text-lg text-primary">{formatCurrency(viewTxn.amount)}</span>
+                  </div>
+                  
+                  {/* Entity Name */}
+                  <div className="border-b border-slate-100 pb-2">
+                     <span className="text-slate-500 text-sm block mb-1">
+                        {viewTxn.type === TransactionType.PAYMENT_RECEIVED ? 'Received From' : 
+                         viewTxn.type === TransactionType.EXPENSE ? 'Paid To' : 'Description Header'}
+                     </span>
+                     <span className="font-bold text-slate-800 text-lg">
+                        {/* Access the enriched mainLabel if available, or compute locally for this modal if viewing directly from raw txn */}
+                        {(() => {
+                           if (viewTxn.type === TransactionType.PAYMENT_RECEIVED) return viewTxn.referenceId && orderLookup[viewTxn.referenceId] ? orderLookup[viewTxn.referenceId] : 'Customer';
+                           if (viewTxn.type === TransactionType.EXPENSE) return viewTxn.providerName || 'Cash Expense';
+                           return 'HQ Deposit';
+                        })()}
+                     </span>
+                  </div>
+
+                  <div>
+                     <span className="text-slate-500 text-sm block mb-2">Full Description</span>
+                     <div className="bg-slate-50 p-3 rounded-lg text-sm text-slate-700 leading-relaxed border border-slate-200 max-h-40 overflow-y-auto">
+                        {viewTxn.description}
+                     </div>
+                  </div>
+               </div>
+
+               <div className="mt-6 text-right">
+                  <button onClick={() => setViewTxn(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium">
+                     Close
+                  </button>
+               </div>
             </div>
          </div>
       )}

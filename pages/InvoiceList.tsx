@@ -1,22 +1,25 @@
 
 import React, { useEffect, useState } from 'react';
-import { getOrders } from '../utils/storage';
+import { getOrders, deleteOrder } from '../utils/storage';
 import { Order, OrderStatus } from '../types';
-import { Search, Loader2 } from 'lucide-react';
+import { Search, Loader2, Edit, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const InvoiceList = () => {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchOrders = async () => {
-      const data = await getOrders();
-      setOrders(data);
-      setLoading(false);
-    };
     fetchOrders();
   }, []);
+
+  const fetchOrders = async () => {
+    const data = await getOrders();
+    setOrders(data);
+    setLoading(false);
+  };
 
   const getStatusColor = (status: OrderStatus) => {
     switch (status) {
@@ -25,6 +28,26 @@ const InvoiceList = () => {
       case OrderStatus.PENDING: return 'bg-slate-100 text-slate-600 border-slate-200';
       default: return 'bg-gray-100 text-gray-600';
     }
+  };
+
+  const handleDelete = async (orderId: string) => {
+    if (window.confirm("Are you sure you want to delete this invoice?")) {
+      if (window.confirm("WARNING: Deleting this invoice will also remove all associated payment records and RESTORE the items to inventory. This cannot be undone. Proceed?")) {
+        setLoading(true);
+        try {
+          await deleteOrder(orderId);
+          await fetchOrders();
+        } catch (error) {
+          console.error("Error deleting order:", error);
+          alert("Failed to delete order.");
+          setLoading(false);
+        }
+      }
+    }
+  };
+
+  const handleEdit = (orderId: string) => {
+    navigate(`/new-order?id=${orderId}`);
   };
 
   const filteredOrders = orders.filter(o => 
@@ -70,11 +93,12 @@ const InvoiceList = () => {
               <th className="p-4 font-medium text-slate-600">Total</th>
               <th className="p-4 font-medium text-slate-600">Paid</th>
               <th className="p-4 font-medium text-slate-600">Status</th>
+              <th className="p-4 font-medium text-slate-600 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filteredOrders.length === 0 ? (
-              <tr><td colSpan={7} className="p-8 text-center text-slate-400">No invoices found.</td></tr>
+              <tr><td colSpan={8} className="p-8 text-center text-slate-400">No invoices found.</td></tr>
             ) : (
               filteredOrders.map(order => (
                 <tr key={order.id} className="hover:bg-slate-50 transition-colors">
@@ -88,6 +112,24 @@ const InvoiceList = () => {
                     <span className={`text-xs px-2 py-1 rounded-full border font-medium ${getStatusColor(order.status)}`}>
                       {order.status}
                     </span>
+                  </td>
+                  <td className="p-4 text-right">
+                    <div className="flex justify-end gap-2">
+                       <button 
+                         onClick={() => handleEdit(order.id)}
+                         className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                         title="Edit Invoice"
+                       >
+                         <Edit size={16} />
+                       </button>
+                       <button 
+                         onClick={() => handleDelete(order.id)}
+                         className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                         title="Delete Invoice"
+                       >
+                         <Trash2 size={16} />
+                       </button>
+                    </div>
                   </td>
                 </tr>
               ))

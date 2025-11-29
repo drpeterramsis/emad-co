@@ -1,12 +1,15 @@
 
 import React, { useState, useEffect } from 'react';
-import { getCustomers, getProducts, saveOrder } from '../utils/storage';
+import { getCustomers, getProducts, saveOrder, getOrder, updateOrder } from '../utils/storage';
 import { Customer, Product, OrderItem, OrderStatus } from '../types';
 import { Plus, Trash2, Save, Calculator, Loader2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const NewOrder = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editOrderId = searchParams.get('id');
+
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -15,6 +18,7 @@ const NewOrder = () => {
   const [cart, setCart] = useState<OrderItem[]>([]);
   const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadingOrder, setLoadingOrder] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -24,10 +28,23 @@ const NewOrder = () => {
       ]);
       setCustomers(custData);
       setProducts(prodData);
+      
+      // If editing, fetch order data
+      if (editOrderId) {
+        setLoadingOrder(true);
+        const order = await getOrder(editOrderId);
+        if (order) {
+          setSelectedCustomer(order.customerId);
+          setOrderDate(new Date(order.date).toISOString().split('T')[0]);
+          setCart(order.items);
+        }
+        setLoadingOrder(false);
+      }
+      
       setLoading(false);
     };
     fetchData();
-  }, []);
+  }, [editOrderId]);
 
   const getCustomerDefaultDiscount = () => {
     const c = customers.find(x => x.id === selectedCustomer);
@@ -90,19 +107,36 @@ const NewOrder = () => {
     try {
       const customer = customers.find(c => c.id === selectedCustomer);
       
-      const newOrder = {
-        id: `ORD-${Date.now()}`,
-        customerId: selectedCustomer,
-        customerName: customer?.name || 'Unknown',
-        date: orderDate,
-        items: cart,
-        totalAmount: calculateTotal(),
-        paidAmount: 0,
-        status: OrderStatus.PENDING,
-        notes: ''
-      };
-
-      await saveOrder(newOrder);
+      if (editOrderId) {
+        // Update existing order
+        const updatedOrder = {
+          id: editOrderId,
+          customerId: selectedCustomer,
+          customerName: customer?.name || 'Unknown',
+          date: orderDate,
+          items: cart,
+          totalAmount: calculateTotal(),
+          paidAmount: 0, // This will be ignored/merged in storage for updates typically, or preserve existing
+          status: OrderStatus.PENDING, // This might need preservation if we edit paid invoice
+          notes: ''
+        };
+        // We need to pass the full object, storage handles preservation of paid amount
+        await updateOrder(updatedOrder as any);
+      } else {
+        // Create new order
+        const newOrder = {
+          id: `ORD-${Date.now()}`,
+          customerId: selectedCustomer,
+          customerName: customer?.name || 'Unknown',
+          date: orderDate,
+          items: cart,
+          totalAmount: calculateTotal(),
+          paidAmount: 0,
+          status: OrderStatus.PENDING,
+          notes: ''
+        };
+        await saveOrder(newOrder);
+      }
       navigate('/invoices');
     } catch (error) {
       console.error("Failed to save order", error);
@@ -112,7 +146,7 @@ const NewOrder = () => {
     }
   };
 
-  if (loading) {
+  if (loading || loadingOrder) {
     return (
       <div className="flex items-center justify-center h-full min-h-screen">
         <Loader2 className="animate-spin text-primary" size={32} />
@@ -124,8 +158,12 @@ const NewOrder = () => {
     <div className="p-8 max-w-6xl mx-auto">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h2 className="text-3xl font-bold text-slate-800">New Sales Order</h2>
-          <p className="text-slate-500">Record a transaction for a customer</p>
+          <h2 className="text-3xl font-bold text-slate-800">
+            {editOrderId ? 'Edit Sales Order' : 'New Sales Order'}
+          </h2>
+          <p className="text-slate-500">
+            {editOrderId ? 'Modify transaction details' : 'Record a transaction for a customer'}
+          </p>
         </div>
       </div>
 
@@ -264,7 +302,7 @@ const NewOrder = () => {
         <div className="flex justify-end gap-3">
           <button
             type="button"
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/invoices')}
             className="px-6 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 font-medium"
           >
             Cancel
@@ -275,7 +313,7 @@ const NewOrder = () => {
             className="px-6 py-2 rounded-lg bg-primary text-white hover:bg-teal-800 font-medium shadow-lg shadow-teal-700/30 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? <Loader2 className="animate-spin" size={18}/> : <Save size={18} />}
-            {isSubmitting ? 'Saving...' : 'Complete Order'}
+            {isSubmitting ? 'Saving...' : (editOrderId ? 'Update Order' : 'Complete Order')}
           </button>
         </div>
       </form>

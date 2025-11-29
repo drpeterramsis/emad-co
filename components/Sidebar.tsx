@@ -51,8 +51,8 @@ const Sidebar = () => {
             AR
           </div>
           <div>
-            <p className="text-sm font-medium">Ahmed Rep</p>
-            <p className="text-xs text-slate-500">Sales Representative</p>
+            <p className="text-sm font-medium">Dr. Emad Ibrahem</p>
+            <p className="text-xs text-slate-500">Co-Founder and CEO</p>
           </div>
         </div>
       </div>

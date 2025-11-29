@@ -123,6 +123,23 @@ export const getOrders = async (): Promise<Order[]> => {
   return JSON.parse(localStorage.getItem(STORAGE_KEYS.ORDERS) || '[]');
 };
 
+export const getOrder = async (orderId: string): Promise<Order | null> => {
+  if (isSupabaseEnabled && supabase) {
+    const { data, error } = await supabase.from('orders').select('*').eq('id', orderId).single();
+    if (error || !data) return null;
+    return {
+      ...data,
+      totalAmount: Number(data.total_amount),
+      paidAmount: Number(data.paid_amount),
+      customerName: data.customer_name,
+      customerId: data.customer_id
+    };
+  } else {
+    const orders = await getOrders();
+    return orders.find(o => o.id === orderId) || null;
+  }
+};
+
 export const getTransactions = async (): Promise<Transaction[]> => {
   if (isSupabaseEnabled && supabase) {
     const { data, error } = await supabase.from('transactions').select('*');
@@ -172,25 +189,137 @@ export const saveOrder = async (order: Order) => {
   } else {
     // Local Storage Fallback
     const orders = await getOrders();
-    const index = orders.findIndex(o => o.id === order.id);
-    if (index >= 0) {
-      orders[index] = order;
-    } else {
-      orders.push(order);
-    }
+    orders.push(order);
     localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     
-    // Update stock if new
-    if (index === -1) {
-      const products = await getProducts();
-      order.items.forEach(item => {
+    // Update stock
+    const products = await getProducts();
+    order.items.forEach(item => {
+      const pIndex = products.findIndex(p => p.id === item.productId);
+      if (pIndex >= 0) {
+        products[pIndex].stock -= item.quantity;
+      }
+    });
+    localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+  }
+};
+
+export const updateOrder = async (order: Order) => {
+  if (isSupabaseEnabled && supabase) {
+    // 1. Fetch old order to restore stock
+    const { data: oldOrder } = await supabase.from('orders').select('*').eq('id', order.id).single();
+    
+    if (oldOrder && oldOrder.items) {
+      // Restore stock from old items
+      const oldItems = oldOrder.items as any[];
+      for (const item of oldItems) {
+         const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
+         if (prod) {
+           await supabase.from('products').update({ stock: prod.stock + item.quantity }).eq('id', item.productId);
+         }
+      }
+    }
+
+    // 2. Update Order Record
+    const dbOrder = {
+      customer_id: order.customerId,
+      customer_name: order.customerName,
+      date: order.date,
+      items: order.items,
+      total_amount: order.totalAmount,
+      notes: order.notes
+      // We don't touch paid_amount or status here unless specifically handled, 
+      // but typically editing an invoice shouldn't reset payments unless logic demands.
+      // For now we keep existing paid amount.
+    };
+    
+    const { error } = await supabase.from('orders').update(dbOrder).eq('id', order.id);
+    if (error) throw error;
+
+    // 3. Deduct stock for new items
+    for (const item of order.items) {
+       const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
+       if (prod) {
+         await supabase.from('products').update({ stock: prod.stock - item.quantity }).eq('id', item.productId);
+       }
+    }
+
+  } else {
+    // Local Storage Fallback
+    const orders = await getOrders();
+    const index = orders.findIndex(o => o.id === order.id);
+    
+    if (index === -1) throw new Error("Order not found");
+
+    const oldOrder = orders[index];
+    let products = await getProducts();
+
+    // Restore old stock
+    oldOrder.items.forEach(item => {
+      const pIndex = products.findIndex(p => p.id === item.productId);
+      if (pIndex >= 0) products[pIndex].stock += item.quantity;
+    });
+
+    // Update order
+    orders[index] = { ...oldOrder, ...order, paidAmount: oldOrder.paidAmount, status: oldOrder.status }; // Preserve payment status
+
+    // Deduct new stock
+    order.items.forEach(item => {
+      const pIndex = products.findIndex(p => p.id === item.productId);
+      if (pIndex >= 0) products[pIndex].stock -= item.quantity;
+    });
+
+    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+    localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+  }
+};
+
+export const deleteOrder = async (orderId: string) => {
+  if (isSupabaseEnabled && supabase) {
+    // 1. Fetch order to restore stock
+    const { data: order } = await supabase.from('orders').select('*').eq('id', orderId).single();
+    
+    if (order && order.items) {
+      // Restore stock
+      const items = order.items as any[];
+      for (const item of items) {
+         const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
+         if (prod) {
+           await supabase.from('products').update({ stock: prod.stock + item.quantity }).eq('id', item.productId);
+         }
+      }
+    }
+
+    // 2. Delete related transactions
+    await supabase.from('transactions').delete().eq('reference_id', orderId);
+
+    // 3. Delete order
+    const { error } = await supabase.from('orders').delete().eq('id', orderId);
+    if (error) throw error;
+
+  } else {
+    // Local Storage Fallback
+    let orders = await getOrders();
+    const orderToDelete = orders.find(o => o.id === orderId);
+    
+    if (orderToDelete) {
+      let products = await getProducts();
+      // Restore stock
+      orderToDelete.items.forEach(item => {
         const pIndex = products.findIndex(p => p.id === item.productId);
-        if (pIndex >= 0) {
-          products[pIndex].stock -= item.quantity;
-        }
+        if (pIndex >= 0) products[pIndex].stock += item.quantity;
       });
       localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
     }
+
+    // Delete transactions
+    let transactions = await getTransactions();
+    transactions = transactions.filter(t => t.referenceId !== orderId);
+    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
+
+    // Delete order
+    orders = orders.filter(o => o.id !== orderId);
+    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
   }
 };
 

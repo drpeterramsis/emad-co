@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { getCustomers, addCustomer, deleteCustomer } from '../utils/storage';
+import { getCustomers, addCustomer, deleteCustomer, updateCustomer } from '../utils/storage';
 import { Customer, CustomerType } from '../types';
-import { Users, Plus, MapPin, Search, Loader2, Trash2, Map } from 'lucide-react';
+import { Users, Plus, MapPin, Search, Loader2, Trash2, Map, Edit2 } from 'lucide-react';
 
 const Customers = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -12,6 +12,7 @@ const Customers = () => {
   const [errorMsg, setErrorMsg] = useState('');
   
   // Form State
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState<CustomerType>(CustomerType.PHARMACY);
   const [newAddress, setNewAddress] = useState('');
@@ -28,32 +29,69 @@ const Customers = () => {
     setLoading(false);
   };
 
+  const resetForm = () => {
+    setEditingId(null);
+    setNewName('');
+    setNewType(CustomerType.PHARMACY);
+    setNewAddress('');
+    setNewBrick('');
+    setNewDiscount('0');
+    setErrorMsg('');
+  };
+
+  const handleOpenAddModal = () => {
+    resetForm();
+    setShowModal(true);
+  };
+
+  const handleOpenEditModal = (customer: Customer) => {
+    setEditingId(customer.id);
+    setNewName(customer.name);
+    setNewType(customer.type);
+    setNewAddress(customer.address || '');
+    setNewBrick(customer.brick || '');
+    setNewDiscount(customer.defaultDiscount?.toString() || '0');
+    setErrorMsg('');
+    setShowModal(true);
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
-    const customer: Customer = {
-      id: `CUST-${Date.now()}`,
-      name: newName,
-      type: newType,
-      address: newAddress,
-      brick: newBrick,
-      defaultDiscount: parseFloat(newDiscount) || 0
-    };
 
     try {
-      await addCustomer(customer);
+      if (editingId) {
+        // Update existing customer
+        const updatedCustomer: Customer = {
+          id: editingId,
+          name: newName,
+          type: newType,
+          address: newAddress,
+          brick: newBrick,
+          defaultDiscount: parseFloat(newDiscount) || 0
+        };
+        await updateCustomer(updatedCustomer);
+      } else {
+        // Add new customer
+        const customer: Customer = {
+          id: `CUST-${Date.now()}`,
+          name: newName,
+          type: newType,
+          address: newAddress,
+          brick: newBrick,
+          defaultDiscount: parseFloat(newDiscount) || 0
+        };
+        await addCustomer(customer);
+      }
+
       await fetchCustomers();
       setShowModal(false);
-      
-      // Reset form
-      setNewName('');
-      setNewType(CustomerType.PHARMACY);
-      setNewAddress('');
-      setNewBrick('');
-      setNewDiscount('0');
-    } catch (err) {
+      resetForm();
+    } catch (err: any) {
       console.error("Error saving customer:", err);
-      setErrorMsg("Failed to save customer. Please check your connection and try again.");
+      // More specific error message if possible
+      const message = err.message || "Failed to save customer. Please check your connection and try again.";
+      setErrorMsg(message);
     }
   };
 
@@ -106,7 +144,7 @@ const Customers = () => {
             />
           </div>
           <button 
-            onClick={() => setShowModal(true)}
+            onClick={handleOpenAddModal}
             className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center gap-2 shadow-lg shadow-teal-700/30"
           >
             <Plus size={18} /> Add Customer
@@ -159,13 +197,22 @@ const Customers = () => {
                     {customer.defaultDiscount ? `${customer.defaultDiscount}%` : '-'}
                   </td>
                   <td className="p-4 text-right">
-                    <button
-                      onClick={() => handleDelete(customer.id, customer.name)}
-                      className="text-slate-400 hover:text-red-500 transition-colors p-2 rounded-full hover:bg-red-50"
-                      title="Delete Customer"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => handleOpenEditModal(customer)}
+                        className="text-slate-400 hover:text-blue-500 transition-colors p-2 rounded-full hover:bg-blue-50"
+                        title="Edit Customer"
+                      >
+                        <Edit2 size={18} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(customer.id, customer.name)}
+                        className="text-slate-400 hover:text-red-500 transition-colors p-2 rounded-full hover:bg-red-50"
+                        title="Delete Customer"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -174,11 +221,13 @@ const Customers = () => {
         </table>
       </div>
 
-      {/* Add Customer Modal */}
+      {/* Add/Edit Customer Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-xl w-full max-w-lg shadow-2xl">
-            <h3 className="text-xl font-bold mb-4 text-slate-800">New Customer</h3>
+            <h3 className="text-xl font-bold mb-4 text-slate-800">
+              {editingId ? 'Edit Customer' : 'New Customer'}
+            </h3>
             {errorMsg && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
                 {errorMsg}
@@ -258,7 +307,7 @@ const Customers = () => {
                   type="submit"
                   className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-teal-800 shadow"
                 >
-                  Save Customer
+                  {editingId ? 'Update Customer' : 'Save Customer'}
                 </button>
               </div>
             </form>

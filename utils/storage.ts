@@ -250,16 +250,49 @@ export const addCustomer = async (customer: Customer) => {
       id: customer.id,
       name: customer.name,
       type: customer.type,
-      address: customer.address,
-      brick: customer.brick,
-      default_discount: customer.defaultDiscount
+      address: customer.address || null, // Ensure null if undefined
+      brick: customer.brick || null,     // Ensure null if undefined
+      default_discount: customer.defaultDiscount || 0
     };
     const { error } = await supabase.from('customers').insert(dbCustomer);
-    if (error) throw error;
+    if (error) {
+      console.error("Supabase Add Customer Error:", error);
+      throw error;
+    }
   } else {
     const customers = await getCustomers();
     customers.push(customer);
     localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+  }
+};
+
+export const updateCustomer = async (customer: Customer) => {
+  if (isSupabaseEnabled && supabase) {
+    const dbCustomer = {
+      name: customer.name,
+      type: customer.type,
+      address: customer.address || null,
+      brick: customer.brick || null,
+      default_discount: customer.defaultDiscount || 0
+    };
+    const { error } = await supabase
+      .from('customers')
+      .update(dbCustomer)
+      .eq('id', customer.id);
+      
+    if (error) {
+      console.error("Supabase Update Customer Error:", error);
+      throw error;
+    }
+  } else {
+    const customers = await getCustomers();
+    const index = customers.findIndex(c => c.id === customer.id);
+    if (index !== -1) {
+      customers[index] = customer;
+      localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+    } else {
+      throw new Error("Customer not found locally");
+    }
   }
 };
 

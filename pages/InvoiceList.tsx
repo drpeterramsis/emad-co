@@ -4,6 +4,7 @@ import { getOrders, deleteOrder } from '../utils/storage';
 import { Order, OrderStatus } from '../types';
 import { Search, Loader2, Edit, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { formatDate, formatCurrency } from '../utils/helpers';
 
 const InvoiceList = () => {
   const navigate = useNavigate();
@@ -102,12 +103,12 @@ const InvoiceList = () => {
             ) : (
               filteredOrders.map(order => (
                 <tr key={order.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="p-4 text-slate-600">{new Date(order.date).toLocaleDateString()}</td>
+                  <td className="p-4 text-slate-600 font-medium">{formatDate(order.date)}</td>
                   <td className="p-4 font-mono text-xs">{order.id}</td>
                   <td className="p-4 font-medium text-slate-800">{order.customerName}</td>
                   <td className="p-4 text-slate-600">{order.items.length}</td>
-                  <td className="p-4 font-bold text-slate-800">EGP {order.totalAmount.toFixed(2)}</td>
-                  <td className="p-4 text-slate-600">EGP {order.paidAmount.toFixed(2)}</td>
+                  <td className="p-4 font-bold text-slate-800">{formatCurrency(order.totalAmount)}</td>
+                  <td className="p-4 text-slate-600">{formatCurrency(order.paidAmount)}</td>
                   <td className="p-4">
                     <span className={`text-xs px-2 py-1 rounded-full border font-medium ${getStatusColor(order.status)}`}>
                       {order.status}

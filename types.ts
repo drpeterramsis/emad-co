@@ -42,6 +42,7 @@ export interface OrderItem {
   bonusQuantity: number; // Bounce/Free goods
   unitPrice: number; // Can be overridden
   discount: number; // Flat amount deduction
+  discountPercent?: number; // Percentage deduction
   subtotal: number;
 }
 

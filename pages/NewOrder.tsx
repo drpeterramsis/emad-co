@@ -1,9 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getCustomers, getProducts, saveOrder, getOrder, updateOrder } from '../utils/storage';
 import { Customer, Product, OrderItem, OrderStatus } from '../types';
-import { Plus, Trash2, Save, Calculator, Loader2 } from 'lucide-react';
+import { Trash2, Save, Loader2, Search, X } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import LoadingOverlay from '../components/LoadingOverlay';
 
 const NewOrder = () => {
   const navigate = useNavigate();
@@ -19,6 +20,11 @@ const NewOrder = () => {
   const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingOrder, setLoadingOrder] = useState(false);
+
+  // Product Search State
+  const [productSearch, setProductSearch] = useState('');
+  const [showProductList, setShowProductList] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -44,6 +50,15 @@ const NewOrder = () => {
       setLoading(false);
     };
     fetchData();
+
+    // Click outside handler for search dropdown
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setShowProductList(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [editOrderId]);
 
   const getCustomerDefaultDiscount = () => {
@@ -51,14 +66,11 @@ const NewOrder = () => {
     return c?.defaultDiscount || 0;
   };
 
-  const addProductToCart = (productId: string) => {
-    const product = products.find(p => p.id === productId);
-    if (!product) return;
-
+  const addProductToCart = (product: Product) => {
     // Auto-calculate discount if customer has a default percentage
     const defaultDiscountPercent = getCustomerDefaultDiscount();
     const discountAmount = defaultDiscountPercent > 0 
-      ? Math.round(product.basePrice * (defaultDiscountPercent / 100)) 
+      ? (product.basePrice * (defaultDiscountPercent / 100)) 
       : 0;
     
     const subtotal = product.basePrice - discountAmount;
@@ -72,25 +84,49 @@ const NewOrder = () => {
         bonusQuantity: 0,
         unitPrice: product.basePrice,
         discount: discountAmount,
+        discountPercent: defaultDiscountPercent,
         subtotal: subtotal
       }
     ]);
+    
+    setProductSearch('');
+    setShowProductList(false);
   };
 
-  const updateCartItem = (index: number, field: keyof OrderItem, value: any) => {
+  const updateCartItem = (index: number, field: keyof OrderItem | 'discountPercent', value: any) => {
     const newCart = [...cart];
     const item = newCart[index];
     
-    // Type safety for dynamic update
+    // Type safety update
     (item as any)[field] = value;
 
-    // Recalculate subtotal (Bonus does not affect subtotal, only stock)
-    if (field === 'quantity' || field === 'unitPrice' || field === 'discount') {
-      const price = Number(item.unitPrice);
-      const qty = Number(item.quantity);
-      const discount = Number(item.discount);
-      item.subtotal = (price * qty) - discount;
+    const price = Number(item.unitPrice);
+    const qty = Number(item.quantity);
+
+    // Recalculate Logic
+    if (field === 'quantity' || field === 'unitPrice') {
+      // Keep percentage fixed, update discount amount
+      const percent = Number(item.discountPercent || 0);
+      const gross = price * qty;
+      const newDiscount = (gross * percent) / 100;
+      item.discount = Number(newDiscount.toFixed(2));
+      item.subtotal = gross - item.discount;
+    } else if (field === 'discountPercent') {
+      // Update discount amount based on new percentage
+      const percent = Number(value);
+      const gross = price * qty;
+      const newDiscount = (gross * percent) / 100;
+      item.discount = Number(newDiscount.toFixed(2));
+      item.subtotal = gross - item.discount;
+    } else if (field === 'discount') {
+      // Update percentage based on new fixed amount
+      const discountVal = Number(value);
+      const gross = price * qty;
+      item.subtotal = gross - discountVal;
+      // Reverse calculate percentage
+      item.discountPercent = gross > 0 ? Number(((discountVal / gross) * 100).toFixed(2)) : 0;
     }
+
     setCart(newCart);
   };
 
@@ -108,35 +144,20 @@ const NewOrder = () => {
     try {
       const customer = customers.find(c => c.id === selectedCustomer);
       
+      const orderData = {
+        customerId: selectedCustomer,
+        customerName: customer?.name || 'Unknown',
+        date: orderDate,
+        items: cart,
+        totalAmount: calculateTotal(),
+        status: OrderStatus.PENDING,
+        notes: ''
+      };
+
       if (editOrderId) {
-        // Update existing order
-        const updatedOrder = {
-          id: editOrderId,
-          customerId: selectedCustomer,
-          customerName: customer?.name || 'Unknown',
-          date: orderDate,
-          items: cart,
-          totalAmount: calculateTotal(),
-          paidAmount: 0, // This will be ignored/merged in storage for updates typically
-          status: OrderStatus.PENDING, 
-          notes: ''
-        };
-        // We need to pass the full object, storage handles preservation of paid amount
-        await updateOrder(updatedOrder as any);
+        await updateOrder({ ...orderData, id: editOrderId, paidAmount: 0 } as any);
       } else {
-        // Create new order
-        const newOrder = {
-          id: `ORD-${Date.now()}`,
-          customerId: selectedCustomer,
-          customerName: customer?.name || 'Unknown',
-          date: orderDate,
-          items: cart,
-          totalAmount: calculateTotal(),
-          paidAmount: 0,
-          status: OrderStatus.PENDING,
-          notes: ''
-        };
-        await saveOrder(newOrder);
+        await saveOrder({ ...orderData, id: `ORD-${Date.now()}`, paidAmount: 0 } as any);
       }
       navigate('/invoices');
     } catch (error) {
@@ -147,6 +168,11 @@ const NewOrder = () => {
     }
   };
 
+  const filteredProducts = products.filter(p => 
+    p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
+    p.basePrice.toString().includes(productSearch)
+  );
+
   if (loading || loadingOrder) {
     return (
       <div className="flex items-center justify-center h-full min-h-screen">
@@ -156,7 +182,9 @@ const NewOrder = () => {
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="p-8 max-w-7xl mx-auto pb-24">
+      {isSubmitting && <LoadingOverlay />}
+      
       <div className="flex justify-between items-center mb-8">
         <div>
           <h2 className="text-3xl font-bold text-slate-800">
@@ -196,34 +224,73 @@ const NewOrder = () => {
               onChange={(e) => setOrderDate(e.target.value)}
               className="w-full rounded-lg border-slate-300 border p-2.5 outline-none focus:ring-2 focus:ring-primary"
             />
+            {/* Helper for date format preference */}
+            <p className="text-[10px] text-slate-400 mt-1 text-right">DD/MM/YYYY</p>
           </div>
         </div>
 
         {/* Product Selection */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
             <h3 className="text-lg font-semibold">Order Items</h3>
-            <div className="flex gap-2">
-               <select 
-                 className="rounded-lg border-slate-300 border p-2 text-sm w-64"
-                 onChange={(e) => {
-                   if(e.target.value) {
-                     addProductToCart(e.target.value);
-                     e.target.value = ''; // Reset
-                   }
-                 }}
-               >
-                 <option value="">+ Add Product...</option>
-                 {products.map(p => (
-                   <option key={p.id} value={p.id} disabled={p.stock <= 0}>
-                     {p.name} (Stock: {p.stock}) - EGP {p.basePrice}
-                   </option>
-                 ))}
-               </select>
+            
+            {/* Searchable Product Input */}
+            <div className="relative w-full md:w-96" ref={searchContainerRef}>
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
+                <input 
+                  type="text"
+                  placeholder="Search products by name or price..."
+                  value={productSearch}
+                  onFocus={() => setShowProductList(true)}
+                  onChange={(e) => {
+                    setProductSearch(e.target.value);
+                    setShowProductList(true);
+                  }}
+                  className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                />
+                {productSearch && (
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setProductSearch('');
+                      setShowProductList(false);
+                    }}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+
+              {/* Dropdown Results */}
+              {showProductList && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-xl border border-slate-200 max-h-60 overflow-y-auto z-10">
+                  {filteredProducts.length === 0 ? (
+                    <div className="p-4 text-center text-slate-500 text-sm">No products found</div>
+                  ) : (
+                    filteredProducts.map(p => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => addProductToCart(p)}
+                        disabled={p.stock <= 0}
+                        className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-50 last:border-0 flex justify-between items-center group disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <div>
+                          <p className="font-medium text-slate-800 group-hover:text-primary transition-colors">{p.name}</p>
+                          <p className="text-xs text-slate-500">Stock: {p.stock}</p>
+                        </div>
+                        <p className="font-bold text-slate-700">EGP {p.basePrice}</p>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto min-h-[300px]">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
@@ -231,16 +298,17 @@ const NewOrder = () => {
                   <th className="p-3 font-medium text-slate-600 w-24">Price</th>
                   <th className="p-3 font-medium text-slate-600 w-20">Qty</th>
                   <th className="p-3 font-medium text-slate-600 w-20 text-orange-600">Bounce</th>
-                  <th className="p-3 font-medium text-slate-600 w-24">Discount</th>
-                  <th className="p-3 font-medium text-slate-600 w-32">Subtotal</th>
-                  <th className="p-3 font-medium text-slate-600 w-16"></th>
+                  <th className="p-3 font-medium text-slate-600 w-32">Discount %</th>
+                  <th className="p-3 font-medium text-slate-600 w-28">Disc. Amt</th>
+                  <th className="p-3 font-medium text-slate-600 w-32 text-right">Subtotal</th>
+                  <th className="p-3 font-medium text-slate-600 w-12"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {cart.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-slate-400">
-                      No items added yet.
+                    <td colSpan={8} className="p-8 text-center text-slate-400">
+                      No items added yet. Search above to add products.
                     </td>
                   </tr>
                 ) : (
@@ -253,7 +321,7 @@ const NewOrder = () => {
                           min="0"
                           value={item.unitPrice}
                           onChange={(e) => updateCartItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          className="w-20 rounded border border-slate-300 p-1"
+                          className="w-20 rounded border border-slate-300 p-1 text-center"
                         />
                       </td>
                       <td className="p-3">
@@ -262,7 +330,7 @@ const NewOrder = () => {
                           min="1"
                           value={item.quantity}
                           onChange={(e) => updateCartItem(index, 'quantity', parseInt(e.target.value) || 1)}
-                          className="w-16 rounded border border-slate-300 p-1"
+                          className="w-16 rounded border border-slate-300 p-1 text-center font-bold"
                         />
                       </td>
                       <td className="p-3">
@@ -271,8 +339,21 @@ const NewOrder = () => {
                           min="0"
                           value={item.bonusQuantity}
                           onChange={(e) => updateCartItem(index, 'bonusQuantity', parseInt(e.target.value) || 0)}
-                          className="w-16 rounded border border-orange-200 p-1 bg-orange-50 text-orange-800"
+                          className="w-16 rounded border border-orange-200 p-1 bg-orange-50 text-orange-800 text-center"
                         />
+                      </td>
+                      <td className="p-3">
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={item.discountPercent || 0}
+                            onChange={(e) => updateCartItem(index, 'discountPercent', parseFloat(e.target.value) || 0)}
+                            className="w-20 rounded border border-slate-300 p-1 pr-6 text-center"
+                          />
+                          <span className="absolute right-2 top-1.5 text-slate-400 text-xs">%</span>
+                        </div>
                       </td>
                       <td className="p-3">
                         <input
@@ -280,17 +361,17 @@ const NewOrder = () => {
                           min="0"
                           value={item.discount}
                           onChange={(e) => updateCartItem(index, 'discount', parseFloat(e.target.value) || 0)}
-                          className="w-20 rounded border border-slate-300 p-1"
+                          className="w-24 rounded border border-slate-300 p-1 text-center"
                         />
                       </td>
-                      <td className="p-3 font-bold text-slate-800">
+                      <td className="p-3 font-bold text-slate-800 text-right">
                         EGP {item.subtotal.toFixed(2)}
                       </td>
                       <td className="p-3 text-right">
                         <button
                           type="button"
                           onClick={() => removeCartItem(index)}
-                          className="text-red-400 hover:text-red-600"
+                          className="text-red-400 hover:text-red-600 transition-colors"
                         >
                           <Trash2 size={18} />
                         </button>
@@ -310,11 +391,11 @@ const NewOrder = () => {
           </div>
         </div>
 
-        <div className="flex justify-end gap-3">
+        <div className="flex justify-end gap-3 sticky bottom-6 z-10">
           <button
             type="button"
             onClick={() => navigate('/invoices')}
-            className="px-6 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 font-medium"
+            className="px-6 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 font-medium shadow-sm"
           >
             Cancel
           </button>

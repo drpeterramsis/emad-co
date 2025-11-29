@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { getOrders, addTransaction, getFinancialStats } from '../utils/storage';
 import { Order, TransactionType, OrderStatus, DashboardStats } from '../types';
 import { ArrowRightLeft, DollarSign, Wallet, Loader2 } from 'lucide-react';
+import { formatDate, formatCurrency } from '../utils/helpers';
 
 const Collections = () => {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -94,7 +95,7 @@ const Collections = () => {
              <div className="bg-amber-100 p-2 rounded-full text-amber-600"><Wallet size={18}/></div>
              <div>
                <p className="text-xs text-amber-800 font-bold uppercase tracking-wider">Cash on Hand</p>
-               <p className="text-xl font-bold text-amber-900">EGP {stats.repCashOnHand.toLocaleString()}</p>
+               <p className="text-xl font-bold text-amber-900">{formatCurrency(stats.repCashOnHand)}</p>
              </div>
           </div>
           <button 
@@ -132,10 +133,10 @@ const Collections = () => {
                   <tr key={order.id} className="hover:bg-slate-50 transition-colors">
                     <td className="p-4 font-mono text-xs">{order.id}</td>
                     <td className="p-4 font-medium text-slate-800">{order.customerName}</td>
-                    <td className="p-4 text-slate-600">{new Date(order.date).toLocaleDateString()}</td>
-                    <td className="p-4">EGP {order.totalAmount.toFixed(2)}</td>
-                    <td className="p-4 text-green-600 font-medium">EGP {order.paidAmount.toFixed(2)}</td>
-                    <td className="p-4 font-bold text-red-500">EGP {balance.toFixed(2)}</td>
+                    <td className="p-4 text-slate-600">{formatDate(order.date)}</td>
+                    <td className="p-4">{formatCurrency(order.totalAmount)}</td>
+                    <td className="p-4 text-green-600 font-medium">{formatCurrency(order.paidAmount)}</td>
+                    <td className="p-4 font-bold text-red-500">{formatCurrency(balance)}</td>
                     <td className="p-4 text-right">
                       <button 
                         onClick={() => handleCollect(order.id, balance)}
@@ -172,7 +173,7 @@ const Collections = () => {
                     placeholder="0.00"
                   />
                 </div>
-                <p className="text-xs text-slate-500 mt-1">Available: EGP {stats.repCashOnHand.toFixed(2)}</p>
+                <p className="text-xs text-slate-500 mt-1">Available: {formatCurrency(stats.repCashOnHand)}</p>
               </div>
               <div className="flex justify-end gap-3">
                 <button 

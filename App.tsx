@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
@@ -7,17 +7,52 @@ import InvoiceList from './pages/InvoiceList';
 import Collections from './pages/Collections';
 import Inventory from './pages/Inventory';
 import Customers from './pages/Customers';
+import Login from './pages/Login';
 import { initStorage } from './utils/storage';
+import { UserProfile } from './types';
 
 const App = () => {
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
   useEffect(() => {
+    // Initialize DB
     initStorage();
+
+    // Check for persisted user
+    const savedUser = localStorage.getItem('emad_user');
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (e) {
+        localStorage.removeItem('emad_user');
+      }
+    }
+    setIsAuthLoading(false);
   }, []);
+
+  const handleLogin = (newUser: UserProfile) => {
+    setUser(newUser);
+    localStorage.setItem('emad_user', JSON.stringify(newUser));
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    localStorage.removeItem('emad_user');
+  };
+
+  if (isAuthLoading) {
+    return <div className="min-h-screen bg-slate-900" />;
+  }
+
+  if (!user) {
+    return <Login onLogin={handleLogin} />;
+  }
 
   return (
     <Router>
-      <div className="flex bg-slate-50 min-h-screen">
-        <Sidebar />
+      <div className="flex bg-slate-50 min-h-screen font-sans">
+        <Sidebar user={user} onLogout={handleLogout} />
         <main className="flex-1 ml-64 relative min-h-screen flex flex-col">
           {/* Main Content Area with padding at bottom for footer */}
           <div className="flex-1 pb-10">
@@ -33,9 +68,9 @@ const App = () => {
           </div>
 
           {/* Fixed Footer */}
-          <footer className="fixed bottom-0 right-0 left-64 bg-slate-50/90 backdrop-blur-sm border-t border-slate-200 py-1.5 px-6 flex justify-between items-center text-[11px] text-slate-400 z-50 print:hidden">
+          <footer className="fixed bottom-0 right-0 left-64 bg-slate-50/90 backdrop-blur-sm border-t border-slate-200 py-1.5 px-6 flex justify-between items-center text-[11px] text-slate-400 z-30 print:hidden">
             <span>&copy; {new Date().getFullYear()} Emad Co. Pharmaceutical - Sales Portal</span>
-            <span className="font-mono font-medium">v2.0.013</span>
+            <span className="font-mono font-medium">v2.0.014</span>
           </footer>
         </main>
       </div>

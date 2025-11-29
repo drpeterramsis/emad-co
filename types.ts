@@ -19,6 +19,12 @@ export enum TransactionType {
   DEPOSIT_TO_HQ = 'DEPOSIT_TO_HQ' // Rep transfers to Company
 }
 
+export interface UserProfile {
+  email: string;
+  name: string;
+  title: string;
+}
+
 export interface Product {
   id: string;
   name: string;

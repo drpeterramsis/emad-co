@@ -1,5 +1,12 @@
 
-import { Product, Customer, CustomerType } from './types';
+import { Product, Customer, CustomerType, UserProfile } from './types';
+
+export const AUTHORIZED_USERS: UserProfile[] = [
+  { email: 'emad@emadco.com', name: 'Dr. Emad Ibrahem', title: 'Co-Founder and CEO' },
+  { email: 'admin@emadco.com', name: 'System Admin', title: 'Administrator' },
+  { email: 'sales@emadco.com', name: 'Sales Representative', title: 'Sales Team' },
+  { email: 'manager@emadco.com', name: 'Inventory Manager', title: 'Logistics' }
+];
 
 export const INITIAL_PRODUCTS: Product[] = [
   { id: 'p1', name: 'Colitra Plus (new)Tab', basePrice: 200, stock: 1000 },

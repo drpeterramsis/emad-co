@@ -30,6 +30,8 @@ const NewOrder = () => {
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerType, setNewCustomerType] = useState<CustomerType>(CustomerType.PHARMACY);
   const [newCustomerAddress, setNewCustomerAddress] = useState('');
+  const [newCustomerBrick, setNewCustomerBrick] = useState('');
+  const [newCustomerDiscount, setNewCustomerDiscount] = useState('0');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -183,7 +185,8 @@ const NewOrder = () => {
         name: newCustomerName,
         type: newCustomerType,
         address: newCustomerAddress,
-        defaultDiscount: 0
+        brick: newCustomerBrick,
+        defaultDiscount: parseFloat(newCustomerDiscount) || 0
       };
       await addCustomer(newCust);
       
@@ -195,6 +198,8 @@ const NewOrder = () => {
       setShowNewCustomerModal(false);
       setNewCustomerName('');
       setNewCustomerAddress('');
+      setNewCustomerBrick('');
+      setNewCustomerDiscount('0');
     } catch (e) {
       console.error("Error adding customer", e);
     } finally {
@@ -460,7 +465,7 @@ const NewOrder = () => {
       {/* Quick Add Customer Modal */}
       {showNewCustomerModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md shadow-2xl p-6">
+          <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-slate-800">Quick Add Customer</h3>
               <button onClick={() => setShowNewCustomerModal(false)} className="text-slate-400 hover:text-slate-600">
@@ -479,17 +484,41 @@ const NewOrder = () => {
                   placeholder="e.g. Hope Pharmacy"
                 />
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                   <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>
+                   <select 
+                     value={newCustomerType}
+                     onChange={(e) => setNewCustomerType(e.target.value as CustomerType)}
+                     className="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary outline-none bg-white"
+                   >
+                     {Object.values(CustomerType).map(t => (
+                       <option key={t} value={t}>{t}</option>
+                     ))}
+                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Default Discount (%)</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    max="100"
+                    value={newCustomerDiscount}
+                    onChange={(e) => setNewCustomerDiscount(e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary outline-none"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
               <div>
-                 <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>
-                 <select 
-                   value={newCustomerType}
-                   onChange={(e) => setNewCustomerType(e.target.value as CustomerType)}
-                   className="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary outline-none"
-                 >
-                   {Object.values(CustomerType).map(t => (
-                     <option key={t} value={t}>{t}</option>
-                   ))}
-                 </select>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Brick / Area</label>
+                <input 
+                  type="text"
+                  value={newCustomerBrick}
+                  onChange={(e) => setNewCustomerBrick(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="e.g. Downtown"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Address</label>

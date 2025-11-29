@@ -20,7 +20,7 @@ const Login = ({ onLogin }: LoginProps) => {
     setError('');
 
     try {
-      const user = await loginUser(email);
+      const user = await loginUser(email.trim());
       if (user) {
         onLogin(user);
       } else {
@@ -92,7 +92,7 @@ const Login = ({ onLogin }: LoginProps) => {
 
           <div className="mt-8 text-center border-t border-slate-100 pt-6">
             <p className="text-xs text-slate-400">
-              Restricted Access System v2.0.014
+              Restricted Access System v2.0.015
             </p>
             <p className="text-xs text-slate-400 mt-1">
               &copy; {new Date().getFullYear()} Emad Co. Pharmaceutical

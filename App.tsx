@@ -14,6 +14,7 @@ import { UserProfile } from './types';
 const App = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     // Initialize DB
@@ -41,6 +42,10 @@ const App = () => {
     localStorage.removeItem('emad_user');
   };
 
+  const toggleSidebar = () => {
+    setIsSidebarCollapsed(!isSidebarCollapsed);
+  };
+
   if (isAuthLoading) {
     return <div className="min-h-screen bg-slate-900" />;
   }
@@ -51,9 +56,16 @@ const App = () => {
 
   return (
     <Router>
-      <div className="flex bg-slate-50 min-h-screen font-sans">
-        <Sidebar user={user} onLogout={handleLogout} />
-        <main className="flex-1 ml-64 relative min-h-screen flex flex-col">
+      <div className="flex bg-slate-50 min-h-screen font-sans print:bg-white">
+        <Sidebar 
+          user={user} 
+          onLogout={handleLogout} 
+          isCollapsed={isSidebarCollapsed} 
+          toggleSidebar={toggleSidebar} 
+        />
+        <main 
+          className={`flex-1 relative min-h-screen flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'ml-20' : 'ml-64'} print:ml-0 print:w-full`}
+        >
           {/* Main Content Area with padding at bottom for footer */}
           <div className="flex-1 pb-10">
             <Routes>
@@ -68,9 +80,11 @@ const App = () => {
           </div>
 
           {/* Fixed Footer */}
-          <footer className="fixed bottom-0 right-0 left-64 bg-slate-50/90 backdrop-blur-sm border-t border-slate-200 py-1.5 px-6 flex justify-between items-center text-[11px] text-slate-400 z-30 print:hidden">
+          <footer 
+            className={`fixed bottom-0 right-0 bg-slate-50/90 backdrop-blur-sm border-t border-slate-200 py-1.5 px-6 flex justify-between items-center text-[11px] text-slate-400 z-30 print:hidden transition-all duration-300 ${isSidebarCollapsed ? 'left-20' : 'left-64'}`}
+          >
             <span>&copy; {new Date().getFullYear()} Emad Co. Pharmaceutical - Sales Portal</span>
-            <span className="font-mono font-medium">v2.0.014</span>
+            <span className="font-mono font-medium">v2.0.015</span>
           </footer>
         </main>
       </div>

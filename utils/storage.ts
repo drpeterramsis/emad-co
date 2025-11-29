@@ -42,6 +42,7 @@ export const initStorage = async () => {
           name: c.name,
           type: c.type,
           address: c.address,
+          brick: c.brick,
           default_discount: c.defaultDiscount
         }));
         await supabase.from('customers').insert(dbCustomers);
@@ -97,6 +98,7 @@ export const getCustomers = async (): Promise<Customer[]> => {
       name: c.name,
       type: c.type,
       address: c.address,
+      brick: c.brick,
       defaultDiscount: Number(c.default_discount || 0)
     })) || [];
   }
@@ -249,6 +251,7 @@ export const addCustomer = async (customer: Customer) => {
       name: customer.name,
       type: customer.type,
       address: customer.address,
+      brick: customer.brick,
       default_discount: customer.defaultDiscount
     };
     const { error } = await supabase.from('customers').insert(dbCustomer);
@@ -256,6 +259,64 @@ export const addCustomer = async (customer: Customer) => {
   } else {
     const customers = await getCustomers();
     customers.push(customer);
+    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+  }
+};
+
+export const deleteCustomer = async (customerId: string) => {
+  if (isSupabaseEnabled && supabase) {
+    // 1. Get all order IDs for this customer
+    const { data: orders, error: orderError } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('customer_id', customerId);
+
+    if (orderError) throw orderError;
+    
+    const orderIds = orders?.map(o => o.id) || [];
+
+    // 2. Delete transactions associated with those orders
+    if (orderIds.length > 0) {
+      const { error: txnError } = await supabase
+        .from('transactions')
+        .delete()
+        .in('reference_id', orderIds);
+      if (txnError) throw txnError;
+      
+      // 3. Delete orders
+      const { error: delOrderError } = await supabase
+        .from('orders')
+        .delete()
+        .in('id', orderIds);
+      if (delOrderError) throw delOrderError;
+    }
+
+    // 4. Delete customer
+    const { error: delCustomerError } = await supabase
+      .from('customers')
+      .delete()
+      .eq('id', customerId);
+    
+    if (delCustomerError) throw delCustomerError;
+
+  } else {
+    // Local Storage
+    let orders = await getOrders();
+    const customerOrders = orders.filter(o => o.customerId === customerId);
+    const customerOrderIds = customerOrders.map(o => o.id);
+
+    // Delete transactions for these orders
+    let transactions = await getTransactions();
+    transactions = transactions.filter(t => !t.referenceId || !customerOrderIds.includes(t.referenceId));
+    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
+
+    // Delete orders
+    orders = orders.filter(o => o.customerId !== customerId);
+    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+
+    // Delete customer
+    let customers = await getCustomers();
+    customers = customers.filter(c => c.id !== customerId);
     localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
   }
 };

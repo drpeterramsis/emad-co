@@ -1,19 +1,16 @@
 
 import React, { useEffect, useState } from 'react';
 import { getFinancialStats, getOrders } from '../utils/storage';
-import { analyzeSalesData } from '../services/geminiService';
 import { Order, DashboardStats } from '../types';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell 
 } from 'recharts';
-import { DollarSign, TrendingUp, Briefcase, AlertCircle, Sparkles, Loader2 } from 'lucide-react';
+import { DollarSign, TrendingUp, Briefcase, AlertCircle, Loader2 } from 'lucide-react';
 
 const Dashboard = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
-  const [aiInsight, setAiInsight] = useState<string>('');
-  const [loadingAi, setLoadingAi] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
@@ -28,17 +25,7 @@ const Dashboard = () => {
     ]);
     setStats(fetchedStats);
     setRecentOrders(fetchedOrders);
-    
-    // Auto-load AI insights if stats are available
-    handleGenerateInsight();
     setLoadingData(false);
-  };
-
-  const handleGenerateInsight = async () => {
-    setLoadingAi(true);
-    const insight = await analyzeSalesData();
-    setAiInsight(insight);
-    setLoadingAi(false);
   };
   
   // Data for Charts
@@ -69,14 +56,6 @@ const Dashboard = () => {
           <h2 className="text-3xl font-bold text-slate-800">Dashboard</h2>
           <p className="text-slate-500">Overview of your sales performance</p>
         </div>
-        <button 
-          onClick={handleGenerateInsight}
-          disabled={loadingAi}
-          className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 py-2 rounded-lg shadow hover:opacity-90 disabled:opacity-50"
-        >
-          <Sparkles size={18} />
-          {loadingAi ? 'Asking AI...' : 'Refresh AI Analysis'}
-        </button>
       </header>
 
       {/* Stats Cards */}
@@ -105,27 +84,6 @@ const Dashboard = () => {
           icon={AlertCircle} 
           color="bg-slate-600" 
         />
-      </div>
-
-      {/* AI Insight Section */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-indigo-500 to-purple-500"></div>
-        <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-          <Sparkles className="text-purple-600" size={20} /> 
-          Gemini Sales Analysis
-        </h3>
-        {loadingAi && !aiInsight ? (
-          <div className="animate-pulse space-y-3">
-            <div className="h-4 bg-slate-100 rounded w-3/4"></div>
-            <div className="h-4 bg-slate-100 rounded w-1/2"></div>
-          </div>
-        ) : (
-          <div className="prose prose-sm max-w-none text-slate-600">
-             <div dangerouslySetInnerHTML={{ 
-               __html: aiInsight.replace(/\n/g, '<br/>').replace(/\*\*(.*?)\*\*/g, '<b>$1</b>') 
-             }} />
-          </div>
-        )}
       </div>
 
       {/* Charts Section */}

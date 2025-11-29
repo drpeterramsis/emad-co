@@ -31,6 +31,7 @@ export interface Customer {
   type: CustomerType;
   email?: string;
   address?: string;
+  brick?: string; // Area or Brick
   defaultDiscount?: number; // Percentage 0-100
 }
 

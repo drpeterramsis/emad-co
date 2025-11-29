@@ -1,19 +1,21 @@
 
 import React, { useState, useEffect } from 'react';
-import { getCustomers, addCustomer } from '../utils/storage';
+import { getCustomers, addCustomer, deleteCustomer } from '../utils/storage';
 import { Customer, CustomerType } from '../types';
-import { Users, Plus, MapPin, Search, Loader2 } from 'lucide-react';
+import { Users, Plus, MapPin, Search, Loader2, Trash2, Map } from 'lucide-react';
 
 const Customers = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   
   // Form State
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState<CustomerType>(CustomerType.PHARMACY);
   const [newAddress, setNewAddress] = useState('');
+  const [newBrick, setNewBrick] = useState('');
   const [newDiscount, setNewDiscount] = useState('0');
 
   useEffect(() => {
@@ -28,28 +30,53 @@ const Customers = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg('');
     const customer: Customer = {
       id: `CUST-${Date.now()}`,
       name: newName,
       type: newType,
       address: newAddress,
+      brick: newBrick,
       defaultDiscount: parseFloat(newDiscount) || 0
     };
 
-    await addCustomer(customer);
-    await fetchCustomers();
-    setShowModal(false);
-    
-    // Reset form
-    setNewName('');
-    setNewType(CustomerType.PHARMACY);
-    setNewAddress('');
-    setNewDiscount('0');
+    try {
+      await addCustomer(customer);
+      await fetchCustomers();
+      setShowModal(false);
+      
+      // Reset form
+      setNewName('');
+      setNewType(CustomerType.PHARMACY);
+      setNewAddress('');
+      setNewBrick('');
+      setNewDiscount('0');
+    } catch (err) {
+      console.error("Error saving customer:", err);
+      setErrorMsg("Failed to save customer. Please check your connection and try again.");
+    }
   };
+
+  const handleDelete = async (customerId: string, customerName: string) => {
+    if (window.confirm(`Are you sure you want to delete ${customerName}?`)) {
+      if (window.confirm(`WARNING: This will permanently delete ${customerName} AND ALL associated orders and transactions. This action cannot be undone. Are you absolutely sure?`)) {
+        try {
+          setLoading(true);
+          await deleteCustomer(customerId);
+          await fetchCustomers();
+        } catch (err) {
+          console.error("Error deleting customer:", err);
+          alert("Failed to delete customer. Please try again.");
+          setLoading(false);
+        }
+      }
+    }
+  }
 
   const filteredCustomers = customers.filter(c => 
     c.name.toLowerCase().includes(search.toLowerCase()) || 
-    c.type.toLowerCase().includes(search.toLowerCase())
+    c.type.toLowerCase().includes(search.toLowerCase()) ||
+    (c.brick && c.brick.toLowerCase().includes(search.toLowerCase()))
   );
 
   if (loading) {
@@ -93,13 +120,15 @@ const Customers = () => {
             <tr>
               <th className="p-4 font-medium text-slate-600">Name</th>
               <th className="p-4 font-medium text-slate-600">Type</th>
+              <th className="p-4 font-medium text-slate-600">Brick / Area</th>
               <th className="p-4 font-medium text-slate-600">Address</th>
               <th className="p-4 font-medium text-slate-600">Default Discount</th>
+              <th className="p-4 font-medium text-slate-600 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filteredCustomers.length === 0 ? (
-               <tr><td colSpan={4} className="p-8 text-center text-slate-400">No customers found.</td></tr>
+               <tr><td colSpan={6} className="p-8 text-center text-slate-400">No customers found.</td></tr>
             ) : (
               filteredCustomers.map(customer => (
                 <tr key={customer.id} className="hover:bg-slate-50 transition-colors">
@@ -116,12 +145,27 @@ const Customers = () => {
                   </td>
                   <td className="p-4 text-slate-600">
                      <div className="flex items-center gap-1">
+                        {customer.brick && <Map size={14} className="text-slate-400" />}
+                        {customer.brick || '-'}
+                     </div>
+                  </td>
+                  <td className="p-4 text-slate-600">
+                     <div className="flex items-center gap-1">
                         {customer.address && <MapPin size={14} className="text-slate-400" />}
                         {customer.address || '-'}
                      </div>
                   </td>
                   <td className="p-4 text-slate-600 font-mono">
                     {customer.defaultDiscount ? `${customer.defaultDiscount}%` : '-'}
+                  </td>
+                  <td className="p-4 text-right">
+                    <button
+                      onClick={() => handleDelete(customer.id, customer.name)}
+                      className="text-slate-400 hover:text-red-500 transition-colors p-2 rounded-full hover:bg-red-50"
+                      title="Delete Customer"
+                    >
+                      <Trash2 size={18} />
+                    </button>
                   </td>
                 </tr>
               ))
@@ -135,6 +179,11 @@ const Customers = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-xl w-full max-w-lg shadow-2xl">
             <h3 className="text-xl font-bold mb-4 text-slate-800">New Customer</h3>
+            {errorMsg && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
+                {errorMsg}
+              </div>
+            )}
             <form onSubmit={handleSave} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Customer Name</label>
@@ -173,6 +222,17 @@ const Customers = () => {
                     placeholder="0"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Brick / Area</label>
+                <input 
+                  type="text" 
+                  value={newBrick}
+                  onChange={(e) => setNewBrick(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="e.g. Maadi, Downtown, Zone A"
+                />
               </div>
 
               <div>

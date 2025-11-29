@@ -319,6 +319,7 @@ const NewOrder = () => {
                         <input
                           type="number"
                           min="0"
+                          step="any"
                           value={item.unitPrice}
                           onChange={(e) => updateCartItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
                           className="w-20 rounded border border-slate-300 p-1 text-center"
@@ -348,6 +349,7 @@ const NewOrder = () => {
                             type="number"
                             min="0"
                             max="100"
+                            step="any"
                             value={item.discountPercent || 0}
                             onChange={(e) => updateCartItem(index, 'discountPercent', parseFloat(e.target.value) || 0)}
                             className="w-20 rounded border border-slate-300 p-1 pr-6 text-center"
@@ -359,6 +361,7 @@ const NewOrder = () => {
                         <input
                           type="number"
                           min="0"
+                          step="any"
                           value={item.discount}
                           onChange={(e) => updateCartItem(index, 'discount', parseFloat(e.target.value) || 0)}
                           className="w-24 rounded border border-slate-300 p-1 text-center"

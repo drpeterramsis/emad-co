@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { getOrders, deleteOrder, updateOrder } from '../utils/storage';
-import { Order, OrderStatus } from '../types';
+import { getOrders, deleteOrder, updateOrder, getCustomers } from '../utils/storage';
+import { Order, OrderStatus, CustomerType } from '../types';
 import { Search, Loader2, Edit, Trash2, Filter, Eye, X, Printer, Save, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { formatDate, formatCurrency } from '../utils/helpers';
@@ -8,12 +8,14 @@ import { formatDate, formatCurrency } from '../utils/helpers';
 const InvoiceList = () => {
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
+  const [customerTypes, setCustomerTypes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   
   // Filters
   const [searchCustomer, setSearchCustomer] = useState('');
   const [searchProduct, setSearchProduct] = useState('');
   const [searchMonth, setSearchMonth] = useState('');
+  const [filterType, setFilterType] = useState('All');
 
   // Modal & Print State
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -30,8 +32,17 @@ const InvoiceList = () => {
   }, []);
 
   const fetchOrders = async () => {
-    const data = await getOrders();
-    setOrders(data);
+    const [ordersData, customersData] = await Promise.all([
+      getOrders(),
+      getCustomers()
+    ]);
+    setOrders(ordersData);
+
+    // Create lookup map for customer types
+    const map: Record<string, string> = {};
+    customersData.forEach(c => map[c.id] = c.type);
+    setCustomerTypes(map);
+
     setLoading(false);
   };
 
@@ -108,7 +119,10 @@ const InvoiceList = () => {
 
     const matchesMonth = searchMonth === '' || o.date.startsWith(searchMonth);
 
-    return matchesCustomer && matchesProduct && matchesMonth;
+    const type = customerTypes[o.customerId];
+    const matchesType = filterType === 'All' || type === filterType;
+
+    return matchesCustomer && matchesProduct && matchesMonth && matchesType;
   }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   if (loading) {
@@ -157,6 +171,19 @@ const InvoiceList = () => {
           </div>
 
           <div className="relative">
+            <select 
+               value={filterType}
+               onChange={(e) => setFilterType(e.target.value)}
+               className="px-4 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-slate-600 bg-white"
+            >
+               <option value="All">All Types</option>
+               {Object.values(CustomerType).map(t => (
+                  <option key={t} value={t}>{t}</option>
+               ))}
+            </select>
+          </div>
+
+          <div className="relative">
              <input 
               type="month"
               value={searchMonth}
@@ -166,7 +193,7 @@ const InvoiceList = () => {
           </div>
 
            <button 
-             onClick={() => { setSearchCustomer(''); setSearchProduct(''); setSearchMonth(''); }}
+             onClick={() => { setSearchCustomer(''); setSearchProduct(''); setSearchMonth(''); setFilterType('All'); }}
              className="text-sm text-slate-500 hover:text-red-500 underline"
            >
              Clear
@@ -205,7 +232,16 @@ const InvoiceList = () => {
                   >
                     <td className="p-4 text-slate-600 font-medium align-top">{formatDate(order.date)}</td>
                     <td className="p-4 font-mono text-xs align-top">{order.id}</td>
-                    <td className="p-4 font-medium text-slate-800 align-top">{order.customerName}</td>
+                    <td className="p-4 font-medium text-slate-800 align-top">
+                      <div>{order.customerName}</div>
+                      {customerTypes[order.customerId] && (
+                        <div className="inline-block mt-1">
+                          <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">
+                            {customerTypes[order.customerId]}
+                          </span>
+                        </div>
+                      )}
+                    </td>
                     <td className="p-4 align-top">
                       <div className="flex flex-col gap-1 text-xs max-h-32 overflow-y-auto pr-2 custom-scrollbar">
                          {order.items.map((item, i) => (
@@ -344,7 +380,14 @@ const InvoiceList = () => {
                      onChange={(e) => setPrintCustomerName(e.target.value)}
                      className="font-bold text-xl text-slate-800 border-b border-transparent hover:border-slate-300 focus:border-primary outline-none bg-transparent w-full print:border-none p-0"
                    />
-                   <p className="text-sm text-slate-600">ID: {selectedOrder.customerId}</p>
+                   <div className="flex gap-2 items-center">
+                    <p className="text-sm text-slate-600">ID: {selectedOrder.customerId}</p>
+                    {customerTypes[selectedOrder.customerId] && (
+                        <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0 rounded border border-slate-200">
+                          {customerTypes[selectedOrder.customerId]}
+                        </span>
+                    )}
+                   </div>
                 </div>
                 <div className="text-right">
                    <p className="text-xs text-slate-500 uppercase font-bold">Invoice #</p>

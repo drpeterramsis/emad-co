@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getCustomers, getProducts, saveOrder, getOrder, updateOrder, addCustomer } from '../utils/storage';
 import { Customer, Product, OrderItem, OrderStatus, CustomerType } from '../types';
-import { Trash2, Save, Loader2, Search, X, Plus } from 'lucide-react';
+import { Trash2, Save, Loader2, Search, X, Plus, MapPin, Map, User } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import LoadingOverlay from '../components/LoadingOverlay';
 
@@ -196,12 +196,15 @@ const NewOrder = () => {
       setSelectedCustomer(newId); // Auto select
       
       setShowNewCustomerModal(false);
+      // Reset form
       setNewCustomerName('');
       setNewCustomerAddress('');
       setNewCustomerBrick('');
       setNewCustomerDiscount('0');
+      setNewCustomerType(CustomerType.PHARMACY);
     } catch (e) {
       console.error("Error adding customer", e);
+      alert("Failed to add customer.");
     } finally {
       setIsSubmitting(false);
     }
@@ -257,7 +260,7 @@ const NewOrder = () => {
               <button 
                 type="button"
                 onClick={() => setShowNewCustomerModal(true)}
-                className="p-2.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 border border-slate-200"
+                className="p-2.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 border border-slate-200 flex-shrink-0"
                 title="Add New Customer"
               >
                 <Plus size={20} />
@@ -465,32 +468,36 @@ const NewOrder = () => {
       {/* Quick Add Customer Modal */}
       {showNewCustomerModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-slate-800">Quick Add Customer</h3>
-              <button onClick={() => setShowNewCustomerModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X size={20} />
-              </button>
+          <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl overflow-hidden">
+             <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
+               <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                 <User size={20} className="text-primary"/> Quick Add Customer
+               </h3>
+               <button onClick={() => setShowNewCustomerModal(false)} className="text-slate-400 hover:text-slate-600">
+                 <X size={20} />
+               </button>
             </div>
             
-            <div className="space-y-4">
+            <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Customer Name <span className="text-red-500">*</span></label>
                 <input 
                   type="text"
                   value={newCustomerName}
                   onChange={(e) => setNewCustomerName(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary outline-none"
+                  className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-primary outline-none"
                   placeholder="e.g. Hope Pharmacy"
+                  autoFocus
                 />
               </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                    <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>
                    <select 
                      value={newCustomerType}
                      onChange={(e) => setNewCustomerType(e.target.value as CustomerType)}
-                     className="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary outline-none bg-white"
+                     className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-primary outline-none bg-white"
                    >
                      {Object.values(CustomerType).map(t => (
                        <option key={t} value={t}>{t}</option>
@@ -503,39 +510,46 @@ const NewOrder = () => {
                     type="number" 
                     min="0"
                     max="100"
+                    step="any"
                     value={newCustomerDiscount}
                     onChange={(e) => setNewCustomerDiscount(e.target.value)}
-                    className="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary outline-none"
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-primary outline-none"
                     placeholder="0"
                   />
                 </div>
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Brick / Area</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
+                  <Map size={14}/> Brick / Area
+                </label>
                 <input 
                   type="text"
                   value={newCustomerBrick}
                   onChange={(e) => setNewCustomerBrick(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary outline-none"
+                  className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-primary outline-none"
                   placeholder="e.g. Downtown"
                 />
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Address</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
+                  <MapPin size={14}/> Address
+                </label>
                 <input 
                   type="text"
                   value={newCustomerAddress}
                   onChange={(e) => setNewCustomerAddress(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary outline-none"
-                  placeholder="Area / Street"
+                  className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="Area / Street Details"
                 />
               </div>
 
-              <div className="pt-4 flex justify-end gap-2">
+              <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 mt-2">
                 <button 
                   type="button" 
                   onClick={() => setShowNewCustomerModal(false)}
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium"
                 >
                   Cancel
                 </button>
@@ -543,7 +557,7 @@ const NewOrder = () => {
                   type="button" 
                   onClick={handleQuickAddCustomer}
                   disabled={!newCustomerName}
-                  className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-teal-800 disabled:opacity-50"
+                  className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-teal-800 disabled:opacity-50 font-medium shadow-md"
                 >
                   Add Customer
                 </button>

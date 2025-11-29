@@ -56,7 +56,7 @@ const App = () => {
 
   return (
     <Router>
-      <div className="flex bg-slate-50 min-h-screen font-sans print:bg-white">
+      <div className="flex bg-slate-50 min-h-screen font-sans print:bg-white print:block">
         <Sidebar 
           user={user} 
           onLogout={handleLogout} 
@@ -64,10 +64,10 @@ const App = () => {
           toggleSidebar={toggleSidebar} 
         />
         <main 
-          className={`flex-1 relative min-h-screen flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'ml-20' : 'ml-64'} print:ml-0 print:w-full`}
+          className={`flex-1 relative min-h-screen flex flex-col transition-all duration-300 ${isSidebarCollapsed ? 'ml-20' : 'ml-64'} print:!ml-0 print:!w-full print:!m-0`}
         >
           {/* Main Content Area with padding at bottom for footer */}
-          <div className="flex-1 pb-10">
+          <div className="flex-1 pb-10 print:pb-0">
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/new-order" element={<NewOrder />} />
@@ -84,7 +84,7 @@ const App = () => {
             className={`fixed bottom-0 right-0 bg-slate-50/90 backdrop-blur-sm border-t border-slate-200 py-1.5 px-6 flex justify-between items-center text-[11px] text-slate-400 z-30 print:hidden transition-all duration-300 ${isSidebarCollapsed ? 'left-20' : 'left-64'}`}
           >
             <span>&copy; {new Date().getFullYear()} Emad Co. Pharmaceutical - Sales Portal</span>
-            <span className="font-mono font-medium">v2.0.015</span>
+            <span className="font-mono font-medium">v2.0.016</span>
           </footer>
         </main>
       </div>

@@ -1,4 +1,5 @@
 
+
 import React, { useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
@@ -36,7 +37,7 @@ const App = () => {
           {/* Fixed Footer */}
           <footer className="fixed bottom-0 right-0 left-64 bg-slate-50/90 backdrop-blur-sm border-t border-slate-200 py-1.5 px-6 flex justify-between items-center text-[11px] text-slate-400 z-50">
             <span>&copy; {new Date().getFullYear()} Emad Co. Pharmaceutical - Sales Portal</span>
-            <span className="font-mono font-medium">v2.0.010</span>
+            <span className="font-mono font-medium">v2.0.011</span>
           </footer>
         </main>
       </div>

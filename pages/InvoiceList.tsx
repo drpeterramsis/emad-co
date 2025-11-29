@@ -1,4 +1,5 @@
 
+
 import React, { useEffect, useState } from 'react';
 import { getOrders, deleteOrder } from '../utils/storage';
 import { Order, OrderStatus } from '../types';
@@ -145,7 +146,7 @@ const InvoiceList = () => {
               <th className="p-4 font-medium text-slate-600">Date</th>
               <th className="p-4 font-medium text-slate-600">Invoice #</th>
               <th className="p-4 font-medium text-slate-600">Customer</th>
-              <th className="p-4 font-medium text-slate-600 text-center">Summary</th>
+              <th className="p-4 font-medium text-slate-600 text-center w-1/3">Summary</th>
               <th className="p-4 font-medium text-slate-600">Total</th>
               <th className="p-4 font-medium text-slate-600">Paid</th>
               <th className="p-4 font-medium text-slate-600">Status</th>
@@ -157,35 +158,47 @@ const InvoiceList = () => {
               <tr><td colSpan={8} className="p-8 text-center text-slate-400">No invoices found matching filters.</td></tr>
             ) : (
               filteredOrders.map(order => {
-                const totalQty = order.items.reduce((s, i) => s + i.quantity, 0);
-                const totalBonus = order.items.reduce((s, i) => s + (i.bonusQuantity || 0), 0);
                 const totalDiscount = order.items.reduce((s, i) => s + (i.discount || 0), 0);
+                const grossTotal = order.totalAmount + totalDiscount;
+                const effectiveDiscountPercent = grossTotal > 0 ? (totalDiscount / grossTotal) * 100 : 0;
                 
                 return (
                   <tr 
                     key={order.id} 
-                    className="hover:bg-slate-50 transition-colors cursor-pointer"
+                    className="hover:bg-slate-50 transition-colors cursor-pointer group"
                     onClick={() => setSelectedOrder(order)}
                   >
-                    <td className="p-4 text-slate-600 font-medium">{formatDate(order.date)}</td>
-                    <td className="p-4 font-mono text-xs">{order.id}</td>
-                    <td className="p-4 font-medium text-slate-800">{order.customerName}</td>
-                    <td className="p-4">
-                      <div className="flex flex-col gap-1 text-xs">
-                         <span className="text-slate-600">Qty: <b className="text-slate-800">{totalQty}</b></span>
-                         {totalBonus > 0 && <span className="text-orange-600">Bonus: <b>{totalBonus}</b></span>}
-                         {totalDiscount > 0 && <span className="text-blue-600">Disc: <b>{totalDiscount.toFixed(2)}</b></span>}
+                    <td className="p-4 text-slate-600 font-medium align-top">{formatDate(order.date)}</td>
+                    <td className="p-4 font-mono text-xs align-top">{order.id}</td>
+                    <td className="p-4 font-medium text-slate-800 align-top">{order.customerName}</td>
+                    <td className="p-4 align-top">
+                      <div className="flex flex-col gap-1 text-xs max-h-32 overflow-y-auto pr-2 custom-scrollbar">
+                         {order.items.map((item, i) => (
+                           <div key={i} className="flex justify-between gap-4 border-b border-slate-100 last:border-0 pb-1 last:pb-0">
+                             <span className="font-medium text-slate-700 truncate max-w-[150px]" title={item.productName}>{item.productName}</span>
+                             <div className="flex gap-2 text-slate-500 whitespace-nowrap">
+                                <span>{item.quantity} u</span>
+                                {item.bonusQuantity > 0 && <span className="text-orange-600 font-bold">+{item.bonusQuantity} b</span>}
+                             </div>
+                           </div>
+                         ))}
+                         {totalDiscount > 0 && (
+                           <div className="mt-2 pt-1 border-t border-slate-200 text-blue-600 font-medium flex justify-between bg-blue-50 px-2 py-1 rounded">
+                              <span>Disc:</span>
+                              <span>{formatCurrency(totalDiscount)} ({effectiveDiscountPercent.toFixed(1)}%)</span>
+                           </div>
+                         )}
                       </div>
                     </td>
-                    <td className="p-4 font-bold text-slate-800">{formatCurrency(order.totalAmount)}</td>
-                    <td className="p-4 text-slate-600">{formatCurrency(order.paidAmount)}</td>
-                    <td className="p-4">
+                    <td className="p-4 font-bold text-slate-800 align-top">{formatCurrency(order.totalAmount)}</td>
+                    <td className="p-4 text-slate-600 align-top">{formatCurrency(order.paidAmount)}</td>
+                    <td className="p-4 align-top">
                       <span className={`text-xs px-2 py-1 rounded-full border font-medium ${getStatusColor(order.status)}`}>
                         {order.status}
                       </span>
                     </td>
-                    <td className="p-4 text-right">
-                      <div className="flex justify-end gap-2">
+                    <td className="p-4 text-right align-top">
+                      <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
                            onClick={(e) => { e.stopPropagation(); setSelectedOrder(order); }}
                            className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded transition-colors"
@@ -265,7 +278,7 @@ const InvoiceList = () => {
                           <td className="p-3 text-center">{item.quantity}</td>
                           <td className="p-3 text-center text-orange-600">{item.bonusQuantity > 0 ? item.bonusQuantity : '-'}</td>
                           <td className="p-3 text-center text-blue-600">
-                            {item.discount > 0 ? `${item.discount.toFixed(2)} (${item.discountPercent}%)` : '-'}
+                            {item.discount > 0 ? `${item.discount.toFixed(2)} (${item.discountPercent || ((item.discount/(item.unitPrice * item.quantity))*100).toFixed(1)}%)` : '-'}
                           </td>
                           <td className="p-3 text-right font-bold">{item.subtotal.toFixed(2)}</td>
                         </tr>

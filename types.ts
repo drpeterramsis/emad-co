@@ -1,4 +1,5 @@
 
+
 export enum CustomerType {
   PHARMACY = 'Pharmacy',
   STORE = 'Store',
@@ -44,6 +45,7 @@ export interface OrderItem {
   discount: number; // Flat amount deduction
   discountPercent?: number; // Percentage deduction
   subtotal: number;
+  paidQuantity?: number; // How many units have been paid for
 }
 
 export interface Order {

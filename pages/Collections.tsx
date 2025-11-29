@@ -1,15 +1,25 @@
 
+
 import React, { useState, useEffect } from 'react';
-import { getOrders, addTransaction, getFinancialStats } from '../utils/storage';
-import { Order, TransactionType, OrderStatus, DashboardStats } from '../types';
-import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search } from 'lucide-react';
+import { getOrders, addTransaction, getFinancialStats, updateOrder } from '../utils/storage';
+import { Order, TransactionType, OrderStatus, DashboardStats, OrderItem } from '../types';
+import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search, Calendar, CheckSquare, X } from 'lucide-react';
 import { formatDate, formatCurrency } from '../utils/helpers';
 
 const Collections = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  
+  // HQ Transfer State
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferAmount, setTransferAmount] = useState('');
+  
+  // Itemized Payment State
+  const [selectedOrderForPayment, setSelectedOrderForPayment] = useState<Order | null>(null);
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [paymentItems, setPaymentItems] = useState<{index: number, payQty: number, selected: boolean}[]>([]);
+  const [actualCollectedAmount, setActualCollectedAmount] = useState<string>('');
+  
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -32,25 +42,98 @@ const Collections = () => {
     setLoading(false);
   };
 
-  const handleCollect = async (orderId: string, amountDue: number) => {
-    const amountStr = prompt(`Enter amount collected for Order #${orderId} (Max: ${amountDue})`, amountDue.toString());
-    if (!amountStr) return;
+  const openPaymentModal = (order: Order) => {
+    setSelectedOrderForPayment(order);
+    setPaymentDate(new Date().toISOString().split('T')[0]);
+    // Initialize payment state for items
+    const initItems = order.items.map((item, idx) => ({
+      index: idx,
+      payQty: item.quantity - (item.paidQuantity || 0), // Default to remaining qty
+      selected: (item.quantity - (item.paidQuantity || 0)) > 0 // Select if there is remaining qty
+    }));
+    setPaymentItems(initItems);
     
-    const amount = parseFloat(amountStr);
-    if (isNaN(amount) || amount <= 0 || amount > amountDue) {
-      alert("Invalid amount.");
+    // Initial Calc
+    const suggested = calculateSuggestedAmount(order, initItems);
+    setActualCollectedAmount(suggested.toFixed(2));
+  };
+
+  const calculateSuggestedAmount = (order: Order, itemsState: typeof paymentItems) => {
+    let total = 0;
+    itemsState.forEach(state => {
+      if (state.selected) {
+        const item = order.items[state.index];
+        const unitSubtotal = item.quantity > 0 ? item.subtotal / item.quantity : 0;
+        total += unitSubtotal * state.payQty;
+      }
+    });
+    return total;
+  };
+
+  const handlePaymentItemChange = (index: number, field: 'selected' | 'payQty', value: any) => {
+    const newItems = [...paymentItems];
+    const itemState = newItems.find(i => i.index === index);
+    if (!itemState) return;
+
+    if (field === 'selected') {
+      itemState.selected = value;
+    } else if (field === 'payQty') {
+      itemState.payQty = Number(value);
+    }
+
+    setPaymentItems(newItems);
+    
+    // Update Suggested Amount
+    if (selectedOrderForPayment) {
+      const suggested = calculateSuggestedAmount(selectedOrderForPayment, newItems);
+      setActualCollectedAmount(suggested.toFixed(2));
+    }
+  };
+
+  const handleSavePayment = async () => {
+    if (!selectedOrderForPayment) return;
+    
+    const amount = parseFloat(actualCollectedAmount);
+    if (isNaN(amount) || amount <= 0) {
+      alert("Please enter a valid amount.");
       return;
     }
+
+    // 1. Build Description & Update Items
+    const updatedItems = [...selectedOrderForPayment.items];
+    const paidDetails: string[] = [];
+
+    paymentItems.forEach(state => {
+      if (state.selected && state.payQty > 0) {
+        const item = updatedItems[state.index];
+        const newPaidQty = (item.paidQuantity || 0) + state.payQty;
+        // Update item in local copy
+        updatedItems[state.index] = { ...item, paidQuantity: newPaidQty };
+        paidDetails.push(`${state.payQty}x ${item.productName}`);
+      }
+    });
+
+    // 2. Update Order Items (to persist paidQuantity)
+    await updateOrder({
+      ...selectedOrderForPayment,
+      items: updatedItems
+    });
+
+    // 3. Add Transaction (This will also update order paidAmount and status)
+    const description = paidDetails.length > 0 
+      ? `Payment for: ${paidDetails.join(', ')}`
+      : `Lump sum payment`;
 
     await addTransaction({
       id: `TXN-${Date.now()}`,
       type: TransactionType.PAYMENT_RECEIVED,
       amount: amount,
-      date: new Date().toISOString(),
-      referenceId: orderId,
-      description: `Collection for Order #${orderId}`
+      date: paymentDate, // Use selected date
+      referenceId: selectedOrderForPayment.id,
+      description: description
     });
 
+    setSelectedOrderForPayment(null);
     await refreshData();
   };
 
@@ -207,8 +290,8 @@ const Collections = () => {
                     <td className="p-4 font-bold text-red-500">{formatCurrency(balance)}</td>
                     <td className="p-4 text-right">
                       <button 
-                        onClick={() => handleCollect(order.id, balance)}
-                        className="text-xs bg-primary text-white px-3 py-1.5 rounded hover:bg-teal-800 transition-colors"
+                        onClick={() => openPaymentModal(order)}
+                        className="text-xs bg-primary text-white px-3 py-1.5 rounded hover:bg-teal-800 transition-colors shadow-sm"
                       >
                         Record Payment
                       </button>
@@ -220,6 +303,132 @@ const Collections = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Itemized Payment Modal */}
+      {selectedOrderForPayment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-4xl shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="p-6 border-b border-slate-200 flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Record Payment</h3>
+                <p className="text-slate-500 text-sm">
+                  #{selectedOrderForPayment.id} - {selectedOrderForPayment.customerName}
+                </p>
+              </div>
+              <button onClick={() => setSelectedOrderForPayment(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="mb-6">
+                 <h4 className="font-medium text-slate-800 mb-3 flex items-center gap-2">
+                   <CheckSquare size={18} className="text-primary"/> Select Items Paid
+                 </h4>
+                 <div className="border border-slate-200 rounded-lg overflow-hidden">
+                   <table className="w-full text-left text-sm">
+                     <thead className="bg-slate-50 border-b border-slate-200">
+                       <tr>
+                         <th className="p-3 w-10"></th>
+                         <th className="p-3 text-slate-600">Product</th>
+                         <th className="p-3 text-slate-600 text-right">Unit Price</th>
+                         <th className="p-3 text-slate-600 text-center">Total Qty</th>
+                         <th className="p-3 text-slate-600 text-center">Prev. Paid</th>
+                         <th className="p-3 text-slate-600 text-center">Remaining</th>
+                         <th className="p-3 text-slate-600 text-center w-24">Pay Now</th>
+                       </tr>
+                     </thead>
+                     <tbody className="divide-y divide-slate-100">
+                       {selectedOrderForPayment.items.map((item, idx) => {
+                         const state = paymentItems.find(i => i.index === idx);
+                         if (!state) return null;
+                         const remaining = item.quantity - (item.paidQuantity || 0);
+                         
+                         return (
+                           <tr key={idx} className={state.selected ? 'bg-teal-50/30' : ''}>
+                             <td className="p-3 text-center">
+                               <input 
+                                 type="checkbox" 
+                                 checked={state.selected}
+                                 onChange={(e) => handlePaymentItemChange(idx, 'selected', e.target.checked)}
+                                 disabled={remaining <= 0}
+                                 className="rounded border-slate-300 text-primary focus:ring-primary"
+                               />
+                             </td>
+                             <td className="p-3 font-medium text-slate-800">{item.productName}</td>
+                             <td className="p-3 text-right">{(item.subtotal / (item.quantity || 1)).toFixed(2)}</td>
+                             <td className="p-3 text-center text-slate-500">{item.quantity}</td>
+                             <td className="p-3 text-center text-green-600 font-medium">{item.paidQuantity || 0}</td>
+                             <td className="p-3 text-center font-bold text-slate-700">{remaining}</td>
+                             <td className="p-3">
+                               <input 
+                                 type="number" 
+                                 min="0"
+                                 max={remaining}
+                                 value={state.payQty}
+                                 onChange={(e) => handlePaymentItemChange(idx, 'payQty', e.target.value)}
+                                 disabled={!state.selected || remaining <= 0}
+                                 className="w-full p-1 text-center border border-slate-300 rounded focus:ring-2 focus:ring-primary outline-none"
+                               />
+                             </td>
+                           </tr>
+                         );
+                       })}
+                     </tbody>
+                   </table>
+                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-6 rounded-xl border border-slate-200">
+                 <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                       <Calendar size={16} /> Payment Date
+                    </label>
+                    <input 
+                      type="date" 
+                      value={paymentDate}
+                      onChange={(e) => setPaymentDate(e.target.value)}
+                      className="w-full p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none bg-white"
+                    />
+                 </div>
+                 <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                       <DollarSign size={16} /> Collected Amount
+                    </label>
+                    <div className="relative">
+                       <span className="absolute left-3 top-2.5 text-slate-400 font-bold">EGP</span>
+                       <input 
+                         type="number"
+                         step="any" 
+                         value={actualCollectedAmount}
+                         onChange={(e) => setActualCollectedAmount(e.target.value)}
+                         className="w-full pl-12 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none font-bold text-lg bg-white text-primary"
+                       />
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Based on selected items, expected: {calculateSuggestedAmount(selectedOrderForPayment, paymentItems).toFixed(2)}
+                    </p>
+                 </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-200 flex justify-end gap-3 shrink-0">
+               <button 
+                  onClick={() => setSelectedOrderForPayment(null)}
+                  className="px-6 py-2.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 font-medium"
+               >
+                 Cancel
+               </button>
+               <button 
+                  onClick={handleSavePayment}
+                  className="px-6 py-2.5 rounded-lg bg-primary text-white hover:bg-teal-800 font-medium shadow-lg shadow-teal-700/30"
+               >
+                 Confirm Payment
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Transfer Modal */}
       {showTransferModal && (

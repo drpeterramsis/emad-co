@@ -6,7 +6,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell 
 } from 'recharts';
-import { DollarSign, TrendingUp, Briefcase, AlertCircle, Loader2 } from 'lucide-react';
+import { DollarSign, TrendingUp, Briefcase, AlertCircle, Loader2, Wallet } from 'lucide-react';
+import { formatCurrency } from '../utils/helpers';
 
 const Dashboard = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -49,6 +50,8 @@ const Dashboard = () => {
     );
   }
 
+  const outstanding = stats.totalSales - stats.totalCollected;
+
   return (
     <div className="p-8 space-y-8">
       <header className="flex justify-between items-center">
@@ -59,29 +62,35 @@ const Dashboard = () => {
       </header>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <StatCard 
           title="Total Sales" 
-          value={`EGP ${stats.totalSales.toLocaleString()}`} 
+          value={formatCurrency(stats.totalSales)}
           icon={TrendingUp} 
           color="bg-blue-500" 
         />
         <StatCard 
           title="Collected" 
-          value={`EGP ${stats.totalCollected.toLocaleString()}`} 
+          value={formatCurrency(stats.totalCollected)} 
           icon={DollarSign} 
           color="bg-teal-600" 
         />
         <StatCard 
+          title="Outstanding" 
+          value={formatCurrency(outstanding)}
+          icon={AlertCircle} 
+          color="bg-red-500" 
+        />
+        <StatCard 
           title="Cash on Hand" 
-          value={`EGP ${stats.repCashOnHand.toLocaleString()}`} 
-          icon={Briefcase} 
+          value={formatCurrency(stats.repCashOnHand)} 
+          icon={Wallet} 
           color="bg-amber-500" 
         />
         <StatCard 
           title="Transferred to HQ" 
-          value={`EGP ${stats.transferredToHQ.toLocaleString()}`} 
-          icon={AlertCircle} 
+          value={formatCurrency(stats.transferredToHQ)} 
+          icon={Briefcase} 
           color="bg-slate-600" 
         />
       </div>
@@ -142,11 +151,11 @@ const Dashboard = () => {
 const StatCard = ({ title, value, icon: Icon, color }: any) => (
   <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-start justify-between">
     <div>
-      <p className="text-slate-500 text-sm font-medium mb-1">{title}</p>
-      <h3 className="text-2xl font-bold text-slate-800">{value}</h3>
+      <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">{title}</p>
+      <h3 className="text-lg font-bold text-slate-800">{value}</h3>
     </div>
     <div className={`p-3 rounded-lg ${color} text-white shadow-lg shadow-opacity-20`}>
-      <Icon size={24} />
+      <Icon size={20} />
     </div>
   </div>
 );

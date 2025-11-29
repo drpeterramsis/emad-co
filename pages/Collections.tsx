@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { getOrders, addTransaction, getFinancialStats } from '../utils/storage';
 import { Order, TransactionType, OrderStatus, DashboardStats } from '../types';
-import { ArrowRightLeft, DollarSign, Wallet, Loader2 } from 'lucide-react';
+import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search } from 'lucide-react';
 import { formatDate, formatCurrency } from '../utils/helpers';
 
 const Collections = () => {
@@ -12,8 +12,10 @@ const Collections = () => {
   const [transferAmount, setTransferAmount] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // Filtering Logic
-  const unpaidOrders = orders.filter(o => o.status !== OrderStatus.PAID);
+  // Filters
+  const [searchCustomer, setSearchCustomer] = useState('');
+  const [searchProduct, setSearchProduct] = useState('');
+  const [searchMonth, setSearchMonth] = useState('');
 
   useEffect(() => {
     refreshData();
@@ -75,6 +77,24 @@ const Collections = () => {
     await refreshData();
   };
 
+  // Filter Logic
+  const unpaidOrders = orders
+    .filter(o => o.status !== OrderStatus.PAID)
+    .filter(o => {
+      const matchesCustomer = o.customerName.toLowerCase().includes(searchCustomer.toLowerCase()) || 
+                              o.id.toLowerCase().includes(searchCustomer.toLowerCase());
+      
+      const matchesProduct = searchProduct === '' || o.items.some(item => 
+        item.productName.toLowerCase().includes(searchProduct.toLowerCase())
+      );
+  
+      const matchesMonth = searchMonth === '' || o.date.startsWith(searchMonth);
+  
+      return matchesCustomer && matchesProduct && matchesMonth;
+    })
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+
   if (loading || !stats) {
     return (
       <div className="flex items-center justify-center h-full min-h-screen">
@@ -85,25 +105,73 @@ const Collections = () => {
 
   return (
     <div className="p-8">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h2 className="text-3xl font-bold text-slate-800">Collections</h2>
-          <p className="text-slate-500">Manage payments and transfers</p>
-        </div>
-        <div className="flex gap-4">
-          <div className="bg-amber-50 border border-amber-200 px-4 py-2 rounded-lg flex items-center gap-3">
-             <div className="bg-amber-100 p-2 rounded-full text-amber-600"><Wallet size={18}/></div>
-             <div>
-               <p className="text-xs text-amber-800 font-bold uppercase tracking-wider">Cash on Hand</p>
-               <p className="text-xl font-bold text-amber-900">{formatCurrency(stats.repCashOnHand)}</p>
-             </div>
+      <div className="flex flex-col gap-6 mb-8">
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-3xl font-bold text-slate-800">Collections</h2>
+            <p className="text-slate-500">Manage payments and transfers</p>
           </div>
-          <button 
-            onClick={() => setShowTransferModal(true)}
-            className="bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 flex items-center gap-2 shadow-lg shadow-slate-900/20"
-          >
-            <ArrowRightLeft size={18} /> Deposit to HQ
-          </button>
+          <div className="flex gap-4">
+            <div className="bg-amber-50 border border-amber-200 px-4 py-2 rounded-lg flex items-center gap-3">
+               <div className="bg-amber-100 p-2 rounded-full text-amber-600"><Wallet size={18}/></div>
+               <div>
+                 <p className="text-xs text-amber-800 font-bold uppercase tracking-wider">Cash on Hand</p>
+                 <p className="text-xl font-bold text-amber-900">{formatCurrency(stats.repCashOnHand)}</p>
+               </div>
+            </div>
+            <button 
+              onClick={() => setShowTransferModal(true)}
+              className="bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 flex items-center gap-2 shadow-lg shadow-slate-900/20"
+            >
+              <ArrowRightLeft size={18} /> Deposit to HQ
+            </button>
+          </div>
+        </div>
+
+        {/* Filters Bar */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-4 items-center">
+          <div className="flex items-center gap-2 text-slate-500 mr-2">
+            <Filter size={20} />
+            <span className="font-medium text-sm">Filters:</span>
+          </div>
+          
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+            <input 
+              type="text" 
+              placeholder="Search Customer or Invoice #..." 
+              value={searchCustomer}
+              onChange={(e) => setSearchCustomer(e.target.value)}
+              className="pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none w-full"
+            />
+          </div>
+
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+            <input 
+              type="text" 
+              placeholder="Filter by Product..." 
+              value={searchProduct}
+              onChange={(e) => setSearchProduct(e.target.value)}
+              className="pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none w-full"
+            />
+          </div>
+
+          <div className="relative">
+             <input 
+              type="month"
+              value={searchMonth}
+              onChange={(e) => setSearchMonth(e.target.value)}
+              className="px-4 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-slate-600"
+            />
+          </div>
+
+           <button 
+             onClick={() => { setSearchCustomer(''); setSearchProduct(''); setSearchMonth(''); }}
+             className="text-sm text-slate-500 hover:text-red-500 underline"
+           >
+             Clear
+           </button>
         </div>
       </div>
 
@@ -125,7 +193,7 @@ const Collections = () => {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {unpaidOrders.length === 0 ? (
-               <tr><td colSpan={7} className="p-8 text-center text-slate-400">All invoices paid!</td></tr>
+               <tr><td colSpan={7} className="p-8 text-center text-slate-400">All invoices paid or no matches!</td></tr>
             ) : (
               unpaidOrders.map(order => {
                 const balance = order.totalAmount - order.paidAmount;

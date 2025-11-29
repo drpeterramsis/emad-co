@@ -1,4 +1,3 @@
-
 import { Product, Customer, Order, Transaction, OrderStatus, TransactionType } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_CUSTOMERS } from '../constants';
 import { supabase, isSupabaseEnabled } from '../services/supabaseClient';
@@ -229,8 +228,9 @@ export const updateOrder = async (order: Order) => {
       date: order.date,
       items: order.items,
       total_amount: order.totalAmount,
-      notes: order.notes
-      // We don't touch paid_amount or status here unless specifically handled
+      notes: order.notes,
+      paid_amount: order.paidAmount,
+      status: order.status
     };
     
     const { error } = await supabase.from('orders').update(dbOrder).eq('id', order.id);
@@ -262,7 +262,7 @@ export const updateOrder = async (order: Order) => {
     });
 
     // Update order
-    orders[index] = { ...oldOrder, ...order, paidAmount: oldOrder.paidAmount, status: oldOrder.status }; // Preserve payment status
+    orders[index] = { ...oldOrder, ...order };
 
     // Deduct new stock (qty + bonus)
     order.items.forEach(item => {
@@ -372,6 +372,74 @@ export const addTransaction = async (transaction: Transaction) => {
         localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
       }
     }
+  }
+};
+
+export const updateTransaction = async (transaction: Transaction) => {
+  if (isSupabaseEnabled && supabase) {
+    // Simple update for details, complex logic not implemented for changing amounts affecting orders deeply
+    // This is primarily for Deposit updates
+    const dbTxn = {
+      amount: transaction.amount,
+      date: transaction.date,
+      description: transaction.description
+    };
+    const { error } = await supabase.from('transactions').update(dbTxn).eq('id', transaction.id);
+    if(error) throw error;
+  } else {
+    const transactions = await getTransactions();
+    const index = transactions.findIndex(t => t.id === transaction.id);
+    if (index !== -1) {
+      transactions[index] = { ...transactions[index], ...transaction };
+      localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
+    }
+  }
+}
+
+export const deleteTransaction = async (transactionId: string) => {
+  if (isSupabaseEnabled && supabase) {
+    const { data: txn } = await supabase.from('transactions').select('*').eq('id', transactionId).single();
+    if (!txn) return;
+
+    if (txn.type === TransactionType.PAYMENT_RECEIVED && txn.reference_id) {
+      // Revert Order Amount
+      const { data: order } = await supabase.from('orders').select('*').eq('id', txn.reference_id).single();
+      if (order) {
+        const newPaid = Math.max(0, (Number(order.paid_amount) || 0) - Number(txn.amount));
+        let newStatus = OrderStatus.PENDING;
+        if (newPaid >= Number(order.total_amount)) newStatus = OrderStatus.PAID;
+        else if (newPaid > 0) newStatus = OrderStatus.PARTIAL;
+        
+        await supabase.from('orders').update({ paid_amount: newPaid, status: newStatus }).eq('id', txn.reference_id);
+      }
+    }
+
+    const { error } = await supabase.from('transactions').delete().eq('id', transactionId);
+    if (error) throw error;
+
+  } else {
+    // Local Storage
+    let transactions = await getTransactions();
+    const txn = transactions.find(t => t.id === transactionId);
+    
+    if (txn && txn.type === TransactionType.PAYMENT_RECEIVED && txn.referenceId) {
+      const orders = await getOrders();
+      const orderIndex = orders.findIndex(o => o.id === txn.referenceId);
+      if (orderIndex >= 0) {
+        orders[orderIndex].paidAmount = Math.max(0, orders[orderIndex].paidAmount - txn.amount);
+        if (orders[orderIndex].paidAmount >= orders[orderIndex].totalAmount) {
+          orders[orderIndex].status = OrderStatus.PAID;
+        } else if (orders[orderIndex].paidAmount > 0) {
+          orders[orderIndex].status = OrderStatus.PARTIAL;
+        } else {
+          orders[orderIndex].status = OrderStatus.PENDING;
+        }
+        localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+      }
+    }
+
+    transactions = transactions.filter(t => t.id !== transactionId);
+    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
   }
 };
 

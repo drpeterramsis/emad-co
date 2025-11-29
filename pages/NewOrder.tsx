@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { getCustomers, getProducts, saveOrder, getOrder, updateOrder } from '../utils/storage';
-import { Customer, Product, OrderItem, OrderStatus } from '../types';
-import { Trash2, Save, Loader2, Search, X } from 'lucide-react';
+import { getCustomers, getProducts, saveOrder, getOrder, updateOrder, addCustomer } from '../utils/storage';
+import { Customer, Product, OrderItem, OrderStatus, CustomerType } from '../types';
+import { Trash2, Save, Loader2, Search, X, Plus } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import LoadingOverlay from '../components/LoadingOverlay';
 
@@ -25,6 +24,12 @@ const NewOrder = () => {
   const [productSearch, setProductSearch] = useState('');
   const [showProductList, setShowProductList] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  // New Customer Modal State
+  const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState('');
+  const [newCustomerType, setNewCustomerType] = useState<CustomerType>(CustomerType.PHARMACY);
+  const [newCustomerAddress, setNewCustomerAddress] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -168,6 +173,35 @@ const NewOrder = () => {
     }
   };
 
+  const handleQuickAddCustomer = async () => {
+    if (!newCustomerName) return;
+    setIsSubmitting(true); // Reusing loading state
+    try {
+      const newId = `CUST-${Date.now()}`;
+      const newCust: Customer = {
+        id: newId,
+        name: newCustomerName,
+        type: newCustomerType,
+        address: newCustomerAddress,
+        defaultDiscount: 0
+      };
+      await addCustomer(newCust);
+      
+      // Refresh customer list
+      const updatedCustomers = await getCustomers();
+      setCustomers(updatedCustomers);
+      setSelectedCustomer(newId); // Auto select
+      
+      setShowNewCustomerModal(false);
+      setNewCustomerName('');
+      setNewCustomerAddress('');
+    } catch (e) {
+      console.error("Error adding customer", e);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
     p.basePrice.toString().includes(productSearch)
@@ -201,19 +235,29 @@ const NewOrder = () => {
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Customer</label>
-            <select
-              required
-              className="w-full rounded-lg border-slate-300 border p-2.5 focus:ring-2 focus:ring-primary focus:border-primary outline-none"
-              value={selectedCustomer}
-              onChange={(e) => setSelectedCustomer(e.target.value)}
-            >
-              <option value="">Select Customer...</option>
-              {customers.map(c => (
-                <option key={c.id} value={c.id}>
-                   {c.name} ({c.type}) {c.defaultDiscount ? `- ${c.defaultDiscount}% Disc` : ''}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select
+                required
+                className="w-full rounded-lg border-slate-300 border p-2.5 focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                value={selectedCustomer}
+                onChange={(e) => setSelectedCustomer(e.target.value)}
+              >
+                <option value="">Select Customer...</option>
+                {customers.map(c => (
+                  <option key={c.id} value={c.id}>
+                     {c.name} ({c.type}) {c.defaultDiscount ? `- ${c.defaultDiscount}% Disc` : ''}
+                  </option>
+                ))}
+              </select>
+              <button 
+                type="button"
+                onClick={() => setShowNewCustomerModal(true)}
+                className="p-2.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 border border-slate-200"
+                title="Add New Customer"
+              >
+                <Plus size={20} />
+              </button>
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Order Date</label>
@@ -412,6 +456,73 @@ const NewOrder = () => {
           </button>
         </div>
       </form>
+
+      {/* Quick Add Customer Modal */}
+      {showNewCustomerModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md shadow-2xl p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-slate-800">Quick Add Customer</h3>
+              <button onClick={() => setShowNewCustomerModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
+                <input 
+                  type="text"
+                  value={newCustomerName}
+                  onChange={(e) => setNewCustomerName(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="e.g. Hope Pharmacy"
+                />
+              </div>
+              <div>
+                 <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>
+                 <select 
+                   value={newCustomerType}
+                   onChange={(e) => setNewCustomerType(e.target.value as CustomerType)}
+                   className="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary outline-none"
+                 >
+                   {Object.values(CustomerType).map(t => (
+                     <option key={t} value={t}>{t}</option>
+                   ))}
+                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Address</label>
+                <input 
+                  type="text"
+                  value={newCustomerAddress}
+                  onChange={(e) => setNewCustomerAddress(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="Area / Street"
+                />
+              </div>
+
+              <div className="pt-4 flex justify-end gap-2">
+                <button 
+                  type="button" 
+                  onClick={() => setShowNewCustomerModal(false)}
+                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="button" 
+                  onClick={handleQuickAddCustomer}
+                  disabled={!newCustomerName}
+                  className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-teal-800 disabled:opacity-50"
+                >
+                  Add Customer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

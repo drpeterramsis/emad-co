@@ -1,9 +1,7 @@
-
-
 import React, { useEffect, useState } from 'react';
 import { getOrders, deleteOrder } from '../utils/storage';
 import { Order, OrderStatus } from '../types';
-import { Search, Loader2, Edit, Trash2, Filter, Eye, X } from 'lucide-react';
+import { Search, Loader2, Edit, Trash2, Filter, Eye, X, Printer, Save } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { formatDate, formatCurrency } from '../utils/helpers';
 
@@ -20,6 +18,11 @@ const InvoiceList = () => {
   // Modal
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
+  // Print Settings
+  const [invoiceHeader, setInvoiceHeader] = useState(() => localStorage.getItem('invoice_header') || 'EMAD CO. PHARMACEUTICAL');
+  const [invoiceSubheader, setInvoiceSubheader] = useState(() => localStorage.getItem('invoice_subheader') || 'Sales & Distribution');
+  const [showPrintSettings, setShowPrintSettings] = useState(false);
+
   useEffect(() => {
     fetchOrders();
   }, []);
@@ -28,6 +31,16 @@ const InvoiceList = () => {
     const data = await getOrders();
     setOrders(data);
     setLoading(false);
+  };
+
+  const savePrintSettings = () => {
+    localStorage.setItem('invoice_header', invoiceHeader);
+    localStorage.setItem('invoice_subheader', invoiceSubheader);
+    setShowPrintSettings(false);
+  };
+
+  const handlePrint = () => {
+    window.print();
   };
 
   const getStatusColor = (status: OrderStatus) => {
@@ -86,7 +99,7 @@ const InvoiceList = () => {
 
   return (
     <div className="p-8">
-      <div className="flex flex-col gap-6 mb-8">
+      <div className="flex flex-col gap-6 mb-8 print:hidden">
         <div>
           <h2 className="text-3xl font-bold text-slate-800">Invoices</h2>
           <p className="text-slate-500">History of all sales orders</p>
@@ -139,7 +152,7 @@ const InvoiceList = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden print:hidden">
         <table className="w-full text-left">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
@@ -232,71 +245,150 @@ const InvoiceList = () => {
 
       {/* Invoice Detail Modal */}
       {selectedOrder && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-slate-200 flex justify-between items-start">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 print:p-0 print:bg-white print:absolute print:inset-0">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto print:max-w-none print:shadow-none print:h-auto print:max-h-none print:rounded-none">
+            
+            {/* Modal Actions (Hidden on Print) */}
+            <div className="p-6 border-b border-slate-200 flex justify-between items-start print:hidden">
               <div>
                 <h3 className="text-xl font-bold text-slate-800">Invoice Details</h3>
-                <p className="text-slate-500 text-sm">#{selectedOrder.id} • {formatDate(selectedOrder.date)}</p>
+                <p className="text-slate-500 text-sm">#{selectedOrder.id}</p>
               </div>
-              <button onClick={() => setSelectedOrder(null)} className="text-slate-400 hover:text-slate-600">
-                <X size={24} />
-              </button>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setShowPrintSettings(!showPrintSettings)}
+                  className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg"
+                  title="Print Settings"
+                >
+                  <Edit size={20} />
+                </button>
+                <button 
+                  onClick={handlePrint}
+                  className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg flex items-center gap-2"
+                >
+                  <Printer size={20} /> Print
+                </button>
+                <button onClick={() => setSelectedOrder(null)} className="p-2 text-slate-400 hover:text-slate-600">
+                  <X size={24} />
+                </button>
+              </div>
             </div>
+
+            {/* Print Settings (Visible when toggled, Hidden on Print) */}
+            {showPrintSettings && (
+              <div className="p-4 bg-slate-50 border-b border-slate-200 print:hidden">
+                <h4 className="font-bold text-sm text-slate-700 mb-2">Print Settings</h4>
+                <div className="grid grid-cols-2 gap-4 mb-2">
+                  <input 
+                    type="text" 
+                    value={invoiceHeader}
+                    onChange={(e) => setInvoiceHeader(e.target.value)}
+                    placeholder="Invoice Heading (e.g. Company Name)"
+                    className="p-2 border border-slate-300 rounded text-sm"
+                  />
+                  <input 
+                    type="text" 
+                    value={invoiceSubheader}
+                    onChange={(e) => setInvoiceSubheader(e.target.value)}
+                    placeholder="Subheading (e.g. Sales Dept)"
+                    className="p-2 border border-slate-300 rounded text-sm"
+                  />
+                </div>
+                <button 
+                  onClick={savePrintSettings} 
+                  className="text-xs bg-slate-800 text-white px-3 py-1 rounded flex items-center gap-1"
+                >
+                  <Save size={12} /> Save Settings
+                </button>
+              </div>
+            )}
             
-            <div className="p-6 space-y-6">
-              <div className="flex justify-between items-center bg-slate-50 p-4 rounded-lg">
+            {/* Invoice Content */}
+            <div className="p-8 space-y-6 print:p-8">
+              
+              {/* Print Header (Only visible heavily on print/preview) */}
+              <div className="text-center border-b-2 border-slate-800 pb-4 mb-8">
+                 <h1 className="text-3xl font-bold text-slate-900 uppercase tracking-wide">{invoiceHeader}</h1>
+                 <p className="text-slate-500 font-medium">{invoiceSubheader}</p>
+              </div>
+
+              <div className="flex justify-between items-start">
                 <div>
-                   <p className="text-sm text-slate-500">Customer</p>
-                   <p className="font-bold text-lg text-slate-800">{selectedOrder.customerName}</p>
+                   <p className="text-xs text-slate-500 uppercase font-bold">Bill To:</p>
+                   <p className="font-bold text-xl text-slate-800">{selectedOrder.customerName}</p>
+                   <p className="text-sm text-slate-600">ID: {selectedOrder.customerId}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm text-slate-500">Total Amount</p>
-                  <p className="font-bold text-2xl text-primary">{formatCurrency(selectedOrder.totalAmount)}</p>
+                   <p className="text-xs text-slate-500 uppercase font-bold">Invoice #</p>
+                   <p className="font-mono text-lg text-slate-800">{selectedOrder.id}</p>
+                   <p className="text-sm text-slate-600 mt-1">Date: {formatDate(selectedOrder.date)}</p>
                 </div>
               </div>
 
               <div>
-                <h4 className="font-medium text-slate-800 mb-3">Order Items</h4>
-                <div className="border border-slate-200 rounded-lg overflow-hidden">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 border-b border-slate-200">
-                      <tr>
-                        <th className="p-3 text-slate-600">Product</th>
-                        <th className="p-3 text-slate-600 text-right">Unit Price</th>
-                        <th className="p-3 text-slate-600 text-center">Qty</th>
-                        <th className="p-3 text-slate-600 text-center">Bonus</th>
-                        <th className="p-3 text-slate-600 text-center">Disc.</th>
-                        <th className="p-3 text-slate-600 text-right">Subtotal</th>
+                <table className="w-full text-left text-sm mt-4">
+                  <thead className="bg-slate-100 border-b-2 border-slate-300 print:bg-slate-50">
+                    <tr>
+                      <th className="p-3 text-slate-800 font-bold">Item</th>
+                      <th className="p-3 text-slate-800 font-bold text-right">Price</th>
+                      <th className="p-3 text-slate-800 font-bold text-center">Qty</th>
+                      <th className="p-3 text-slate-800 font-bold text-center">Bonus</th>
+                      <th className="p-3 text-slate-800 font-bold text-center">Disc.</th>
+                      <th className="p-3 text-slate-800 font-bold text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {selectedOrder.items.map((item, idx) => (
+                      <tr key={idx}>
+                        <td className="p-3 font-medium text-slate-800">{item.productName}</td>
+                        <td className="p-3 text-right">{item.unitPrice}</td>
+                        <td className="p-3 text-center">{item.quantity}</td>
+                        <td className="p-3 text-center">{item.bonusQuantity > 0 ? item.bonusQuantity : '-'}</td>
+                        <td className="p-3 text-center">
+                          {item.discount > 0 ? item.discount.toFixed(2) : '-'}
+                        </td>
+                        <td className="p-3 text-right font-bold">{item.subtotal.toFixed(2)}</td>
                       </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {selectedOrder.items.map((item, idx) => (
-                        <tr key={idx}>
-                          <td className="p-3 font-medium text-slate-800">{item.productName}</td>
-                          <td className="p-3 text-right">{item.unitPrice}</td>
-                          <td className="p-3 text-center">{item.quantity}</td>
-                          <td className="p-3 text-center text-orange-600">{item.bonusQuantity > 0 ? item.bonusQuantity : '-'}</td>
-                          <td className="p-3 text-center text-blue-600">
-                            {item.discount > 0 ? `${item.discount.toFixed(2)} (${item.discountPercent || ((item.discount/(item.unitPrice * item.quantity))*100).toFixed(1)}%)` : '-'}
-                          </td>
-                          <td className="p-3 text-right font-bold">{item.subtotal.toFixed(2)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
               </div>
 
-              <div className="flex justify-between text-sm text-slate-600 pt-4 border-t border-slate-100">
-                <span>Paid: {formatCurrency(selectedOrder.paidAmount)}</span>
-                <span className={selectedOrder.status === OrderStatus.PAID ? 'text-green-600 font-bold' : 'text-amber-600 font-bold'}>
-                  {selectedOrder.status.toUpperCase()}
-                </span>
+              <div className="flex flex-col items-end pt-4 border-t border-slate-300 gap-1">
+                 <div className="w-48 flex justify-between text-sm">
+                   <span className="text-slate-600">Subtotal:</span>
+                   <span className="font-medium">
+                     {formatCurrency(selectedOrder.items.reduce((s, i) => s + (i.unitPrice * i.quantity), 0))}
+                   </span>
+                 </div>
+                 <div className="w-48 flex justify-between text-sm">
+                   <span className="text-slate-600">Discount:</span>
+                   <span className="text-red-500 font-medium">
+                     - {formatCurrency(selectedOrder.items.reduce((s, i) => s + (i.discount || 0), 0))}
+                   </span>
+                 </div>
+                 <div className="w-48 flex justify-between text-lg font-bold border-t border-slate-300 pt-2 mt-2">
+                   <span>Total:</span>
+                   <span>{formatCurrency(selectedOrder.totalAmount)}</span>
+                 </div>
+                 <div className="w-48 flex justify-between text-sm pt-1">
+                   <span className="text-slate-500">Paid:</span>
+                   <span className="text-green-600 font-medium">{formatCurrency(selectedOrder.paidAmount)}</span>
+                 </div>
+                 <div className="w-48 flex justify-between text-sm pt-1">
+                   <span className="text-slate-500">Balance:</span>
+                   <span className="text-red-600 font-bold">{formatCurrency(selectedOrder.totalAmount - selectedOrder.paidAmount)}</span>
+                 </div>
+              </div>
+
+              {/* Print Footer */}
+              <div className="hidden print:block fixed bottom-4 left-0 w-full text-center text-xs text-slate-400">
+                Printed on {new Date().toLocaleDateString()}
               </div>
             </div>
             
-            <div className="p-4 bg-slate-50 border-t border-slate-200 text-right">
+            {/* Modal Close Footer (Hidden on Print) */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 text-right print:hidden">
               <button 
                 onClick={() => setSelectedOrder(null)}
                 className="px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900"

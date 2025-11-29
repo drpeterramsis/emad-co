@@ -1,18 +1,27 @@
-
-
 import React, { useState, useEffect } from 'react';
-import { getOrders, addTransaction, getFinancialStats, updateOrder } from '../utils/storage';
-import { Order, TransactionType, OrderStatus, DashboardStats, OrderItem } from '../types';
-import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search, Calendar, CheckSquare, X } from 'lucide-react';
+import { getOrders, addTransaction, getFinancialStats, updateOrder, getTransactions, deleteTransaction, updateTransaction } from '../utils/storage';
+import { Order, TransactionType, OrderStatus, DashboardStats, Transaction } from '../types';
+import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search, Calendar, CheckSquare, X, History, FileText, Trash2, Edit2 } from 'lucide-react';
 import { formatDate, formatCurrency } from '../utils/helpers';
 
 const Collections = () => {
+  const [activeTab, setActiveTab] = useState<'pending' | 'history' | 'deposits'>('pending');
+
   const [orders, setOrders] = useState<Order[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  
+  const [loading, setLoading] = useState(true);
+
+  // Filters for History
+  const [searchHistory, setSearchHistory] = useState('');
+  const [historyMonth, setHistoryMonth] = useState('');
+
   // HQ Transfer State
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferAmount, setTransferAmount] = useState('');
+  const [transferDate, setTransferDate] = useState(new Date().toISOString().split('T')[0]);
+  const [transferDesc, setTransferDesc] = useState('Transfer to HQ Bank Account');
+  const [editingDeposit, setEditingDeposit] = useState<Transaction | null>(null);
   
   // Itemized Payment State
   const [selectedOrderForPayment, setSelectedOrderForPayment] = useState<Order | null>(null);
@@ -20,9 +29,7 @@ const Collections = () => {
   const [paymentItems, setPaymentItems] = useState<{index: number, payQty: number, selected: boolean}[]>([]);
   const [actualCollectedAmount, setActualCollectedAmount] = useState<string>('');
   
-  const [loading, setLoading] = useState(true);
-
-  // Filters
+  // Filters for Pending
   const [searchCustomer, setSearchCustomer] = useState('');
   const [searchProduct, setSearchProduct] = useState('');
   const [searchMonth, setSearchMonth] = useState('');
@@ -33,27 +40,27 @@ const Collections = () => {
 
   const refreshData = async () => {
     setLoading(true);
-    const [fetchedOrders, fetchedStats] = await Promise.all([
+    const [fetchedOrders, fetchedStats, fetchedTxns] = await Promise.all([
       getOrders(),
-      getFinancialStats()
+      getFinancialStats(),
+      getTransactions()
     ]);
     setOrders(fetchedOrders);
     setStats(fetchedStats);
+    setTransactions(fetchedTxns.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     setLoading(false);
   };
 
+  /* --- PAYMENT LOGIC --- */
   const openPaymentModal = (order: Order) => {
     setSelectedOrderForPayment(order);
     setPaymentDate(new Date().toISOString().split('T')[0]);
-    // Initialize payment state for items
     const initItems = order.items.map((item, idx) => ({
       index: idx,
-      payQty: item.quantity - (item.paidQuantity || 0), // Default to remaining qty
-      selected: (item.quantity - (item.paidQuantity || 0)) > 0 // Select if there is remaining qty
+      payQty: item.quantity - (item.paidQuantity || 0),
+      selected: (item.quantity - (item.paidQuantity || 0)) > 0
     }));
     setPaymentItems(initItems);
-    
-    // Initial Calc
     const suggested = calculateSuggestedAmount(order, initItems);
     setActualCollectedAmount(suggested.toFixed(2));
   };
@@ -82,8 +89,6 @@ const Collections = () => {
     }
 
     setPaymentItems(newItems);
-    
-    // Update Suggested Amount
     if (selectedOrderForPayment) {
       const suggested = calculateSuggestedAmount(selectedOrderForPayment, newItems);
       setActualCollectedAmount(suggested.toFixed(2));
@@ -92,14 +97,12 @@ const Collections = () => {
 
   const handleSavePayment = async () => {
     if (!selectedOrderForPayment) return;
-    
     const amount = parseFloat(actualCollectedAmount);
     if (isNaN(amount) || amount <= 0) {
       alert("Please enter a valid amount.");
       return;
     }
 
-    // 1. Build Description & Update Items
     const updatedItems = [...selectedOrderForPayment.items];
     const paidDetails: string[] = [];
 
@@ -107,28 +110,20 @@ const Collections = () => {
       if (state.selected && state.payQty > 0) {
         const item = updatedItems[state.index];
         const newPaidQty = (item.paidQuantity || 0) + state.payQty;
-        // Update item in local copy
         updatedItems[state.index] = { ...item, paidQuantity: newPaidQty };
         paidDetails.push(`${state.payQty}x ${item.productName}`);
       }
     });
 
-    // 2. Update Order Items (to persist paidQuantity)
-    await updateOrder({
-      ...selectedOrderForPayment,
-      items: updatedItems
-    });
+    await updateOrder({ ...selectedOrderForPayment, items: updatedItems });
 
-    // 3. Add Transaction (This will also update order paidAmount and status)
-    const description = paidDetails.length > 0 
-      ? `Payment for: ${paidDetails.join(', ')}`
-      : `Lump sum payment`;
+    const description = paidDetails.length > 0 ? `Payment for: ${paidDetails.join(', ')}` : `Lump sum payment`;
 
     await addTransaction({
       id: `TXN-${Date.now()}`,
       type: TransactionType.PAYMENT_RECEIVED,
       amount: amount,
-      date: paymentDate, // Use selected date
+      date: paymentDate,
       referenceId: selectedOrderForPayment.id,
       description: description
     });
@@ -137,45 +132,116 @@ const Collections = () => {
     await refreshData();
   };
 
+  /* --- DEPOSIT LOGIC --- */
+  const openDepositModal = (deposit?: Transaction) => {
+    if (deposit) {
+      setEditingDeposit(deposit);
+      setTransferAmount(deposit.amount.toString());
+      setTransferDate(new Date(deposit.date).toISOString().split('T')[0]);
+      setTransferDesc(deposit.description);
+    } else {
+      setEditingDeposit(null);
+      setTransferAmount('');
+      setTransferDate(new Date().toISOString().split('T')[0]);
+      setTransferDesc('Transfer to HQ Bank Account');
+    }
+    setShowTransferModal(true);
+  };
+
   const handleDepositToHQ = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!stats) return;
 
     const amount = parseFloat(transferAmount);
-    if (isNaN(amount) || amount <= 0 || amount > stats.repCashOnHand) {
-      alert("Invalid transfer amount. Cannot exceed Cash on Hand.");
+    if (isNaN(amount) || amount <= 0) {
+      alert("Invalid amount.");
       return;
     }
+    
+    // Check constraints only for new deposits
+    if (!editingDeposit && amount > stats.repCashOnHand) {
+       alert("Invalid transfer amount. Cannot exceed Cash on Hand.");
+       return;
+    }
 
-    await addTransaction({
-      id: `TXN-${Date.now()}`,
-      type: TransactionType.DEPOSIT_TO_HQ,
-      amount: amount,
-      date: new Date().toISOString(),
-      description: 'Transfer to HQ Bank Account'
-    });
+    if (editingDeposit) {
+       await updateTransaction({
+         ...editingDeposit,
+         amount,
+         date: new Date(transferDate).toISOString(),
+         description: transferDesc
+       });
+    } else {
+      await addTransaction({
+        id: `TXN-${Date.now()}`,
+        type: TransactionType.DEPOSIT_TO_HQ,
+        amount: amount,
+        date: new Date(transferDate).toISOString(),
+        description: transferDesc
+      });
+    }
 
     setTransferAmount('');
     setShowTransferModal(false);
     await refreshData();
   };
 
-  // Filter Logic
+  const handleDeleteDeposit = async (id: string) => {
+    if(window.confirm("Are you sure you want to delete this deposit? This will return the amount to 'Cash on Hand'.")){
+      await deleteTransaction(id);
+      await refreshData();
+    }
+  }
+
+  /* --- DATA FILTERS --- */
   const unpaidOrders = orders
     .filter(o => o.status !== OrderStatus.PAID)
     .filter(o => {
       const matchesCustomer = o.customerName.toLowerCase().includes(searchCustomer.toLowerCase()) || 
                               o.id.toLowerCase().includes(searchCustomer.toLowerCase());
-      
       const matchesProduct = searchProduct === '' || o.items.some(item => 
         item.productName.toLowerCase().includes(searchProduct.toLowerCase())
       );
-  
       const matchesMonth = searchMonth === '' || o.date.startsWith(searchMonth);
-  
       return matchesCustomer && matchesProduct && matchesMonth;
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  // Collections History
+  const collectionHistory = transactions
+    .filter(t => t.type === TransactionType.PAYMENT_RECEIVED)
+    .filter(t => {
+      // Find customer name from order ref if possible, or just search description/id
+      const order = orders.find(o => o.id === t.referenceId);
+      const customerName = order?.customerName || '';
+      
+      const matchesSearch = customerName.toLowerCase().includes(searchHistory.toLowerCase()) || 
+                            t.description.toLowerCase().includes(searchHistory.toLowerCase()) ||
+                            t.referenceId?.toLowerCase().includes(searchHistory.toLowerCase());
+      
+      const matchesMonth = historyMonth === '' || t.date.startsWith(historyMonth);
+      return matchesSearch && matchesMonth;
+    });
+
+  // Deposits History
+  const depositHistory = transactions.filter(t => t.type === TransactionType.DEPOSIT_TO_HQ);
+  
+  // Calculate Monthly Report Stats
+  const getMonthlyReport = () => {
+     const monthFilter = historyMonth || new Date().toISOString().slice(0, 7); // Default to current or selected
+     
+     const collected = transactions
+        .filter(t => t.type === TransactionType.PAYMENT_RECEIVED && t.date.startsWith(monthFilter))
+        .reduce((sum, t) => sum + t.amount, 0);
+        
+     const deposited = transactions
+        .filter(t => t.type === TransactionType.DEPOSIT_TO_HQ && t.date.startsWith(monthFilter))
+        .reduce((sum, t) => sum + t.amount, 0);
+        
+     return { month: monthFilter, collected, deposited };
+  }
+  
+  const report = getMonthlyReport();
 
 
   if (loading || !stats) {
@@ -188,121 +254,242 @@ const Collections = () => {
 
   return (
     <div className="p-8">
-      <div className="flex flex-col gap-6 mb-8">
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-3xl font-bold text-slate-800">Collections</h2>
-            <p className="text-slate-500">Manage payments and transfers</p>
-          </div>
-          <div className="flex gap-4">
-            <div className="bg-amber-50 border border-amber-200 px-4 py-2 rounded-lg flex items-center gap-3">
-               <div className="bg-amber-100 p-2 rounded-full text-amber-600"><Wallet size={18}/></div>
-               <div>
-                 <p className="text-xs text-amber-800 font-bold uppercase tracking-wider">Cash on Hand</p>
-                 <p className="text-xl font-bold text-amber-900">{formatCurrency(stats.repCashOnHand)}</p>
-               </div>
+      {/* Top Header & Report */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+        <div>
+          <h2 className="text-3xl font-bold text-slate-800">Collections & Deposits</h2>
+          <p className="text-slate-500">Manage payments, history, and HQ transfers</p>
+        </div>
+        
+        {/* Cash on Hand Card */}
+        <div className="bg-amber-50 border border-amber-200 px-6 py-3 rounded-xl flex items-center gap-4 shadow-sm">
+           <div className="bg-amber-100 p-3 rounded-full text-amber-600"><Wallet size={24}/></div>
+           <div>
+             <p className="text-xs text-amber-800 font-bold uppercase tracking-wider">Cash on Hand</p>
+             <p className="text-2xl font-bold text-amber-900">{formatCurrency(stats.repCashOnHand)}</p>
+           </div>
+        </div>
+      </div>
+
+      {/* Monthly Summary (Visible mostly when filters active or just generally) */}
+      <div className="bg-gradient-to-r from-slate-800 to-slate-700 rounded-xl p-6 text-white shadow-lg mb-8 flex flex-col md:flex-row justify-between items-center gap-6">
+         <div className="flex items-center gap-4">
+            <div className="p-3 bg-white/10 rounded-lg"><FileText size={24} /></div>
+            <div>
+               <h3 className="font-bold text-lg">Monthly Report</h3>
+               <p className="text-slate-300 text-sm">Summary for {report.month}</p>
             </div>
-            <button 
-              onClick={() => setShowTransferModal(true)}
-              className="bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 flex items-center gap-2 shadow-lg shadow-slate-900/20"
-            >
-              <ArrowRightLeft size={18} /> Deposit to HQ
-            </button>
-          </div>
-        </div>
-
-        {/* Filters Bar */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-4 items-center">
-          <div className="flex items-center gap-2 text-slate-500 mr-2">
-            <Filter size={20} />
-            <span className="font-medium text-sm">Filters:</span>
-          </div>
-          
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
-            <input 
-              type="text" 
-              placeholder="Search Customer or Invoice #..." 
-              value={searchCustomer}
-              onChange={(e) => setSearchCustomer(e.target.value)}
-              className="pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none w-full"
-            />
-          </div>
-
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
-            <input 
-              type="text" 
-              placeholder="Filter by Product..." 
-              value={searchProduct}
-              onChange={(e) => setSearchProduct(e.target.value)}
-              className="pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none w-full"
-            />
-          </div>
-
-          <div className="relative">
-             <input 
-              type="month"
-              value={searchMonth}
-              onChange={(e) => setSearchMonth(e.target.value)}
-              className="px-4 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-slate-600"
-            />
-          </div>
-
-           <button 
-             onClick={() => { setSearchCustomer(''); setSearchProduct(''); setSearchMonth(''); }}
-             className="text-sm text-slate-500 hover:text-red-500 underline"
-           >
-             Clear
-           </button>
-        </div>
+         </div>
+         <div className="flex gap-8">
+            <div className="text-right">
+               <p className="text-xs text-slate-400 uppercase font-bold">Total Collected</p>
+               <p className="text-xl font-bold text-teal-400">{formatCurrency(report.collected)}</p>
+            </div>
+            <div className="text-right border-l border-white/10 pl-8">
+               <p className="text-xs text-slate-400 uppercase font-bold">Deposited to HQ</p>
+               <p className="text-xl font-bold text-blue-400">{formatCurrency(report.deposited)}</p>
+            </div>
+            <div className="text-right border-l border-white/10 pl-8">
+               <p className="text-xs text-slate-400 uppercase font-bold">Net Difference</p>
+               <p className="text-xl font-bold text-white">{formatCurrency(report.collected - report.deposited)}</p>
+            </div>
+         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-6 border-b border-slate-200">
-          <h3 className="text-lg font-bold text-slate-800">Outstanding Invoices</h3>
-        </div>
-        <table className="w-full text-left">
-          <thead className="bg-slate-50 border-b border-slate-200">
-            <tr>
-              <th className="p-4 font-medium text-slate-600">Invoice ID</th>
-              <th className="p-4 font-medium text-slate-600">Customer</th>
-              <th className="p-4 font-medium text-slate-600">Date</th>
-              <th className="p-4 font-medium text-slate-600">Total</th>
-              <th className="p-4 font-medium text-slate-600">Paid</th>
-              <th className="p-4 font-medium text-slate-600">Balance</th>
-              <th className="p-4 font-medium text-slate-600 text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {unpaidOrders.length === 0 ? (
-               <tr><td colSpan={7} className="p-8 text-center text-slate-400">All invoices paid or no matches!</td></tr>
-            ) : (
-              unpaidOrders.map(order => {
-                const balance = order.totalAmount - order.paidAmount;
-                return (
-                  <tr key={order.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-4 font-mono text-xs">{order.id}</td>
-                    <td className="p-4 font-medium text-slate-800">{order.customerName}</td>
-                    <td className="p-4 text-slate-600">{formatDate(order.date)}</td>
-                    <td className="p-4">{formatCurrency(order.totalAmount)}</td>
-                    <td className="p-4 text-green-600 font-medium">{formatCurrency(order.paidAmount)}</td>
-                    <td className="p-4 font-bold text-red-500">{formatCurrency(balance)}</td>
-                    <td className="p-4 text-right">
-                      <button 
-                        onClick={() => openPaymentModal(order)}
-                        className="text-xs bg-primary text-white px-3 py-1.5 rounded hover:bg-teal-800 transition-colors shadow-sm"
-                      >
-                        Record Payment
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+      {/* Tabs */}
+      <div className="flex border-b border-slate-200 mb-6">
+        <button 
+          onClick={() => setActiveTab('pending')}
+          className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 ${activeTab === 'pending' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Outstanding Invoices
+        </button>
+        <button 
+          onClick={() => setActiveTab('history')}
+          className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 ${activeTab === 'history' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Collection History
+        </button>
+        <button 
+          onClick={() => setActiveTab('deposits')}
+          className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 ${activeTab === 'deposits' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          HQ Deposits
+        </button>
       </div>
+
+      {/* TAB CONTENT: PENDING */}
+      {activeTab === 'pending' && (
+        <div className="space-y-6">
+           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-4 items-center">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                <input 
+                  type="text" 
+                  placeholder="Search Customer..." 
+                  value={searchCustomer}
+                  onChange={(e) => setSearchCustomer(e.target.value)}
+                  className="pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg w-full"
+                />
+              </div>
+              <div className="relative">
+                 <input type="month" value={searchMonth} onChange={(e) => setSearchMonth(e.target.value)} className="px-4 py-2 text-sm border border-slate-300 rounded-lg" />
+              </div>
+           </div>
+
+           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <table className="w-full text-left">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="p-4 font-medium text-slate-600">Invoice ID</th>
+                  <th className="p-4 font-medium text-slate-600">Customer</th>
+                  <th className="p-4 font-medium text-slate-600">Date</th>
+                  <th className="p-4 font-medium text-slate-600">Total</th>
+                  <th className="p-4 font-medium text-slate-600">Paid</th>
+                  <th className="p-4 font-medium text-slate-600">Balance</th>
+                  <th className="p-4 font-medium text-slate-600 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {unpaidOrders.length === 0 ? (
+                   <tr><td colSpan={7} className="p-8 text-center text-slate-400">All invoices paid or no matches!</td></tr>
+                ) : (
+                  unpaidOrders.map(order => {
+                    const balance = order.totalAmount - order.paidAmount;
+                    return (
+                      <tr key={order.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-4 font-mono text-xs">{order.id}</td>
+                        <td className="p-4 font-medium text-slate-800">{order.customerName}</td>
+                        <td className="p-4 text-slate-600">{formatDate(order.date)}</td>
+                        <td className="p-4">{formatCurrency(order.totalAmount)}</td>
+                        <td className="p-4 text-green-600 font-medium">{formatCurrency(order.paidAmount)}</td>
+                        <td className="p-4 font-bold text-red-500">{formatCurrency(balance)}</td>
+                        <td className="p-4 text-right">
+                          <button onClick={() => openPaymentModal(order)} className="text-xs bg-primary text-white px-3 py-1.5 rounded hover:bg-teal-800 shadow-sm">
+                            Record Payment
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT: HISTORY */}
+      {activeTab === 'history' && (
+        <div className="space-y-6">
+           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-4 items-center">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                <input 
+                  type="text" 
+                  placeholder="Search Customer or Transaction..." 
+                  value={searchHistory}
+                  onChange={(e) => setSearchHistory(e.target.value)}
+                  className="pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg w-full"
+                />
+              </div>
+              <div className="relative">
+                 <input type="month" value={historyMonth} onChange={(e) => setHistoryMonth(e.target.value)} className="px-4 py-2 text-sm border border-slate-300 rounded-lg" />
+              </div>
+           </div>
+
+           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+             <table className="w-full text-left">
+               <thead className="bg-slate-50 border-b border-slate-200">
+                 <tr>
+                   <th className="p-4 font-medium text-slate-600">Date</th>
+                   <th className="p-4 font-medium text-slate-600">Ref ID</th>
+                   <th className="p-4 font-medium text-slate-600">Customer / Description</th>
+                   <th className="p-4 font-medium text-slate-600 text-right">Amount</th>
+                 </tr>
+               </thead>
+               <tbody className="divide-y divide-slate-100">
+                 {collectionHistory.length === 0 ? (
+                    <tr><td colSpan={4} className="p-8 text-center text-slate-400">No history found.</td></tr>
+                 ) : (
+                   collectionHistory.map(txn => {
+                     const order = orders.find(o => o.id === txn.referenceId);
+                     return (
+                       <tr key={txn.id} className="hover:bg-slate-50">
+                         <td className="p-4 text-slate-600">{formatDate(txn.date)}</td>
+                         <td className="p-4 font-mono text-xs text-slate-500">{txn.referenceId || '-'}</td>
+                         <td className="p-4">
+                            <p className="font-medium text-slate-800">{order?.customerName || 'Unknown'}</p>
+                            <p className="text-xs text-slate-500">{txn.description}</p>
+                         </td>
+                         <td className="p-4 text-right font-bold text-teal-600">
+                           {formatCurrency(txn.amount)}
+                         </td>
+                       </tr>
+                     )
+                   })
+                 )}
+               </tbody>
+             </table>
+           </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT: DEPOSITS */}
+      {activeTab === 'deposits' && (
+        <div className="space-y-6">
+           <div className="flex justify-end">
+              <button 
+                onClick={() => openDepositModal()}
+                className="bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 flex items-center gap-2 shadow-lg shadow-slate-900/20"
+              >
+                <ArrowRightLeft size={18} /> New Deposit to HQ
+              </button>
+           </div>
+
+           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+             <table className="w-full text-left">
+               <thead className="bg-slate-50 border-b border-slate-200">
+                 <tr>
+                   <th className="p-4 font-medium text-slate-600">Deposit Date</th>
+                   <th className="p-4 font-medium text-slate-600">Description</th>
+                   <th className="p-4 font-medium text-slate-600">Amount</th>
+                   <th className="p-4 font-medium text-slate-600 text-right">Actions</th>
+                 </tr>
+               </thead>
+               <tbody className="divide-y divide-slate-100">
+                 {depositHistory.length === 0 ? (
+                    <tr><td colSpan={4} className="p-8 text-center text-slate-400">No deposits found.</td></tr>
+                 ) : (
+                   depositHistory.map(txn => (
+                     <tr key={txn.id} className="hover:bg-slate-50">
+                       <td className="p-4 text-slate-600">{formatDate(txn.date)}</td>
+                       <td className="p-4 text-slate-800">{txn.description}</td>
+                       <td className="p-4 font-bold text-slate-800">{formatCurrency(txn.amount)}</td>
+                       <td className="p-4 text-right flex justify-end gap-2">
+                          <button 
+                            onClick={() => openDepositModal(txn)}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                            title="Edit Deposit"
+                          >
+                             <Edit2 size={16} />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteDeposit(txn.id)}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+                            title="Return/Delete Deposit"
+                          >
+                             <Trash2 size={16} />
+                          </button>
+                       </td>
+                     </tr>
+                   ))
+                 )}
+               </tbody>
+             </table>
+           </div>
+        </div>
+      )}
 
       {/* Itemized Payment Modal */}
       {selectedOrderForPayment && (
@@ -332,9 +519,7 @@ const Collections = () => {
                          <th className="p-3 w-10"></th>
                          <th className="p-3 text-slate-600">Product</th>
                          <th className="p-3 text-slate-600 text-right">Unit Price</th>
-                         <th className="p-3 text-slate-600 text-center">Total Qty</th>
-                         <th className="p-3 text-slate-600 text-center">Prev. Paid</th>
-                         <th className="p-3 text-slate-600 text-center">Remaining</th>
+                         <th className="p-3 text-slate-600 text-center">Remaining Qty</th>
                          <th className="p-3 text-slate-600 text-center w-24">Pay Now</th>
                        </tr>
                      </thead>
@@ -357,8 +542,6 @@ const Collections = () => {
                              </td>
                              <td className="p-3 font-medium text-slate-800">{item.productName}</td>
                              <td className="p-3 text-right">{(item.subtotal / (item.quantity || 1)).toFixed(2)}</td>
-                             <td className="p-3 text-center text-slate-500">{item.quantity}</td>
-                             <td className="p-3 text-center text-green-600 font-medium">{item.paidQuantity || 0}</td>
                              <td className="p-3 text-center font-bold text-slate-700">{remaining}</td>
                              <td className="p-3">
                                <input 
@@ -405,26 +588,13 @@ const Collections = () => {
                          className="w-full pl-12 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none font-bold text-lg bg-white text-primary"
                        />
                     </div>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Based on selected items, expected: {calculateSuggestedAmount(selectedOrderForPayment, paymentItems).toFixed(2)}
-                    </p>
                  </div>
               </div>
             </div>
 
             <div className="p-6 border-t border-slate-200 flex justify-end gap-3 shrink-0">
-               <button 
-                  onClick={() => setSelectedOrderForPayment(null)}
-                  className="px-6 py-2.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 font-medium"
-               >
-                 Cancel
-               </button>
-               <button 
-                  onClick={handleSavePayment}
-                  className="px-6 py-2.5 rounded-lg bg-primary text-white hover:bg-teal-800 font-medium shadow-lg shadow-teal-700/30"
-               >
-                 Confirm Payment
-               </button>
+               <button onClick={() => setSelectedOrderForPayment(null)} className="px-6 py-2.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 font-medium">Cancel</button>
+               <button onClick={handleSavePayment} className="px-6 py-2.5 rounded-lg bg-primary text-white hover:bg-teal-800 font-medium shadow-lg shadow-teal-700/30">Confirm Payment</button>
             </div>
           </div>
         </div>
@@ -434,15 +604,34 @@ const Collections = () => {
       {showTransferModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-xl w-full max-w-md shadow-2xl">
-            <h3 className="text-xl font-bold mb-4">Deposit Cash to HQ</h3>
+            <h3 className="text-xl font-bold mb-4">{editingDeposit ? 'Edit Deposit' : 'Deposit Cash to HQ'}</h3>
             <form onSubmit={handleDepositToHQ}>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Date</label>
+                <input 
+                   type="date"
+                   required
+                   value={transferDate}
+                   onChange={(e) => setTransferDate(e.target.value)}
+                   className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Description</label>
+                <input 
+                   type="text"
+                   value={transferDesc}
+                   onChange={(e) => setTransferDesc(e.target.value)}
+                   className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                />
+              </div>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 mb-2">Amount to Transfer</label>
                 <div className="relative">
                   <span className="absolute left-3 top-2.5 text-slate-400">EGP</span>
                   <input 
                     type="number" 
-                    max={stats.repCashOnHand}
+                    max={editingDeposit ? undefined : stats.repCashOnHand} // Limit only on new
                     required
                     value={transferAmount}
                     onChange={(e) => setTransferAmount(e.target.value)}
@@ -450,22 +639,11 @@ const Collections = () => {
                     placeholder="0.00"
                   />
                 </div>
-                <p className="text-xs text-slate-500 mt-1">Available: {formatCurrency(stats.repCashOnHand)}</p>
+                {!editingDeposit && <p className="text-xs text-slate-500 mt-1">Available: {formatCurrency(stats.repCashOnHand)}</p>}
               </div>
               <div className="flex justify-end gap-3">
-                <button 
-                  type="button" 
-                  onClick={() => setShowTransferModal(false)}
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit"
-                  className="px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900"
-                >
-                  Confirm Deposit
-                </button>
+                <button type="button" onClick={() => setShowTransferModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900">{editingDeposit ? 'Update' : 'Confirm Deposit'}</button>
               </div>
             </form>
           </div>

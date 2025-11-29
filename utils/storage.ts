@@ -177,12 +177,12 @@ export const saveOrder = async (order: Order) => {
     const { error } = await supabase.from('orders').upsert(dbOrder);
     if (error) throw error;
 
-    // Decrease Stock
+    // Decrease Stock (Quantity + Bonus)
     for (const item of order.items) {
-       // Fetch current stock
+       const totalQty = item.quantity + (item.bonusQuantity || 0);
        const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
        if (prod) {
-         await supabase.from('products').update({ stock: prod.stock - item.quantity }).eq('id', item.productId);
+         await supabase.from('products').update({ stock: prod.stock - totalQty }).eq('id', item.productId);
        }
     }
 
@@ -197,7 +197,8 @@ export const saveOrder = async (order: Order) => {
     order.items.forEach(item => {
       const pIndex = products.findIndex(p => p.id === item.productId);
       if (pIndex >= 0) {
-        products[pIndex].stock -= item.quantity;
+        // Decrease stock by Sold Qty + Bonus Qty
+        products[pIndex].stock -= (item.quantity + (item.bonusQuantity || 0));
       }
     });
     localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
@@ -213,9 +214,10 @@ export const updateOrder = async (order: Order) => {
       // Restore stock from old items
       const oldItems = oldOrder.items as any[];
       for (const item of oldItems) {
+         const qtyToRestore = item.quantity + (item.bonusQuantity || 0);
          const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
          if (prod) {
-           await supabase.from('products').update({ stock: prod.stock + item.quantity }).eq('id', item.productId);
+           await supabase.from('products').update({ stock: prod.stock + qtyToRestore }).eq('id', item.productId);
          }
       }
     }
@@ -228,9 +230,7 @@ export const updateOrder = async (order: Order) => {
       items: order.items,
       total_amount: order.totalAmount,
       notes: order.notes
-      // We don't touch paid_amount or status here unless specifically handled, 
-      // but typically editing an invoice shouldn't reset payments unless logic demands.
-      // For now we keep existing paid amount.
+      // We don't touch paid_amount or status here unless specifically handled
     };
     
     const { error } = await supabase.from('orders').update(dbOrder).eq('id', order.id);
@@ -238,9 +238,10 @@ export const updateOrder = async (order: Order) => {
 
     // 3. Deduct stock for new items
     for (const item of order.items) {
+       const totalQty = item.quantity + (item.bonusQuantity || 0);
        const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
        if (prod) {
-         await supabase.from('products').update({ stock: prod.stock - item.quantity }).eq('id', item.productId);
+         await supabase.from('products').update({ stock: prod.stock - totalQty }).eq('id', item.productId);
        }
     }
 
@@ -254,19 +255,19 @@ export const updateOrder = async (order: Order) => {
     const oldOrder = orders[index];
     let products = await getProducts();
 
-    // Restore old stock
+    // Restore old stock (qty + bonus)
     oldOrder.items.forEach(item => {
       const pIndex = products.findIndex(p => p.id === item.productId);
-      if (pIndex >= 0) products[pIndex].stock += item.quantity;
+      if (pIndex >= 0) products[pIndex].stock += (item.quantity + (item.bonusQuantity || 0));
     });
 
     // Update order
     orders[index] = { ...oldOrder, ...order, paidAmount: oldOrder.paidAmount, status: oldOrder.status }; // Preserve payment status
 
-    // Deduct new stock
+    // Deduct new stock (qty + bonus)
     order.items.forEach(item => {
       const pIndex = products.findIndex(p => p.id === item.productId);
-      if (pIndex >= 0) products[pIndex].stock -= item.quantity;
+      if (pIndex >= 0) products[pIndex].stock -= (item.quantity + (item.bonusQuantity || 0));
     });
 
     localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
@@ -283,9 +284,10 @@ export const deleteOrder = async (orderId: string) => {
       // Restore stock
       const items = order.items as any[];
       for (const item of items) {
+         const qtyToRestore = item.quantity + (item.bonusQuantity || 0);
          const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
          if (prod) {
-           await supabase.from('products').update({ stock: prod.stock + item.quantity }).eq('id', item.productId);
+           await supabase.from('products').update({ stock: prod.stock + qtyToRestore }).eq('id', item.productId);
          }
       }
     }
@@ -307,7 +309,7 @@ export const deleteOrder = async (orderId: string) => {
       // Restore stock
       orderToDelete.items.forEach(item => {
         const pIndex = products.findIndex(p => p.id === item.productId);
-        if (pIndex >= 0) products[pIndex].stock += item.quantity;
+        if (pIndex >= 0) products[pIndex].stock += (item.quantity + (item.bonusQuantity || 0));
       });
       localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
     }
@@ -379,8 +381,8 @@ export const addCustomer = async (customer: Customer) => {
       id: customer.id,
       name: customer.name,
       type: customer.type,
-      address: customer.address || null, // Ensure null if undefined
-      brick: customer.brick || null,     // Ensure null if undefined
+      address: customer.address || null, 
+      brick: customer.brick || null,     
       default_discount: customer.defaultDiscount || 0
     };
     const { error } = await supabase.from('customers').insert(dbCustomer);

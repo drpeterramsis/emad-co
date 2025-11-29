@@ -69,6 +69,7 @@ const NewOrder = () => {
         productId: product.id,
         productName: product.name,
         quantity: 1,
+        bonusQuantity: 0,
         unitPrice: product.basePrice,
         discount: discountAmount,
         subtotal: subtotal
@@ -83,7 +84,7 @@ const NewOrder = () => {
     // Type safety for dynamic update
     (item as any)[field] = value;
 
-    // Recalculate subtotal
+    // Recalculate subtotal (Bonus does not affect subtotal, only stock)
     if (field === 'quantity' || field === 'unitPrice' || field === 'discount') {
       const price = Number(item.unitPrice);
       const qty = Number(item.quantity);
@@ -116,8 +117,8 @@ const NewOrder = () => {
           date: orderDate,
           items: cart,
           totalAmount: calculateTotal(),
-          paidAmount: 0, // This will be ignored/merged in storage for updates typically, or preserve existing
-          status: OrderStatus.PENDING, // This might need preservation if we edit paid invoice
+          paidAmount: 0, // This will be ignored/merged in storage for updates typically
+          status: OrderStatus.PENDING, 
           notes: ''
         };
         // We need to pass the full object, storage handles preservation of paid amount
@@ -155,7 +156,7 @@ const NewOrder = () => {
   }
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
+    <div className="p-8 max-w-7xl mx-auto">
       <div className="flex justify-between items-center mb-8">
         <div>
           <h2 className="text-3xl font-bold text-slate-800">
@@ -228,16 +229,17 @@ const NewOrder = () => {
                 <tr>
                   <th className="p-3 font-medium text-slate-600">Product</th>
                   <th className="p-3 font-medium text-slate-600 w-24">Price</th>
-                  <th className="p-3 font-medium text-slate-600 w-24">Qty</th>
+                  <th className="p-3 font-medium text-slate-600 w-20">Qty</th>
+                  <th className="p-3 font-medium text-slate-600 w-20 text-orange-600">Bounce</th>
                   <th className="p-3 font-medium text-slate-600 w-24">Discount</th>
-                  <th className="p-3 font-medium text-slate-600 w-24">Subtotal</th>
+                  <th className="p-3 font-medium text-slate-600 w-32">Subtotal</th>
                   <th className="p-3 font-medium text-slate-600 w-16"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {cart.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-slate-400">
+                    <td colSpan={7} className="p-8 text-center text-slate-400">
                       No items added yet.
                     </td>
                   </tr>
@@ -260,7 +262,16 @@ const NewOrder = () => {
                           min="1"
                           value={item.quantity}
                           onChange={(e) => updateCartItem(index, 'quantity', parseInt(e.target.value) || 1)}
-                          className="w-20 rounded border border-slate-300 p-1"
+                          className="w-16 rounded border border-slate-300 p-1"
+                        />
+                      </td>
+                      <td className="p-3">
+                        <input
+                          type="number"
+                          min="0"
+                          value={item.bonusQuantity}
+                          onChange={(e) => updateCartItem(index, 'bonusQuantity', parseInt(e.target.value) || 0)}
+                          className="w-16 rounded border border-orange-200 p-1 bg-orange-50 text-orange-800"
                         />
                       </td>
                       <td className="p-3">

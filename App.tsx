@@ -84,7 +84,7 @@ const App = () => {
             className={`fixed bottom-0 right-0 bg-slate-50/90 backdrop-blur-sm border-t border-slate-200 py-1.5 px-6 flex justify-between items-center text-[11px] text-slate-400 z-30 print:hidden transition-all duration-300 ${isSidebarCollapsed ? 'left-20' : 'left-64'}`}
           >
             <span>&copy; {new Date().getFullYear()} Emad Co. Pharmaceutical - Sales Portal</span>
-            <span className="font-mono font-medium">v2.0.020</span>
+            <span className="font-mono font-medium">v2.0.021</span>
           </footer>
         </main>
       </div>

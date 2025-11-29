@@ -11,7 +11,8 @@ export enum OrderStatus {
   PENDING = 'Pending',
   PARTIAL = 'Partial',
   PAID = 'Paid',
-  CANCELLED = 'Cancelled'
+  CANCELLED = 'Cancelled',
+  RETURNED = 'Returned'
 }
 
 export enum TransactionType {

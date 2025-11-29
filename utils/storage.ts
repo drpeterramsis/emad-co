@@ -1,3 +1,4 @@
+
 import { Product, Customer, Order, Transaction, OrderStatus, TransactionType } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_CUSTOMERS } from '../constants';
 import { supabase, isSupabaseEnabled } from '../services/supabaseClient';
@@ -40,7 +41,8 @@ export const initStorage = async () => {
           id: c.id,
           name: c.name,
           type: c.type,
-          address: c.address
+          address: c.address,
+          default_discount: c.defaultDiscount
         }));
         await supabase.from('customers').insert(dbCustomers);
       }
@@ -90,7 +92,13 @@ export const getCustomers = async (): Promise<Customer[]> => {
       console.error('Supabase error fetching customers:', error);
       return [];
     }
-    return data || [];
+    return (data as any[])?.map(c => ({
+      id: c.id,
+      name: c.name,
+      type: c.type,
+      address: c.address,
+      defaultDiscount: Number(c.default_discount || 0)
+    })) || [];
   }
   return JSON.parse(localStorage.getItem(STORAGE_KEYS.CUSTOMERS) || '[]');
 };
@@ -231,6 +239,24 @@ export const addTransaction = async (transaction: Transaction) => {
         localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
       }
     }
+  }
+};
+
+export const addCustomer = async (customer: Customer) => {
+  if (isSupabaseEnabled && supabase) {
+    const dbCustomer = {
+      id: customer.id,
+      name: customer.name,
+      type: customer.type,
+      address: customer.address,
+      default_discount: customer.defaultDiscount
+    };
+    const { error } = await supabase.from('customers').insert(dbCustomer);
+    if (error) throw error;
+  } else {
+    const customers = await getCustomers();
+    customers.push(customer);
+    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
   }
 };
 

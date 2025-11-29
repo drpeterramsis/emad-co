@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { getFinancialStats, getOrders } from '../utils/storage';
 import { analyzeSalesData } from '../services/geminiService';
@@ -82,25 +83,25 @@ const Dashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
           title="Total Sales" 
-          value={`$${stats.totalSales.toLocaleString()}`} 
+          value={`EGP ${stats.totalSales.toLocaleString()}`} 
           icon={TrendingUp} 
           color="bg-blue-500" 
         />
         <StatCard 
           title="Collected" 
-          value={`$${stats.totalCollected.toLocaleString()}`} 
+          value={`EGP ${stats.totalCollected.toLocaleString()}`} 
           icon={DollarSign} 
           color="bg-teal-600" 
         />
         <StatCard 
           title="Cash on Hand" 
-          value={`$${stats.repCashOnHand.toLocaleString()}`} 
+          value={`EGP ${stats.repCashOnHand.toLocaleString()}`} 
           icon={Briefcase} 
           color="bg-amber-500" 
         />
         <StatCard 
           title="Transferred to HQ" 
-          value={`$${stats.transferredToHQ.toLocaleString()}`} 
+          value={`EGP ${stats.transferredToHQ.toLocaleString()}`} 
           icon={AlertCircle} 
           color="bg-slate-600" 
         />

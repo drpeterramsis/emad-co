@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { getCustomers, getProducts, saveOrder } from '../utils/storage';
 import { Customer, Product, OrderItem, OrderStatus } from '../types';
@@ -28,9 +29,22 @@ const NewOrder = () => {
     fetchData();
   }, []);
 
+  const getCustomerDefaultDiscount = () => {
+    const c = customers.find(x => x.id === selectedCustomer);
+    return c?.defaultDiscount || 0;
+  };
+
   const addProductToCart = (productId: string) => {
     const product = products.find(p => p.id === productId);
     if (!product) return;
+
+    // Auto-calculate discount if customer has a default percentage
+    const defaultDiscountPercent = getCustomerDefaultDiscount();
+    const discountAmount = defaultDiscountPercent > 0 
+      ? Math.round(product.basePrice * (defaultDiscountPercent / 100)) 
+      : 0;
+    
+    const subtotal = product.basePrice - discountAmount;
 
     setCart(prev => [
       ...prev,
@@ -39,8 +53,8 @@ const NewOrder = () => {
         productName: product.name,
         quantity: 1,
         unitPrice: product.basePrice,
-        discount: 0,
-        subtotal: product.basePrice
+        discount: discountAmount,
+        subtotal: subtotal
       }
     ]);
   };
@@ -128,7 +142,9 @@ const NewOrder = () => {
             >
               <option value="">Select Customer...</option>
               {customers.map(c => (
-                <option key={c.id} value={c.id}>{c.name} ({c.type})</option>
+                <option key={c.id} value={c.id}>
+                   {c.name} ({c.type}) {c.defaultDiscount ? `- ${c.defaultDiscount}% Disc` : ''}
+                </option>
               ))}
             </select>
           </div>
@@ -161,7 +177,7 @@ const NewOrder = () => {
                  <option value="">+ Add Product...</option>
                  {products.map(p => (
                    <option key={p.id} value={p.id} disabled={p.stock <= 0}>
-                     {p.name} (Stock: {p.stock}) - ${p.basePrice}
+                     {p.name} (Stock: {p.stock}) - EGP {p.basePrice}
                    </option>
                  ))}
                </select>
@@ -175,7 +191,7 @@ const NewOrder = () => {
                   <th className="p-3 font-medium text-slate-600">Product</th>
                   <th className="p-3 font-medium text-slate-600 w-24">Price</th>
                   <th className="p-3 font-medium text-slate-600 w-24">Qty</th>
-                  <th className="p-3 font-medium text-slate-600 w-24">Discount ($)</th>
+                  <th className="p-3 font-medium text-slate-600 w-24">Discount</th>
                   <th className="p-3 font-medium text-slate-600 w-24">Subtotal</th>
                   <th className="p-3 font-medium text-slate-600 w-16"></th>
                 </tr>
@@ -219,7 +235,7 @@ const NewOrder = () => {
                         />
                       </td>
                       <td className="p-3 font-bold text-slate-800">
-                        ${item.subtotal.toFixed(2)}
+                        EGP {item.subtotal.toFixed(2)}
                       </td>
                       <td className="p-3 text-right">
                         <button
@@ -240,7 +256,7 @@ const NewOrder = () => {
           <div className="mt-6 flex justify-end items-center gap-4 border-t border-slate-100 pt-4">
              <div className="text-right">
                <p className="text-sm text-slate-500">Total Amount</p>
-               <p className="text-3xl font-bold text-primary">${calculateTotal().toFixed(2)}</p>
+               <p className="text-3xl font-bold text-primary">EGP {calculateTotal().toFixed(2)}</p>
              </div>
           </div>
         </div>

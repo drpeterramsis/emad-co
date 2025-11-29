@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { getOrders } from '../utils/storage';
 import { Order, OrderStatus } from '../types';
@@ -81,8 +82,8 @@ const InvoiceList = () => {
                   <td className="p-4 font-mono text-xs">{order.id}</td>
                   <td className="p-4 font-medium text-slate-800">{order.customerName}</td>
                   <td className="p-4 text-slate-600">{order.items.length}</td>
-                  <td className="p-4 font-bold text-slate-800">${order.totalAmount.toFixed(2)}</td>
-                  <td className="p-4 text-slate-600">${order.paidAmount.toFixed(2)}</td>
+                  <td className="p-4 font-bold text-slate-800">EGP {order.totalAmount.toFixed(2)}</td>
+                  <td className="p-4 text-slate-600">EGP {order.paidAmount.toFixed(2)}</td>
                   <td className="p-4">
                     <span className={`text-xs px-2 py-1 rounded-full border font-medium ${getStatusColor(order.status)}`}>
                       {order.status}

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { getOrders, addTransaction, getFinancialStats } from '../utils/storage';
 import { Order, TransactionType, OrderStatus, DashboardStats } from '../types';
@@ -93,7 +94,7 @@ const Collections = () => {
              <div className="bg-amber-100 p-2 rounded-full text-amber-600"><Wallet size={18}/></div>
              <div>
                <p className="text-xs text-amber-800 font-bold uppercase tracking-wider">Cash on Hand</p>
-               <p className="text-xl font-bold text-amber-900">${stats.repCashOnHand.toLocaleString()}</p>
+               <p className="text-xl font-bold text-amber-900">EGP {stats.repCashOnHand.toLocaleString()}</p>
              </div>
           </div>
           <button 
@@ -132,9 +133,9 @@ const Collections = () => {
                     <td className="p-4 font-mono text-xs">{order.id}</td>
                     <td className="p-4 font-medium text-slate-800">{order.customerName}</td>
                     <td className="p-4 text-slate-600">{new Date(order.date).toLocaleDateString()}</td>
-                    <td className="p-4">${order.totalAmount.toFixed(2)}</td>
-                    <td className="p-4 text-green-600 font-medium">${order.paidAmount.toFixed(2)}</td>
-                    <td className="p-4 font-bold text-red-500">${balance.toFixed(2)}</td>
+                    <td className="p-4">EGP {order.totalAmount.toFixed(2)}</td>
+                    <td className="p-4 text-green-600 font-medium">EGP {order.paidAmount.toFixed(2)}</td>
+                    <td className="p-4 font-bold text-red-500">EGP {balance.toFixed(2)}</td>
                     <td className="p-4 text-right">
                       <button 
                         onClick={() => handleCollect(order.id, balance)}
@@ -160,18 +161,18 @@ const Collections = () => {
               <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 mb-2">Amount to Transfer</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-2.5 text-slate-400">$</span>
+                  <span className="absolute left-3 top-2.5 text-slate-400">EGP</span>
                   <input 
                     type="number" 
                     max={stats.repCashOnHand}
                     required
                     value={transferAmount}
                     onChange={(e) => setTransferAmount(e.target.value)}
-                    className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    className="w-full pl-12 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
                     placeholder="0.00"
                   />
                 </div>
-                <p className="text-xs text-slate-500 mt-1">Available: ${stats.repCashOnHand.toFixed(2)}</p>
+                <p className="text-xs text-slate-500 mt-1">Available: EGP {stats.repCashOnHand.toFixed(2)}</p>
               </div>
               <div className="flex justify-end gap-3">
                 <button 

@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { getProducts } from '../utils/storage';
 import { Product } from '../types';
@@ -55,7 +56,7 @@ const Inventory = () => {
               <div className="flex justify-between items-end mt-4 pt-4 border-t border-slate-100">
                 <div>
                   <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">Price</p>
-                  <p className="text-lg font-semibold text-primary">${product.basePrice}</p>
+                  <p className="text-lg font-semibold text-primary">EGP {product.basePrice}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">Stock</p>

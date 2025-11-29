@@ -1,7 +1,9 @@
+
 export enum CustomerType {
   PHARMACY = 'Pharmacy',
   STORE = 'Store',
-  DIRECT = 'Direct Customer'
+  HCP = 'HCP',
+  DIRECT = 'Direct Sale'
 }
 
 export enum OrderStatus {
@@ -29,6 +31,7 @@ export interface Customer {
   type: CustomerType;
   email?: string;
   address?: string;
+  defaultDiscount?: number; // Percentage 0-100
 }
 
 export interface OrderItem {
@@ -36,7 +39,7 @@ export interface OrderItem {
   productName: string;
   quantity: number;
   unitPrice: number; // Can be overridden
-  discount: number; // Percentage or flat amount logic handled in component, stored as final deduction
+  discount: number; // Flat amount deduction
   subtotal: number;
 }
 

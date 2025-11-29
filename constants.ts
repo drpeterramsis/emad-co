@@ -1,3 +1,4 @@
+
 import { Product, Customer, CustomerType } from './types';
 
 export const INITIAL_PRODUCTS: Product[] = [
@@ -16,8 +17,8 @@ export const INITIAL_PRODUCTS: Product[] = [
 ];
 
 export const INITIAL_CUSTOMERS: Customer[] = [
-  { id: 'c1', name: 'Al-Amal Pharmacy', type: CustomerType.PHARMACY, address: 'Downtown St.' },
-  { id: 'c2', name: 'Care Store', type: CustomerType.STORE, address: 'Market District' },
-  { id: 'c3', name: 'Dr. John Doe', type: CustomerType.DIRECT, address: 'Private Clinic' },
-  { id: 'c4', name: 'City Central Pharmacy', type: CustomerType.PHARMACY, address: 'Main Blvd' },
+  { id: 'c1', name: 'Al-Amal Pharmacy', type: CustomerType.PHARMACY, address: 'Downtown St.', defaultDiscount: 0 },
+  { id: 'c2', name: 'Care Store', type: CustomerType.STORE, address: 'Market District', defaultDiscount: 0 },
+  { id: 'c3', name: 'Dr. John Doe', type: CustomerType.DIRECT, address: 'Private Clinic', defaultDiscount: 0 },
+  { id: 'c4', name: 'City Central Pharmacy', type: CustomerType.PHARMACY, address: 'Main Blvd', defaultDiscount: 5 },
 ];

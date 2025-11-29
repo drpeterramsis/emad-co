@@ -16,13 +16,26 @@ export enum OrderStatus {
 
 export enum TransactionType {
   PAYMENT_RECEIVED = 'PAYMENT_RECEIVED', // Customer pays Rep
-  DEPOSIT_TO_HQ = 'DEPOSIT_TO_HQ' // Rep transfers to Company
+  DEPOSIT_TO_HQ = 'DEPOSIT_TO_HQ', // Rep transfers to Company
+  EXPENSE = 'EXPENSE' // Purchasing stock or other expenses
+}
+
+export enum PaymentMethod {
+  CASH = 'CASH', // Cash from Rep Hand
+  BANK_TRANSFER = 'BANK_TRANSFER' // Direct from HQ Bank
 }
 
 export interface UserProfile {
   email: string;
   name: string;
   title: string;
+}
+
+export interface Provider {
+  id: string;
+  name: string;
+  contactInfo?: string;
+  bankDetails?: string; // Account Number, IBAN, etc.
 }
 
 export interface Product {
@@ -71,8 +84,11 @@ export interface Transaction {
   type: TransactionType;
   amount: number;
   date: string;
-  referenceId?: string; // Order ID if payment received
+  referenceId?: string; // Order ID if payment received, or Product ID if purchase
   description: string;
+  paymentMethod?: PaymentMethod;
+  providerId?: string;
+  providerName?: string;
 }
 
 export interface DashboardStats {
@@ -80,4 +96,5 @@ export interface DashboardStats {
   totalCollected: number;
   repCashOnHand: number;
   transferredToHQ: number;
+  totalExpenses: number;
 }

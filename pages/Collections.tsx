@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { getOrders, addTransaction, getFinancialStats, updateOrder, getTransactions, deleteTransaction, updateTransaction } from '../utils/storage';
-import { Order, TransactionType, OrderStatus, DashboardStats, Transaction } from '../types';
-import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search, Calendar, CheckSquare, X, History, FileText, Trash2, Edit2 } from 'lucide-react';
+import { Order, TransactionType, OrderStatus, DashboardStats, Transaction, PaymentMethod } from '../types';
+import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search, Calendar, CheckSquare, X, History, FileText, Trash2, Edit2, TrendingDown, TrendingUp } from 'lucide-react';
 import { formatDate, formatCurrency } from '../utils/helpers';
 
 const Collections = () => {
-  const [activeTab, setActiveTab] = useState<'pending' | 'history' | 'deposits'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'history' | 'deposits' | 'statement'>('pending');
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -226,6 +226,16 @@ const Collections = () => {
   // Deposits History
   const depositHistory = transactions.filter(t => t.type === TransactionType.DEPOSIT_TO_HQ);
   
+  // Statement Data: All transactions affecting Rep Cash
+  // (Collections + Deposits + Cash Expenses)
+  const statementData = transactions
+    .filter(t => 
+      t.type === TransactionType.PAYMENT_RECEIVED || 
+      t.type === TransactionType.DEPOSIT_TO_HQ || 
+      (t.type === TransactionType.EXPENSE && t.paymentMethod === PaymentMethod.CASH)
+    )
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()); // Chronological for ledger
+
   // Calculate Monthly Report Stats
   const getMonthlyReport = () => {
      const monthFilter = historyMonth || new Date().toISOString().slice(0, 7); // Default to current or selected
@@ -253,7 +263,7 @@ const Collections = () => {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-8 pb-24">
       {/* Top Header & Report */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
@@ -297,24 +307,30 @@ const Collections = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200 mb-6">
+      <div className="flex border-b border-slate-200 mb-6 overflow-x-auto">
         <button 
           onClick={() => setActiveTab('pending')}
-          className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 ${activeTab === 'pending' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 whitespace-nowrap ${activeTab === 'pending' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
           Outstanding Invoices
         </button>
         <button 
           onClick={() => setActiveTab('history')}
-          className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 ${activeTab === 'history' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 whitespace-nowrap ${activeTab === 'history' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
           Collection History
         </button>
         <button 
           onClick={() => setActiveTab('deposits')}
-          className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 ${activeTab === 'deposits' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 whitespace-nowrap ${activeTab === 'deposits' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
           HQ Deposits
+        </button>
+        <button 
+          onClick={() => setActiveTab('statement')}
+          className={`px-6 py-3 font-medium text-sm transition-colors border-b-2 whitespace-nowrap ${activeTab === 'statement' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Cash Statement
         </button>
       </div>
 
@@ -489,6 +505,65 @@ const Collections = () => {
              </table>
            </div>
         </div>
+      )}
+
+      {/* TAB CONTENT: STATEMENT */}
+      {activeTab === 'statement' && (
+         <div className="space-y-6">
+            <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <h3 className="font-bold text-slate-800">Cash Statement Report</h3>
+                <div className="text-sm text-slate-500">
+                   Running Balance for Rep Cash on Hand
+                </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+               <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                     <tr>
+                        <th className="p-3 font-medium text-slate-600">Date</th>
+                        <th className="p-3 font-medium text-slate-600">Description</th>
+                        <th className="p-3 font-medium text-slate-600 text-center">Type</th>
+                        <th className="p-3 font-medium text-slate-600 text-right">Debit (Out)</th>
+                        <th className="p-3 font-medium text-slate-600 text-right">Credit (In)</th>
+                        <th className="p-3 font-medium text-slate-600 text-right">Balance</th>
+                     </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                     {(() => {
+                        let balance = 0;
+                        if (statementData.length === 0) return <tr><td colSpan={6} className="p-8 text-center text-slate-400">No transactions recorded.</td></tr>;
+
+                        return statementData.map(txn => {
+                           const isCredit = txn.type === TransactionType.PAYMENT_RECEIVED;
+                           // Calculate Balance
+                           if (isCredit) balance += txn.amount;
+                           else balance -= txn.amount;
+
+                           return (
+                              <tr key={txn.id} className="hover:bg-slate-50">
+                                 <td className="p-3 text-slate-600">{formatDate(txn.date)}</td>
+                                 <td className="p-3 text-slate-800">{txn.description}</td>
+                                 <td className="p-3 text-center">
+                                    {txn.type === TransactionType.PAYMENT_RECEIVED && <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs">Collection</span>}
+                                    {txn.type === TransactionType.DEPOSIT_TO_HQ && <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">Deposit</span>}
+                                    {txn.type === TransactionType.EXPENSE && <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-xs">Expense</span>}
+                                 </td>
+                                 <td className="p-3 text-right text-slate-500">
+                                    {!isCredit ? formatCurrency(txn.amount) : '-'}
+                                 </td>
+                                 <td className="p-3 text-right text-slate-500">
+                                    {isCredit ? formatCurrency(txn.amount) : '-'}
+                                 </td>
+                                 <td className="p-3 text-right font-bold text-slate-800">{formatCurrency(balance)}</td>
+                              </tr>
+                           );
+                        });
+                     })()}
+                  </tbody>
+               </table>
+            </div>
+         </div>
       )}
 
       {/* Itemized Payment Modal */}

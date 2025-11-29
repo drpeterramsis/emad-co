@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { loginUser } from '../utils/auth';
-import { Loader2, Lock, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Loader2, Lock, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface LoginProps {
@@ -20,14 +20,15 @@ const Login = ({ onLogin }: LoginProps) => {
     setError('');
 
     try {
-      const user = await loginUser(email.trim());
-      if (user) {
-        onLogin(user);
+      const result = await loginUser(email.trim());
+      
+      if (result.success && result.user) {
+        onLogin(result.user);
       } else {
-        setError('Unauthorized access. This email is not in the allowed users list.');
+        setError(result.error || 'Unauthorized access.');
       }
     } catch (err) {
-      setError('An error occurred. Please try again.');
+      setError('An error occurred during login. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -68,8 +69,8 @@ const Login = ({ onLogin }: LoginProps) => {
 
             {error && (
               <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-sm rounded-lg flex items-start gap-2">
-                <div className="mt-0.5 min-w-[4px] h-4 bg-red-500 rounded-full"></div>
-                {error}
+                <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                <span>{error}</span>
               </div>
             )}
 
@@ -92,7 +93,7 @@ const Login = ({ onLogin }: LoginProps) => {
 
           <div className="mt-8 text-center border-t border-slate-100 pt-6">
             <p className="text-xs text-slate-400">
-              Restricted Access System v2.0.015
+              Restricted Access System v2.0.017
             </p>
             <p className="text-xs text-slate-400 mt-1">
               &copy; {new Date().getFullYear()} Emad Co. Pharmaceutical

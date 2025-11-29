@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { getOrders, deleteOrder } from '../utils/storage';
+import { getOrders, deleteOrder, updateOrder } from '../utils/storage';
 import { Order, OrderStatus } from '../types';
-import { Search, Loader2, Edit, Trash2, Filter, Eye, X, Printer, Save } from 'lucide-react';
+import { Search, Loader2, Edit, Trash2, Filter, Eye, X, Printer, Save, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { formatDate, formatCurrency } from '../utils/helpers';
 
@@ -15,8 +15,10 @@ const InvoiceList = () => {
   const [searchProduct, setSearchProduct] = useState('');
   const [searchMonth, setSearchMonth] = useState('');
 
-  // Modal
+  // Modal & Print State
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [printCustomerName, setPrintCustomerName] = useState('');
+  const [orderNotes, setOrderNotes] = useState('');
 
   // Print Settings
   const [invoiceHeader, setInvoiceHeader] = useState(() => localStorage.getItem('invoice_header') || 'EMAD CO. PHARMACEUTICAL');
@@ -32,6 +34,26 @@ const InvoiceList = () => {
     setOrders(data);
     setLoading(false);
   };
+
+  const openModal = (order: Order) => {
+    setSelectedOrder(order);
+    setPrintCustomerName(order.customerName);
+    setOrderNotes(order.notes || '');
+  }
+
+  const saveNotes = async () => {
+    if (!selectedOrder) return;
+    try {
+      const updated = { ...selectedOrder, notes: orderNotes };
+      await updateOrder(updated);
+      await fetchOrders(); // Refresh list
+      setSelectedOrder(updated); // Update modal state
+      alert('Notes saved successfully!');
+    } catch (e) {
+      console.error(e);
+      alert('Failed to save notes.');
+    }
+  }
 
   const savePrintSettings = () => {
     localStorage.setItem('invoice_header', invoiceHeader);
@@ -179,7 +201,7 @@ const InvoiceList = () => {
                   <tr 
                     key={order.id} 
                     className="hover:bg-slate-50 transition-colors cursor-pointer group"
-                    onClick={() => setSelectedOrder(order)}
+                    onClick={() => openModal(order)}
                   >
                     <td className="p-4 text-slate-600 font-medium align-top">{formatDate(order.date)}</td>
                     <td className="p-4 font-mono text-xs align-top">{order.id}</td>
@@ -213,7 +235,7 @@ const InvoiceList = () => {
                     <td className="p-4 text-right align-top">
                       <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
-                           onClick={(e) => { e.stopPropagation(); setSelectedOrder(order); }}
+                           onClick={(e) => { e.stopPropagation(); openModal(order); }}
                            className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded transition-colors"
                            title="View Details"
                          >
@@ -314,8 +336,14 @@ const InvoiceList = () => {
 
               <div className="flex justify-between items-start">
                 <div>
-                   <p className="text-xs text-slate-500 uppercase font-bold">Bill To:</p>
-                   <p className="font-bold text-xl text-slate-800">{selectedOrder.customerName}</p>
+                   <p className="text-xs text-slate-500 uppercase font-bold mb-1">Bill To:</p>
+                   {/* Editable "Bill To" for Printing */}
+                   <input 
+                     type="text" 
+                     value={printCustomerName}
+                     onChange={(e) => setPrintCustomerName(e.target.value)}
+                     className="font-bold text-xl text-slate-800 border-b border-transparent hover:border-slate-300 focus:border-primary outline-none bg-transparent w-full print:border-none p-0"
+                   />
                    <p className="text-sm text-slate-600">ID: {selectedOrder.customerId}</p>
                 </div>
                 <div className="text-right">
@@ -398,6 +426,20 @@ const InvoiceList = () => {
                    </>
                    );
                 })()}
+              </div>
+
+              {/* Notes Section */}
+              <div className="pt-6 mt-4 border-t border-slate-100">
+                 <div className="flex justify-between items-center mb-2 print:hidden">
+                    <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2"><FileText size={16}/> Notes</h4>
+                    <button onClick={saveNotes} className="text-xs text-primary hover:underline font-medium">Save Note</button>
+                 </div>
+                 <textarea 
+                   value={orderNotes}
+                   onChange={(e) => setOrderNotes(e.target.value)}
+                   className="w-full text-sm p-3 bg-slate-50 rounded border border-slate-200 focus:ring-1 focus:ring-primary outline-none resize-none h-24 print:bg-transparent print:border-none print:p-0 print:h-auto print:resize-none"
+                   placeholder="Add notes to this invoice..."
+                 />
               </div>
 
               {/* Print Footer */}

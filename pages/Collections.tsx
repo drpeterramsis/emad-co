@@ -278,6 +278,7 @@ const Collections = () => {
 
   /* --- DATA FILTERS & CALCULATIONS --- */
   const unpaidOrders = orders
+    .filter(o => !o.isDraft && o.status !== OrderStatus.DRAFT) // Exclude Drafts
     .filter(o => o.status !== OrderStatus.PAID)
     .filter(o => {
       const matchesCustomer = o.customerName.toLowerCase().includes(searchCustomer.toLowerCase()) || 

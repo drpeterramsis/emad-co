@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
@@ -131,7 +132,7 @@ const AppContent = () => {
               ${isMobile ? 'w-full' : (isSidebarCollapsed ? `w-[calc(100%-5rem)]` : `w-[calc(100%-16rem)]`)}`}
           >
             <span>&copy; {new Date().getFullYear()} Emad Co. Pharmaceutical</span>
-            <span className="font-mono font-medium">v2.0.025</span>
+            <span className="font-mono font-medium">v2.0.026</span>
           </footer>
         </main>
       </div>

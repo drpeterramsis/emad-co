@@ -1,6 +1,7 @@
+
 import React, { useState } from 'react';
 import { loginUser } from '../utils/auth';
-import { Loader2, Lock, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Loader2, Lock, ArrowRight, ShieldCheck, AlertCircle, Mail } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface LoginProps {
@@ -9,18 +10,19 @@ interface LoginProps {
 
 const Login = ({ onLogin }: LoginProps) => {
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
+    if (!email || !password) return;
 
     setLoading(true);
     setError('');
 
     try {
-      const result = await loginUser(email.trim());
+      const result = await loginUser(email.trim(), password);
       
       if (result.success && result.user) {
         onLogin(result.user);
@@ -52,7 +54,7 @@ const Login = ({ onLogin }: LoginProps) => {
                 Email Address
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-3 text-slate-400" size={18} />
+                <Mail className="absolute left-3 top-3 text-slate-400" size={18} />
                 <input
                   id="email"
                   type="email"
@@ -63,6 +65,25 @@ const Login = ({ onLogin }: LoginProps) => {
                   placeholder="name@emadco.com"
                   autoComplete="email"
                   autoFocus
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="pass" className="block text-sm font-medium text-slate-700 mb-2">
+                Password
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-3 text-slate-400" size={18} />
+                <input
+                  id="pass"
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
+                  placeholder="••••••••"
+                  autoComplete="current-password"
                 />
               </div>
             </div>
@@ -93,7 +114,7 @@ const Login = ({ onLogin }: LoginProps) => {
 
           <div className="mt-8 text-center border-t border-slate-100 pt-6">
             <p className="text-xs text-slate-400">
-              Restricted Access System v2.0.024
+              Restricted Access System v2.0.026
             </p>
             <p className="text-xs text-slate-400 mt-1">
               &copy; {new Date().getFullYear()} Emad Co. Pharmaceutical

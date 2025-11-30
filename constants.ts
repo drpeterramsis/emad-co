@@ -1,11 +1,14 @@
 
 import { Product, Customer, CustomerType, UserProfile } from './types';
 
-export const AUTHORIZED_USERS: UserProfile[] = [
-  { email: 'emad@emadco.com', name: 'Dr. Emad Ibrahem', title: 'Co-Founder and CEO' },
-  { email: 'admin@emadco.com', name: 'System Admin', title: 'Administrator' },
-  { email: 'sales@emadco.com', name: 'Sales Representative', title: 'Sales Team' },
-  { email: 'manager@emadco.com', name: 'Inventory Manager', title: 'Logistics' }
+// Extended type for Auth purposes locally
+type AuthUser = UserProfile & { password?: string };
+
+export const AUTHORIZED_USERS: AuthUser[] = [
+  { email: 'emad@emadco.com', name: 'Dr. Emad Ibrahem', title: 'Co-Founder and CEO', password: 'admin' },
+  { email: 'admin@emadco.com', name: 'System Admin', title: 'Administrator', password: 'admin' },
+  { email: 'sales@emadco.com', name: 'Sales Representative', title: 'Sales Team', password: 'sales' },
+  { email: 'manager@emadco.com', name: 'Inventory Manager', title: 'Logistics', password: 'manager' }
 ];
 
 export const INITIAL_PRODUCTS: Product[] = [

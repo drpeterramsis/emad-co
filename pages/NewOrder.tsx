@@ -92,23 +92,21 @@ const NewOrder = () => {
   const addProductToCart = (product: Product) => {
     // Auto-calculate discount if customer has a default percentage
     const defaultDiscountPercent = getCustomerDefaultDiscount();
-    const discountAmount = defaultDiscountPercent > 0 
-      ? (product.basePrice * (defaultDiscountPercent / 100)) 
-      : 0;
     
-    const subtotal = product.basePrice - discountAmount;
-
+    // Initialise with 0 quantity so no cost is added yet
+    // Discount percent is kept for calculation when quantity is added
+    
     setCart(prev => [
       ...prev,
       {
         productId: product.id,
         productName: product.name,
-        quantity: 1,
+        quantity: 0,
         bonusQuantity: 0,
         unitPrice: product.basePrice,
-        discount: discountAmount,
+        discount: 0,
         discountPercent: defaultDiscountPercent,
-        subtotal: subtotal
+        subtotal: 0
       }
     ]);
     
@@ -484,10 +482,10 @@ const NewOrder = () => {
                         <td className="p-2 relative">
                           <input
                             type="number"
-                            min="1"
+                            min="0"
                             value={item.quantity}
                             onFocus={(e) => e.target.select()}
-                            onChange={(e) => updateCartItem(index, 'quantity', parseInt(e.target.value) || 1)}
+                            onChange={(e) => updateCartItem(index, 'quantity', parseInt(e.target.value) || 0)}
                             className={`w-14 rounded border p-1 text-center font-bold text-xs focus:ring-1 focus:ring-primary outline-none ${isOverselling ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-300'}`}
                           />
                         </td>
@@ -631,8 +629,7 @@ const NewOrder = () => {
 
               <div>
                 <label className="block text-xs font-medium text-slate-700 mb-1 flex items-center gap-1">
-                  <Map size={12}/> {t('brickAreaLabel')}
-                </label>
+                  <Map size={12}/> {t('brickAreaLabel')}</label>
                 <input 
                   type="text"
                   value={newCustomerBrick}
@@ -644,8 +641,7 @@ const NewOrder = () => {
 
               <div>
                 <label className="block text-xs font-medium text-slate-700 mb-1 flex items-center gap-1">
-                  <MapPin size={12}/> {t('addressLabel')}
-                </label>
+                  <MapPin size={12}/> {t('addressLabel')}</label>
                 <input 
                   type="text"
                   value={newCustomerAddress}

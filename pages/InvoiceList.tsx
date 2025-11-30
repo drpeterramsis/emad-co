@@ -368,20 +368,22 @@ const InvoiceList = () => {
             {filteredOrders.length === 0 ? (
                <tbody><tr><td colSpan={8} className="p-6 text-center text-slate-400">{t('noInvoicesFound')}</td></tr></tbody>
             ) : (
-              Object.entries(groupedOrders).map(([groupName, groupOrders]) => (
+              Object.entries(groupedOrders).map(([groupName, groupOrders]) => {
+                const orders = groupOrders as Order[];
+                return (
                 <React.Fragment key={groupName}>
                   {groupBy !== 'none' && (
                     <tbody>
                        <tr className="bg-yellow-100 border-b border-yellow-200 sticky top-10 z-10">
                          <td colSpan={8} className="p-3 font-bold text-amber-900 bg-yellow-100">
                            {groupBy === 'month' ? formatDate(groupName + '-01').substring(3) : groupName} 
-                           <span className="text-amber-700 font-normal text-xs ml-2">({groupOrders.length})</span>
+                           <span className="text-amber-700 font-normal text-xs ml-2">({orders.length})</span>
                          </td>
                        </tr>
                     </tbody>
                   )}
                   <tbody className="divide-y divide-slate-100">
-                    {groupOrders.map(order => {
+                    {orders.map(order => {
                       const totalDiscount = order.items.reduce((s, i) => s + (i.discount || 0), 0);
                       const grossTotal = order.totalAmount + totalDiscount;
                       const effectiveDiscountPercent = grossTotal > 0 ? (totalDiscount / grossTotal) * 100 : 0;
@@ -461,7 +463,7 @@ const InvoiceList = () => {
                     })}
                   </tbody>
                 </React.Fragment>
-              ))
+              );})
             )}
           </table>
         </div>

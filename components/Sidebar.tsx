@@ -11,7 +11,8 @@ import {
   ChevronLeft,
   ChevronRight,
   FileSpreadsheet,
-  Globe
+  Globe,
+  Pill
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -48,7 +49,7 @@ const Sidebar = ({ user, onLogout, isCollapsed, toggleSidebar, isMobile }: Sideb
   // Mobile classes logic
   const mobileClasses = isMobile 
     ? `transform ${isCollapsed ? (dir === 'rtl' ? 'translate-x-full' : '-translate-x-full') : 'translate-x-0'} w-64` 
-    : `${isCollapsed ? 'w-20' : 'w-64'}`;
+    : `${isCollapsed ? 'w-16' : 'w-60'}`; // Slightly narrower collapsed width
 
   // Direction specific border logic
   const borderSide = dir === 'rtl' ? 'border-l' : 'border-r';
@@ -58,17 +59,22 @@ const Sidebar = ({ user, onLogout, isCollapsed, toggleSidebar, isMobile }: Sideb
     <div 
       className={`bg-slate-900 text-white min-h-screen flex flex-col fixed top-0 h-full overflow-y-auto print:hidden z-40 transition-all duration-300 ${mobileClasses} ${sidebarPos}`}
     >
-      <div className={`p-6 border-b border-slate-700 flex items-center ${isCollapsed && !isMobile ? 'justify-center' : 'justify-between'}`}>
+      <div className={`p-4 border-b border-slate-700 flex items-center ${isCollapsed && !isMobile ? 'justify-center' : 'justify-between'}`}>
         {(!isCollapsed || isMobile) && (
-          <div>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-teal-400 to-cyan-400 bg-clip-text text-transparent whitespace-nowrap">
-              {t('welcome')}
-            </h1>
-            <p className="text-slate-400 text-sm">{t('salesPortal')}</p>
+          <div className="flex items-center gap-3">
+            <div className="bg-teal-500/20 p-2 rounded-lg">
+              <Pill className="text-teal-400" size={20} />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold bg-gradient-to-r from-teal-400 to-cyan-400 bg-clip-text text-transparent whitespace-nowrap leading-none">
+                {t('welcome')}
+              </h1>
+              <p className="text-slate-400 text-[10px] mt-0.5">{t('salesPortal')}</p>
+            </div>
           </div>
         )}
         {isCollapsed && !isMobile && (
-          <h1 className="text-xl font-bold text-teal-400">EC</h1>
+          <Pill className="text-teal-400" size={24} />
         )}
         
         {/* Toggle Button - Hidden on Mobile inside sidebar (used header instead) */}
@@ -77,7 +83,7 @@ const Sidebar = ({ user, onLogout, isCollapsed, toggleSidebar, isMobile }: Sideb
             onClick={toggleSidebar}
             className={`text-slate-400 hover:text-white transition-colors ${isCollapsed ? 'hidden' : 'block'}`}
           >
-            {dir === 'rtl' ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+            {dir === 'rtl' ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
         )}
       </div>
@@ -89,12 +95,12 @@ const Sidebar = ({ user, onLogout, isCollapsed, toggleSidebar, isMobile }: Sideb
             onClick={toggleSidebar}
             className="text-slate-400 hover:text-white transition-colors"
           >
-            {dir === 'rtl' ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
+            {dir === 'rtl' ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
           </button>
         </div>
       )}
 
-      <nav className="flex-1 p-3 space-y-2">
+      <nav className="flex-1 p-2 space-y-1">
         {navItems.map((item) => (
           <NavLink
             key={item.to}
@@ -102,37 +108,37 @@ const Sidebar = ({ user, onLogout, isCollapsed, toggleSidebar, isMobile }: Sideb
             onClick={isMobile ? toggleSidebar : undefined}
             title={isCollapsed && !isMobile ? item.label : undefined}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-3 rounded-lg transition-all duration-200 ${
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 text-sm ${
                 isActive 
                   ? 'bg-primary text-white shadow-lg shadow-teal-900/50' 
                   : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              } ${isCollapsed && !isMobile ? 'justify-center' : ''}`
+              } ${isCollapsed && !isMobile ? 'justify-center px-2' : ''}`
             }
           >
-            <item.icon size={22} className="shrink-0" />
+            <item.icon size={20} className="shrink-0" />
             {(!isCollapsed || isMobile) && <span className="font-medium whitespace-nowrap overflow-hidden">{item.label}</span>}
           </NavLink>
         ))}
       </nav>
       
-      <div className="p-4 border-t border-slate-800 space-y-4">
+      <div className="p-3 border-t border-slate-800 space-y-3">
         {/* Language Toggle */}
         <button
           onClick={() => setLanguage(language === 'en' ? 'ar' : 'en')}
-          className={`w-full flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors text-sm ${isCollapsed && !isMobile ? 'justify-center' : ''}`}
+          className={`w-full flex items-center gap-2 px-2 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors text-xs ${isCollapsed && !isMobile ? 'justify-center' : ''}`}
           title={t('language')}
         >
-          <Globe size={isCollapsed && !isMobile ? 20 : 16} />
+          <Globe size={isCollapsed && !isMobile ? 18 : 14} />
           {(!isCollapsed || isMobile) && <span>{t('switchLang')}</span>}
         </button>
 
         <div className={`flex items-center gap-3 ${isCollapsed && !isMobile ? 'justify-center' : ''}`}>
-          <div className="w-9 h-9 rounded-full bg-teal-600 flex items-center justify-center text-xs font-bold text-white shrink-0 border-2 border-slate-800">
+          <div className="w-8 h-8 rounded-full bg-teal-600 flex items-center justify-center text-[10px] font-bold text-white shrink-0 border-2 border-slate-800">
             {initials}
           </div>
           {(!isCollapsed || isMobile) && (
             <div className="overflow-hidden">
-              <p className="text-sm font-medium truncate" title={user.name}>{user.name}</p>
+              <p className="text-xs font-medium truncate text-slate-200" title={user.name}>{user.name}</p>
               <p className="text-[10px] text-slate-500 uppercase tracking-wide truncate" title={user.title}>{user.title}</p>
             </div>
           )}
@@ -140,10 +146,10 @@ const Sidebar = ({ user, onLogout, isCollapsed, toggleSidebar, isMobile }: Sideb
         
         <button 
           onClick={onLogout}
-          className={`w-full flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors text-sm ${isCollapsed && !isMobile ? 'justify-center' : ''}`}
+          className={`w-full flex items-center gap-2 px-2 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors text-xs ${isCollapsed && !isMobile ? 'justify-center' : ''}`}
           title={isCollapsed && !isMobile ? t('signOut') : undefined}
         >
-          <LogOut size={isCollapsed && !isMobile ? 20 : 16} /> 
+          <LogOut size={isCollapsed && !isMobile ? 18 : 14} /> 
           {(!isCollapsed || isMobile) && t('signOut')}
         </button>
       </div>

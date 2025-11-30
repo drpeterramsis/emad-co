@@ -119,6 +119,17 @@ const InvoiceList = () => {
     }
   };
 
+  const getCustomerTypeColor = (typeString: string) => {
+    // Note: This relies on string matching since we store type as string in map
+    // Types: Pharmacy, Store, HCP, Direct Sale
+    const type = typeString as CustomerType;
+    if (typeString === CustomerType.PHARMACY) return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+    if (typeString === CustomerType.STORE) return 'bg-blue-100 text-blue-700 border-blue-200';
+    if (typeString === CustomerType.HCP) return 'bg-purple-100 text-purple-700 border-purple-200';
+    if (typeString === CustomerType.DIRECT) return 'bg-amber-100 text-amber-700 border-amber-200';
+    return 'bg-slate-100 text-slate-500 border-slate-200';
+  };
+
   const handleDelete = async (e: React.MouseEvent, orderId: string) => {
     e.stopPropagation();
     if (window.confirm("Are you sure you want to delete this invoice?")) {
@@ -164,45 +175,45 @@ const InvoiceList = () => {
   if (loading) {
      return (
        <div className="flex items-center justify-center h-full min-h-screen">
-        <Loader2 className="animate-spin text-primary" size={32} />
+        <Loader2 className="animate-spin text-primary" size={24} />
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-8">
-      <div className="flex flex-col gap-6 mb-8 print:hidden">
+    <div className="p-4 md:p-6">
+      <div className="flex flex-col gap-4 mb-6 print:hidden">
         <div>
-          <h2 className="text-2xl md:text-3xl font-bold text-slate-800">{t('invoices')}</h2>
-          <p className="text-slate-500">History of all sales orders</p>
+          <h2 className="text-xl md:text-2xl font-bold text-slate-800">{t('invoices')}</h2>
+          <p className="text-slate-500 text-xs md:text-sm">History of all sales orders</p>
         </div>
 
         {/* Filters Bar */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-4 items-center">
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-3 items-center">
           <div className="flex items-center gap-2 text-slate-500 mr-2">
-            <Filter size={20} />
-            <span className="font-medium text-sm">Filters:</span>
+            <Filter size={18} />
+            <span className="font-medium text-xs">Filters:</span>
           </div>
           
           <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+            <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
             <input 
               type="text" 
               placeholder="Search Customer or Invoice #..." 
               value={searchCustomer}
               onChange={(e) => setSearchCustomer(e.target.value)}
-              className="pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none w-full"
+              className="pl-9 pr-4 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none w-full"
             />
           </div>
 
-          <div className="relative flex-1 min-w-[180px]">
-            <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+          <div className="relative flex-1 min-w-[160px]">
+            <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
             <input 
               type="text" 
               placeholder="Filter by Product..." 
               value={searchProduct}
               onChange={(e) => setSearchProduct(e.target.value)}
-              className="pl-9 pr-4 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none w-full"
+              className="pl-9 pr-4 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none w-full"
             />
           </div>
 
@@ -211,7 +222,7 @@ const InvoiceList = () => {
              <select 
                value={filterStatus}
                onChange={(e) => setFilterStatus(e.target.value)}
-               className="px-4 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-slate-600 bg-white"
+               className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-slate-600 bg-white"
             >
                <option value="All">All Status</option>
                <option value={OrderStatus.PAID}>Paid</option>
@@ -227,7 +238,7 @@ const InvoiceList = () => {
              <select 
                value={filterType}
                onChange={(e) => setFilterType(e.target.value)}
-               className="px-4 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-slate-600 bg-white"
+               className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-slate-600 bg-white"
             >
                <option value="All">All Types</option>
                {Object.values(CustomerType).map(t => (
@@ -241,13 +252,13 @@ const InvoiceList = () => {
               type="month"
               value={searchMonth}
               onChange={(e) => setSearchMonth(e.target.value)}
-              className="px-4 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-slate-600"
+              className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-slate-600"
             />
           </div>
 
            <button 
              onClick={() => { setSearchCustomer(''); setSearchProduct(''); setSearchMonth(''); setFilterType('All'); setFilterStatus('All'); }}
-             className="text-sm text-slate-500 hover:text-red-500 underline"
+             className="text-xs text-slate-500 hover:text-red-500 underline"
            >
              Clear
            </button>
@@ -256,27 +267,28 @@ const InvoiceList = () => {
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden print:hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
+          <table className="w-full text-left text-xs md:text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="p-4 font-medium text-slate-600">Date</th>
-                <th className="p-4 font-medium text-slate-600">Invoice #</th>
-                <th className="p-4 font-medium text-slate-600">Customer</th>
-                <th className="p-4 font-medium text-slate-600 text-center w-1/3 min-w-[200px]">Summary</th>
-                <th className="p-4 font-medium text-slate-600">Total</th>
-                <th className="p-4 font-medium text-slate-600">Paid</th>
-                <th className="p-4 font-medium text-slate-600">Status</th>
-                <th className="p-4 font-medium text-slate-600 text-right">Actions</th>
+                <th className="p-3 font-medium text-slate-600">Date</th>
+                <th className="p-3 font-medium text-slate-600">Invoice #</th>
+                <th className="p-3 font-medium text-slate-600">Customer</th>
+                <th className="p-3 font-medium text-slate-600 text-center w-1/3 min-w-[200px]">Summary</th>
+                <th className="p-3 font-medium text-slate-600">Total</th>
+                <th className="p-3 font-medium text-slate-600">Paid</th>
+                <th className="p-3 font-medium text-slate-600">Status</th>
+                <th className="p-3 font-medium text-slate-600 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredOrders.length === 0 ? (
-                <tr><td colSpan={8} className="p-8 text-center text-slate-400">No invoices found matching filters.</td></tr>
+                <tr><td colSpan={8} className="p-6 text-center text-slate-400">No invoices found matching filters.</td></tr>
               ) : (
                 filteredOrders.map(order => {
                   const totalDiscount = order.items.reduce((s, i) => s + (i.discount || 0), 0);
                   const grossTotal = order.totalAmount + totalDiscount;
                   const effectiveDiscountPercent = grossTotal > 0 ? (totalDiscount / grossTotal) * 100 : 0;
+                  const custType = customerTypes[order.customerId];
                   
                   return (
                     <tr 
@@ -284,66 +296,66 @@ const InvoiceList = () => {
                       className="hover:bg-slate-50 transition-colors cursor-pointer group"
                       onClick={() => openModal(order)}
                     >
-                      <td className="p-4 text-slate-600 font-medium align-top whitespace-nowrap">{formatDate(order.date)}</td>
-                      <td className="p-4 font-mono text-xs align-top whitespace-nowrap">{order.id}</td>
-                      <td className="p-4 font-medium text-slate-800 align-top min-w-[150px]">
+                      <td className="p-3 text-slate-600 font-medium align-top whitespace-nowrap">{formatDate(order.date)}</td>
+                      <td className="p-3 font-mono text-[10px] align-top whitespace-nowrap">{order.id}</td>
+                      <td className="p-3 font-medium text-slate-800 align-top min-w-[150px]">
                         <div>{order.customerName}</div>
-                        {customerTypes[order.customerId] && (
-                          <div className="inline-block mt-1">
-                            <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">
-                              {customerTypes[order.customerId]}
+                        {custType && (
+                          <div className="inline-block mt-0.5">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${getCustomerTypeColor(custType)}`}>
+                              {custType}
                             </span>
                           </div>
                         )}
                       </td>
-                      <td className="p-4 align-top">
-                        <div className="flex flex-col gap-1 text-xs max-h-32 overflow-y-auto pr-2 custom-scrollbar">
+                      <td className="p-3 align-top">
+                        <div className="flex flex-col gap-1 text-[10px] md:text-xs max-h-24 overflow-y-auto pr-1 custom-scrollbar">
                            {order.items.map((item, i) => (
-                             <div key={i} className="flex justify-between gap-4 border-b border-slate-100 last:border-0 pb-1 last:pb-0">
-                               <span className="font-medium text-slate-700 truncate max-w-[150px]" title={item.productName}>{item.productName}</span>
-                               <div className="flex gap-2 text-slate-500 whitespace-nowrap">
-                                  <span>{item.quantity} u</span>
-                                  {item.bonusQuantity > 0 && <span className="text-orange-600 font-bold">+{item.bonusQuantity} b</span>}
+                             <div key={i} className="flex justify-between gap-2 border-b border-slate-100 last:border-0 pb-0.5 last:pb-0">
+                               <span className="font-medium text-slate-700 truncate max-w-[120px]" title={item.productName}>{item.productName}</span>
+                               <div className="flex gap-1 text-slate-500 whitespace-nowrap">
+                                  <span>{item.quantity}u</span>
+                                  {item.bonusQuantity > 0 && <span className="text-orange-600 font-bold">+{item.bonusQuantity}b</span>}
                                </div>
                              </div>
                            ))}
                            {totalDiscount > 0 && (
-                             <div className="mt-2 pt-1 border-t border-slate-200 text-blue-600 font-medium flex justify-between bg-blue-50 px-2 py-1 rounded">
+                             <div className="mt-1 pt-0.5 border-t border-slate-200 text-blue-600 font-medium flex justify-between bg-blue-50 px-1.5 py-0.5 rounded">
                                 <span>Disc:</span>
                                 <span>{formatCurrency(totalDiscount)} ({effectiveDiscountPercent.toFixed(1)}%)</span>
                              </div>
                            )}
                         </div>
                       </td>
-                      <td className="p-4 font-bold text-slate-800 align-top whitespace-nowrap">{formatCurrency(order.totalAmount)}</td>
-                      <td className="p-4 text-slate-600 align-top whitespace-nowrap">{formatCurrency(order.paidAmount)}</td>
-                      <td className="p-4 align-top">
-                        <span className={`text-xs px-2 py-1 rounded-full border font-medium whitespace-nowrap ${getStatusColor(order.status)}`}>
+                      <td className="p-3 font-bold text-slate-800 align-top whitespace-nowrap">{formatCurrency(order.totalAmount)}</td>
+                      <td className="p-3 text-slate-600 align-top whitespace-nowrap">{formatCurrency(order.paidAmount)}</td>
+                      <td className="p-3 align-top">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium whitespace-nowrap ${getStatusColor(order.status)}`}>
                           {order.status}
                         </span>
                       </td>
-                      <td className="p-4 text-right align-top">
-                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <td className="p-3 text-right align-top">
+                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button 
                              onClick={(e) => { e.stopPropagation(); openModal(order); }}
-                             className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded transition-colors"
+                             className="p-1 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded transition-colors"
                              title="View Details"
                            >
-                             <Eye size={16} />
+                             <Eye size={14} />
                            </button>
                            <button 
                              onClick={(e) => handleEdit(e, order.id)}
-                             className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                             className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
                              title="Edit Invoice"
                            >
-                             <Edit size={16} />
+                             <Edit size={14} />
                            </button>
                            <button 
                              onClick={(e) => handleDelete(e, order.id)}
-                             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                             className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                              title="Delete Invoice"
                            >
-                             <Trash2 size={16} />
+                             <Trash2 size={14} />
                            </button>
                         </div>
                       </td>
@@ -362,10 +374,10 @@ const InvoiceList = () => {
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto print:max-w-none print:shadow-none print:h-auto print:max-h-none print:rounded-none">
             
             {/* Modal Actions (Hidden on Print) */}
-            <div className="p-6 border-b border-slate-200 flex justify-between items-start print:hidden">
+            <div className="p-4 border-b border-slate-200 flex justify-between items-start print:hidden">
               <div>
-                <h3 className="text-xl font-bold text-slate-800">Invoice Details</h3>
-                <p className="text-slate-500 text-sm">#{selectedOrder.id}</p>
+                <h3 className="text-lg font-bold text-slate-800">Invoice Details</h3>
+                <p className="text-slate-500 text-xs">#{selectedOrder.id}</p>
               </div>
               <div className="flex gap-2">
                 <button 
@@ -373,16 +385,16 @@ const InvoiceList = () => {
                   className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg"
                   title="Print Settings"
                 >
-                  <Edit size={20} />
+                  <Edit size={18} />
                 </button>
                 <button 
                   onClick={handlePrint}
-                  className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg flex items-center gap-2"
+                  className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg flex items-center gap-2 text-sm"
                 >
-                  <Printer size={20} /> Print
+                  <Printer size={18} /> Print
                 </button>
                 <button onClick={() => setSelectedOrder(null)} className="p-2 text-slate-400 hover:text-slate-600">
-                  <X size={24} />
+                  <X size={20} />
                 </button>
               </div>
             </div>
@@ -390,21 +402,21 @@ const InvoiceList = () => {
             {/* Print Settings (Visible when toggled, Hidden on Print) */}
             {showPrintSettings && (
               <div className="p-4 bg-slate-50 border-b border-slate-200 print:hidden">
-                <h4 className="font-bold text-sm text-slate-700 mb-2">Print Settings</h4>
+                <h4 className="font-bold text-xs text-slate-700 mb-2">Print Settings</h4>
                 <div className="grid grid-cols-2 gap-4 mb-2">
                   <input 
                     type="text" 
                     value={invoiceHeader}
                     onChange={(e) => setInvoiceHeader(e.target.value)}
                     placeholder="Invoice Heading (e.g. Company Name)"
-                    className="p-2 border border-slate-300 rounded text-sm"
+                    className="p-2 border border-slate-300 rounded text-xs"
                   />
                   <input 
                     type="text" 
                     value={invoiceSubheader}
                     onChange={(e) => setInvoiceSubheader(e.target.value)}
                     placeholder="Subheading (e.g. Sales Dept)"
-                    className="p-2 border border-slate-300 rounded text-sm"
+                    className="p-2 border border-slate-300 rounded text-xs"
                   />
                 </div>
                 <button 
@@ -417,51 +429,51 @@ const InvoiceList = () => {
             )}
             
             {/* Invoice Content */}
-            <div className="p-8 space-y-6 print:p-8">
+            <div className="p-6 space-y-4 print:p-6">
               
               {/* Print Header (Only visible heavily on print/preview) */}
-              <div className="text-center border-b-2 border-slate-800 pb-4 mb-8">
-                 <h1 className="text-3xl font-bold text-slate-900 uppercase tracking-wide">{invoiceHeader}</h1>
-                 <p className="text-slate-500 font-medium">{invoiceSubheader}</p>
+              <div className="text-center border-b-2 border-slate-800 pb-4 mb-6">
+                 <h1 className="text-2xl font-bold text-slate-900 uppercase tracking-wide">{invoiceHeader}</h1>
+                 <p className="text-slate-500 font-medium text-sm">{invoiceSubheader}</p>
               </div>
 
               <div className="flex justify-between items-start">
                 <div>
-                   <p className="text-xs text-slate-500 uppercase font-bold mb-1">Bill To:</p>
+                   <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Bill To:</p>
                    {/* Editable "Bill To" for Printing */}
                    <input 
                      type="text" 
                      value={printCustomerName}
                      onChange={(e) => setPrintCustomerName(e.target.value)}
-                     className="font-bold text-xl text-slate-800 border-b border-transparent hover:border-slate-300 focus:border-primary outline-none bg-transparent w-full print:border-none p-0"
+                     className="font-bold text-lg text-slate-800 border-b border-transparent hover:border-slate-300 focus:border-primary outline-none bg-transparent w-full print:border-none p-0"
                    />
                    <div className="flex gap-2 items-center">
-                    <p className="text-sm text-slate-600">ID: {selectedOrder.customerId}</p>
+                    <p className="text-xs text-slate-600">ID: {selectedOrder.customerId}</p>
                     {customerTypes[selectedOrder.customerId] && (
-                        <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0 rounded border border-slate-200">
+                        <span className={`text-[10px] px-1.5 py-0 rounded border font-medium ${getCustomerTypeColor(customerTypes[selectedOrder.customerId])}`}>
                           {customerTypes[selectedOrder.customerId]}
                         </span>
                     )}
                    </div>
                 </div>
                 <div className="text-right">
-                   <p className="text-xs text-slate-500 uppercase font-bold">Invoice #</p>
-                   <p className="font-mono text-lg text-slate-800">{selectedOrder.id}</p>
-                   <p className="text-sm text-slate-600 mt-1">Date: {formatDate(selectedOrder.date)}</p>
+                   <p className="text-[10px] text-slate-500 uppercase font-bold">Invoice #</p>
+                   <p className="font-mono text-base text-slate-800">{selectedOrder.id}</p>
+                   <p className="text-xs text-slate-600 mt-0.5">Date: {formatDate(selectedOrder.date)}</p>
                 </div>
               </div>
 
               <div>
-                <table className="w-full text-left text-sm mt-4">
+                <table className="w-full text-left text-xs mt-4">
                   <thead className="bg-slate-100 border-b-2 border-slate-300 print:bg-slate-50">
                     <tr>
-                      <th className="p-3 text-slate-800 font-bold">Item</th>
-                      <th className="p-3 text-slate-800 font-bold text-right">Price</th>
-                      <th className="p-3 text-slate-800 font-bold text-center">Qty</th>
-                      <th className="p-3 text-slate-800 font-bold text-center">Bonus</th>
-                      <th className="p-3 text-slate-800 font-bold text-center">Disc %</th>
-                      <th className="p-3 text-slate-800 font-bold text-center">Disc Amt</th>
-                      <th className="p-3 text-slate-800 font-bold text-right">Total</th>
+                      <th className="p-2 text-slate-800 font-bold">Item</th>
+                      <th className="p-2 text-slate-800 font-bold text-right">Price</th>
+                      <th className="p-2 text-slate-800 font-bold text-center">Qty</th>
+                      <th className="p-2 text-slate-800 font-bold text-center">Bonus</th>
+                      <th className="p-2 text-slate-800 font-bold text-center">Disc %</th>
+                      <th className="p-2 text-slate-800 font-bold text-center">Disc Amt</th>
+                      <th className="p-2 text-slate-800 font-bold text-right">Total</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -471,17 +483,17 @@ const InvoiceList = () => {
                       
                       return (
                       <tr key={idx}>
-                        <td className="p-3 font-medium text-slate-800">{item.productName}</td>
-                        <td className="p-3 text-right">{item.unitPrice}</td>
-                        <td className="p-3 text-center">{item.quantity}</td>
-                        <td className="p-3 text-center">{item.bonusQuantity > 0 ? item.bonusQuantity : '-'}</td>
-                        <td className="p-3 text-center text-slate-600">
+                        <td className="p-2 font-medium text-slate-800">{item.productName}</td>
+                        <td className="p-2 text-right">{item.unitPrice}</td>
+                        <td className="p-2 text-center">{item.quantity}</td>
+                        <td className="p-2 text-center">{item.bonusQuantity > 0 ? item.bonusQuantity : '-'}</td>
+                        <td className="p-2 text-center text-slate-600">
                           {percent > 0.01 ? percent.toFixed(2) + '%' : '-'}
                         </td>
-                        <td className="p-3 text-center">
+                        <td className="p-2 text-center">
                           {item.discount > 0 ? item.discount.toFixed(2) : '-'}
                         </td>
-                        <td className="p-3 text-right font-bold">{item.subtotal.toFixed(2)}</td>
+                        <td className="p-2 text-right font-bold">{item.subtotal.toFixed(2)}</td>
                       </tr>
                     )})}
                   </tbody>
@@ -496,28 +508,28 @@ const InvoiceList = () => {
                    
                    return (
                    <>
-                     <div className="w-64 flex justify-between text-sm">
+                     <div className="w-64 flex justify-between text-xs">
                        <span className="text-slate-600">Subtotal:</span>
                        <span className="font-medium">
                          {formatCurrency(subTotal)}
                        </span>
                      </div>
-                     <div className="w-64 flex justify-between text-sm">
+                     <div className="w-64 flex justify-between text-xs">
                        <span className="text-slate-600">Discount:</span>
                        <span className="text-red-500 font-medium flex items-center gap-2">
-                         {totalDiscount > 0 && <span className="text-xs text-slate-500">({totalPercent.toFixed(2)}%)</span>}
+                         {totalDiscount > 0 && <span className="text-[10px] text-slate-500">({totalPercent.toFixed(2)}%)</span>}
                          <span>- {formatCurrency(totalDiscount)}</span>
                        </span>
                      </div>
-                     <div className="w-64 flex justify-between text-lg font-bold border-t border-slate-300 pt-2 mt-2">
+                     <div className="w-64 flex justify-between text-base font-bold border-t border-slate-300 pt-2 mt-2">
                        <span>Total:</span>
                        <span>{formatCurrency(selectedOrder.totalAmount)}</span>
                      </div>
-                     <div className="w-64 flex justify-between text-sm pt-1">
+                     <div className="w-64 flex justify-between text-xs pt-1">
                        <span className="text-slate-500">Paid:</span>
                        <span className="text-green-600 font-medium">{formatCurrency(selectedOrder.paidAmount)}</span>
                      </div>
-                     <div className="w-64 flex justify-between text-sm pt-1">
+                     <div className="w-64 flex justify-between text-xs pt-1">
                        <span className="text-slate-500">Balance:</span>
                        <span className="text-red-600 font-bold">{formatCurrency(selectedOrder.totalAmount - selectedOrder.paidAmount)}</span>
                      </div>
@@ -528,40 +540,40 @@ const InvoiceList = () => {
 
               {/* Payment History Section */}
               {selectedOrderTxns.length > 0 && (
-                <div className="mt-8 pt-4 border-t border-slate-300 page-break-inside-avoid">
-                  <h4 className="text-sm font-bold text-slate-800 mb-2 uppercase tracking-wide">Payments Received</h4>
-                  <table className="w-full text-left text-xs">
+                <div className="mt-6 pt-3 border-t border-slate-300 page-break-inside-avoid">
+                  <h4 className="text-xs font-bold text-slate-800 mb-2 uppercase tracking-wide">Payments Received</h4>
+                  <table className="w-full text-left text-[10px]">
                     <thead className="bg-slate-50 border-b border-slate-200">
                       <tr>
-                        <th className="p-2 text-slate-600">Date</th>
-                        <th className="p-2 text-slate-600">Description</th>
-                        <th className="p-2 text-slate-600 text-right">Amount</th>
+                        <th className="p-1.5 text-slate-600">Date</th>
+                        <th className="p-1.5 text-slate-600">Description</th>
+                        <th className="p-1.5 text-slate-600 text-right">Amount</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {selectedOrderTxns.map((txn, i) => (
                         <tr key={i}>
-                          <td className="p-2 text-slate-700">{formatDate(txn.date)}</td>
-                          <td className="p-2 text-slate-500">{txn.description}</td>
-                          <td className="p-2 text-slate-800 font-medium text-right">{formatCurrency(txn.amount)}</td>
+                          <td className="p-1.5 text-slate-700">{formatDate(txn.date)}</td>
+                          <td className="p-1.5 text-slate-500">{txn.description}</td>
+                          <td className="p-1.5 text-slate-800 font-medium text-right">{formatCurrency(txn.amount)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  <div className="text-right mt-2 text-sm font-bold text-green-700">
+                  <div className="text-right mt-1 text-xs font-bold text-green-700">
                     Total Paid: {formatCurrency(selectedOrderTxns.reduce((sum, t) => sum + t.amount, 0))}
                   </div>
                 </div>
               )}
 
               {/* Status Manager - Hidden on Print */}
-              <div className="mt-6 pt-4 border-t border-slate-100 print:hidden">
-                 <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2 mb-2"><CheckCircle size={16}/> Invoice Status</h4>
-                 <div className="flex items-center gap-3">
+              <div className="mt-4 pt-4 border-t border-slate-100 print:hidden">
+                 <h4 className="text-xs font-bold text-slate-700 flex items-center gap-2 mb-2"><CheckCircle size={14}/> Invoice Status</h4>
+                 <div className="flex items-center gap-2">
                     <select 
                       value={selectedOrder.status} 
                       onChange={(e) => handleStatusChange(e.target.value as OrderStatus)}
-                      className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-primary outline-none"
+                      className="px-2 py-1.5 border border-slate-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-primary outline-none"
                     >
                        <option value={OrderStatus.PENDING}>Pending</option>
                        <option value={OrderStatus.PARTIAL}>Partial Payment</option>
@@ -569,35 +581,35 @@ const InvoiceList = () => {
                        <option value={OrderStatus.RETURNED}>Returned / Recalled</option>
                        <option value={OrderStatus.CANCELLED}>Cancelled</option>
                     </select>
-                    <span className={`text-xs px-3 py-1.5 rounded-full font-medium border ${getStatusColor(selectedOrder.status)}`}>
+                    <span className={`text-[10px] px-2 py-1 rounded-full font-medium border ${getStatusColor(selectedOrder.status)}`}>
                        Current: {selectedOrder.status}
                     </span>
                  </div>
                  {selectedOrder.status === OrderStatus.RETURNED && (
-                   <div className="flex items-center gap-2 mt-2 text-xs text-rose-600 bg-rose-50 p-2 rounded">
-                      <AlertTriangle size={14} />
+                   <div className="flex items-center gap-2 mt-2 text-[10px] text-rose-600 bg-rose-50 p-2 rounded">
+                      <AlertTriangle size={12} />
                       <span>Note: Marking as Returned does not automatically adjust stock. Please manage inventory manually.</span>
                    </div>
                  )}
-                 <p className="text-xs text-slate-400 mt-1">Manually updating status does not automatically refund payments.</p>
+                 <p className="text-[10px] text-slate-400 mt-1">Manually updating status does not automatically refund payments.</p>
               </div>
 
               {/* Notes Section */}
-              <div className="pt-6 mt-4 border-t border-slate-100">
-                 <div className="flex justify-between items-center mb-2 print:hidden">
-                    <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2"><FileText size={16}/> Notes</h4>
-                    <button onClick={saveNotes} className="text-xs text-primary hover:underline font-medium">Save Note</button>
+              <div className="pt-4 mt-4 border-t border-slate-100">
+                 <div className="flex justify-between items-center mb-1 print:hidden">
+                    <h4 className="text-xs font-bold text-slate-700 flex items-center gap-2"><FileText size={14}/> Notes</h4>
+                    <button onClick={saveNotes} className="text-[10px] text-primary hover:underline font-medium">Save Note</button>
                  </div>
                  <textarea 
                    value={orderNotes}
                    onChange={(e) => setOrderNotes(e.target.value)}
-                   className="w-full text-sm p-3 bg-slate-50 rounded border border-slate-200 focus:ring-1 focus:ring-primary outline-none resize-none h-24 print:bg-transparent print:border-none print:p-0 print:h-auto print:resize-none"
+                   className="w-full text-xs p-2 bg-slate-50 rounded border border-slate-200 focus:ring-1 focus:ring-primary outline-none resize-none h-20 print:bg-transparent print:border-none print:p-0 print:h-auto print:resize-none"
                    placeholder="Add notes to this invoice..."
                  />
               </div>
 
               {/* Print Footer */}
-              <div className="hidden print:block fixed bottom-4 left-0 w-full text-center text-xs text-slate-400">
+              <div className="hidden print:block fixed bottom-4 left-0 w-full text-center text-[10px] text-slate-400">
                 Printed on {new Date().toLocaleDateString()}
               </div>
             </div>
@@ -606,7 +618,7 @@ const InvoiceList = () => {
             <div className="p-4 bg-slate-50 border-t border-slate-200 text-right print:hidden">
               <button 
                 onClick={() => setSelectedOrder(null)}
-                className="px-4 py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900"
+                className="px-3 py-1.5 bg-slate-800 text-white rounded-lg hover:bg-slate-900 text-sm"
               >
                 Close
               </button>

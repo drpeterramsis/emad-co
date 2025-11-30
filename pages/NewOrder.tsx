@@ -218,35 +218,35 @@ const NewOrder = () => {
   if (loading || loadingOrder) {
     return (
       <div className="flex items-center justify-center h-full min-h-screen">
-        <Loader2 className="animate-spin text-primary" size={32} />
+        <Loader2 className="animate-spin text-primary" size={24} />
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-7xl mx-auto pb-24">
+    <div className="p-4 md:p-6 max-w-7xl mx-auto pb-20">
       {isSubmitting && <LoadingOverlay />}
       
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-2xl md:text-3xl font-bold text-slate-800">
+          <h2 className="text-xl md:text-2xl font-bold text-slate-800">
             {editOrderId ? 'Edit Sales Order' : 'New Sales Order'}
           </h2>
-          <p className="text-slate-500 text-sm">
+          <p className="text-slate-500 text-xs">
             {editOrderId ? 'Modify transaction details' : 'Record a transaction for a customer'}
           </p>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-4">
         {/* Header Details */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Customer</label>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Customer</label>
             <div className="flex gap-2">
               <select
                 required
-                className="w-full rounded-lg border-slate-300 border p-2.5 focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                className="w-full rounded-lg border-slate-300 border p-2 text-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none"
                 value={selectedCustomer}
                 onChange={(e) => setSelectedCustomer(e.target.value)}
               >
@@ -260,46 +260,46 @@ const NewOrder = () => {
               <button 
                 type="button"
                 onClick={() => setShowNewCustomerModal(true)}
-                className="p-2.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 border border-slate-200 flex-shrink-0"
+                className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 border border-slate-200 flex-shrink-0"
                 title="Add New Customer"
               >
-                <Plus size={20} />
+                <Plus size={18} />
               </button>
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Order Date</label>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Order Date</label>
             <input 
               type="date"
               required
               value={orderDate}
               onChange={(e) => setOrderDate(e.target.value)}
-              className="w-full rounded-lg border-slate-300 border p-2.5 outline-none focus:ring-2 focus:ring-primary"
+              className="w-full rounded-lg border-slate-300 border p-2 text-sm outline-none focus:ring-2 focus:ring-primary"
             />
             {/* Helper for date format preference */}
-            <p className="text-[10px] text-slate-400 mt-1 text-right">DD/MM/YYYY</p>
+            <p className="text-[10px] text-slate-400 mt-0.5 text-right">DD/MM/YYYY</p>
           </div>
         </div>
 
         {/* Product Selection */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-            <h3 className="text-lg font-semibold">Order Items</h3>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
+            <h3 className="text-base font-semibold">Order Items</h3>
             
             {/* Searchable Product Input */}
-            <div className="relative w-full md:w-96" ref={searchContainerRef}>
+            <div className="relative w-full md:w-80" ref={searchContainerRef}>
               <div className="relative">
-                <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
+                <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
                 <input 
                   type="text"
-                  placeholder="Search products by name or price..."
+                  placeholder="Search products..."
                   value={productSearch}
                   onFocus={() => setShowProductList(true)}
                   onChange={(e) => {
                     setProductSearch(e.target.value);
                     setShowProductList(true);
                   }}
-                  className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                  className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-primary outline-none"
                 />
                 {productSearch && (
                   <button 
@@ -310,16 +310,16 @@ const NewOrder = () => {
                     }}
                     className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
                   >
-                    <X size={16} />
+                    <X size={14} />
                   </button>
                 )}
               </div>
 
               {/* Dropdown Results */}
               {showProductList && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-xl border border-slate-200 max-h-60 overflow-y-auto z-10">
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-xl border border-slate-200 max-h-56 overflow-y-auto z-10">
                   {filteredProducts.length === 0 ? (
-                    <div className="p-4 text-center text-slate-500 text-sm">No products found</div>
+                    <div className="p-3 text-center text-slate-500 text-xs">No products found</div>
                   ) : (
                     filteredProducts.map(p => (
                       <button
@@ -327,13 +327,13 @@ const NewOrder = () => {
                         type="button"
                         onClick={() => addProductToCart(p)}
                         disabled={p.stock <= 0}
-                        className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-50 last:border-0 flex justify-between items-center group disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full text-left px-3 py-2 hover:bg-slate-50 border-b border-slate-50 last:border-0 flex justify-between items-center group disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <div>
-                          <p className="font-medium text-slate-800 group-hover:text-primary transition-colors">{p.name}</p>
-                          <p className="text-xs text-slate-500">Stock: {p.stock}</p>
+                          <p className="font-medium text-slate-800 text-sm group-hover:text-primary transition-colors">{p.name}</p>
+                          <p className="text-[10px] text-slate-500">Stock: {p.stock}</p>
                         </div>
-                        <p className="font-bold text-slate-700">EGP {p.basePrice}</p>
+                        <p className="font-bold text-slate-700 text-xs">EGP {p.basePrice}</p>
                       </button>
                     ))
                   )}
@@ -342,60 +342,60 @@ const NewOrder = () => {
             </div>
           </div>
 
-          <div className="overflow-x-auto min-h-[300px]">
+          <div className="overflow-x-auto min-h-[250px]">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="p-3 font-medium text-slate-600 min-w-[150px]">Product</th>
-                  <th className="p-3 font-medium text-slate-600 w-24">Price</th>
-                  <th className="p-3 font-medium text-slate-600 w-20">Qty</th>
-                  <th className="p-3 font-medium text-slate-600 w-20 text-orange-600">Bounce</th>
-                  <th className="p-3 font-medium text-slate-600 w-32">Discount %</th>
-                  <th className="p-3 font-medium text-slate-600 w-28">Disc. Amt</th>
-                  <th className="p-3 font-medium text-slate-600 w-32 text-right">Subtotal</th>
-                  <th className="p-3 font-medium text-slate-600 w-12"></th>
+                  <th className="p-2 font-medium text-slate-600 min-w-[150px]">Product</th>
+                  <th className="p-2 font-medium text-slate-600 w-20">Price</th>
+                  <th className="p-2 font-medium text-slate-600 w-16">Qty</th>
+                  <th className="p-2 font-medium text-slate-600 w-16 text-orange-600">Bounce</th>
+                  <th className="p-2 font-medium text-slate-600 w-24">Discount %</th>
+                  <th className="p-2 font-medium text-slate-600 w-20">Disc. Amt</th>
+                  <th className="p-2 font-medium text-slate-600 w-28 text-right">Subtotal</th>
+                  <th className="p-2 font-medium text-slate-600 w-10"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {cart.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-slate-400">
+                    <td colSpan={8} className="p-8 text-center text-slate-400 text-sm">
                       No items added yet. Search above to add products.
                     </td>
                   </tr>
                 ) : (
                   cart.map((item, index) => (
                     <tr key={index}>
-                      <td className="p-3 font-medium text-slate-800">{item.productName}</td>
-                      <td className="p-3">
+                      <td className="p-2 font-medium text-slate-800 text-xs md:text-sm">{item.productName}</td>
+                      <td className="p-2">
                         <input
                           type="number"
                           min="0"
                           step="any"
                           value={item.unitPrice}
                           onChange={(e) => updateCartItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          className="w-20 rounded border border-slate-300 p-1 text-center"
+                          className="w-16 rounded border border-slate-300 p-1 text-center text-xs"
                         />
                       </td>
-                      <td className="p-3">
+                      <td className="p-2">
                         <input
                           type="number"
                           min="1"
                           value={item.quantity}
                           onChange={(e) => updateCartItem(index, 'quantity', parseInt(e.target.value) || 1)}
-                          className="w-16 rounded border border-slate-300 p-1 text-center font-bold"
+                          className="w-14 rounded border border-slate-300 p-1 text-center font-bold text-xs"
                         />
                       </td>
-                      <td className="p-3">
+                      <td className="p-2">
                         <input
                           type="number"
                           min="0"
                           value={item.bonusQuantity}
                           onChange={(e) => updateCartItem(index, 'bonusQuantity', parseInt(e.target.value) || 0)}
-                          className="w-16 rounded border border-orange-200 p-1 bg-orange-50 text-orange-800 text-center"
+                          className="w-14 rounded border border-orange-200 p-1 bg-orange-50 text-orange-800 text-center text-xs"
                         />
                       </td>
-                      <td className="p-3">
+                      <td className="p-2">
                         <div className="relative">
                           <input
                             type="number"
@@ -404,31 +404,31 @@ const NewOrder = () => {
                             step="any"
                             value={item.discountPercent || 0}
                             onChange={(e) => updateCartItem(index, 'discountPercent', parseFloat(e.target.value) || 0)}
-                            className="w-20 rounded border border-slate-300 p-1 pr-6 text-center"
+                            className="w-20 rounded border border-slate-300 p-1 pr-5 text-center text-xs"
                           />
-                          <span className="absolute right-2 top-1.5 text-slate-400 text-xs">%</span>
+                          <span className="absolute right-2 top-1.5 text-slate-400 text-[10px]">%</span>
                         </div>
                       </td>
-                      <td className="p-3">
+                      <td className="p-2">
                         <input
                           type="number"
                           min="0"
                           step="any"
                           value={item.discount}
                           onChange={(e) => updateCartItem(index, 'discount', parseFloat(e.target.value) || 0)}
-                          className="w-24 rounded border border-slate-300 p-1 text-center"
+                          className="w-20 rounded border border-slate-300 p-1 text-center text-xs"
                         />
                       </td>
-                      <td className="p-3 font-bold text-slate-800 text-right">
+                      <td className="p-2 font-bold text-slate-800 text-right text-xs">
                         EGP {item.subtotal.toFixed(2)}
                       </td>
-                      <td className="p-3 text-right">
+                      <td className="p-2 text-right">
                         <button
                           type="button"
                           onClick={() => removeCartItem(index)}
                           className="text-red-400 hover:text-red-600 transition-colors"
                         >
-                          <Trash2 size={18} />
+                          <Trash2 size={16} />
                         </button>
                       </td>
                     </tr>
@@ -438,28 +438,28 @@ const NewOrder = () => {
             </table>
           </div>
 
-          <div className="mt-6 flex justify-end items-center gap-4 border-t border-slate-100 pt-4">
+          <div className="mt-4 flex justify-end items-center gap-4 border-t border-slate-100 pt-3">
              <div className="text-right">
-               <p className="text-sm text-slate-500">Total Amount</p>
-               <p className="text-3xl font-bold text-primary">EGP {calculateTotal().toFixed(2)}</p>
+               <p className="text-xs text-slate-500">Total Amount</p>
+               <p className="text-2xl font-bold text-primary">EGP {calculateTotal().toFixed(2)}</p>
              </div>
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 sticky bottom-6 z-10">
+        <div className="flex justify-end gap-2 sticky bottom-4 z-10">
           <button
             type="button"
             onClick={() => navigate('/invoices')}
-            className="px-6 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 font-medium shadow-sm"
+            className="px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 font-medium shadow-sm text-sm"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={cart.length === 0 || isSubmitting}
-            className="px-6 py-2 rounded-lg bg-primary text-white hover:bg-teal-800 font-medium shadow-lg shadow-teal-700/30 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 rounded-lg bg-primary text-white hover:bg-teal-800 font-medium shadow-lg shadow-teal-700/30 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
-            {isSubmitting ? <Loader2 className="animate-spin" size={18}/> : <Save size={18} />}
+            {isSubmitting ? <Loader2 className="animate-spin" size={16}/> : <Save size={16} />}
             {isSubmitting ? 'Saving...' : (editOrderId ? 'Update Order' : 'Complete Order')}
           </button>
         </div>
@@ -469,35 +469,35 @@ const NewOrder = () => {
       {showNewCustomerModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl overflow-hidden">
-             <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
-               <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                 <User size={20} className="text-primary"/> Quick Add Customer
+             <div className="bg-slate-50 p-3 border-b border-slate-200 flex justify-between items-center">
+               <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                 <User size={18} className="text-primary"/> Quick Add Customer
                </h3>
                <button onClick={() => setShowNewCustomerModal(false)} className="text-slate-400 hover:text-slate-600">
-                 <X size={20} />
+                 <X size={18} />
                </button>
             </div>
             
-            <div className="p-6 space-y-4">
+            <div className="p-5 space-y-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Customer Name <span className="text-red-500">*</span></label>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Customer Name <span className="text-red-500">*</span></label>
                 <input 
                   type="text"
                   value={newCustomerName}
                   onChange={(e) => setNewCustomerName(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-primary outline-none"
+                  className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-primary outline-none"
                   placeholder="e.g. Hope Pharmacy"
                   autoFocus
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                   <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>
+                   <label className="block text-xs font-medium text-slate-700 mb-1">Type</label>
                    <select 
                      value={newCustomerType}
                      onChange={(e) => setNewCustomerType(e.target.value as CustomerType)}
-                     className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-primary outline-none bg-white"
+                     className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-primary outline-none bg-white"
                    >
                      {Object.values(CustomerType).map(t => (
                        <option key={t} value={t}>{t}</option>
@@ -505,7 +505,7 @@ const NewOrder = () => {
                    </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Default Discount (%)</label>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">Default Discount (%)</label>
                   <input 
                     type="number" 
                     min="0"
@@ -513,43 +513,43 @@ const NewOrder = () => {
                     step="any"
                     value={newCustomerDiscount}
                     onChange={(e) => setNewCustomerDiscount(e.target.value)}
-                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-primary outline-none"
+                    className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-primary outline-none"
                     placeholder="0"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
-                  <Map size={14}/> Brick / Area
+                <label className="block text-xs font-medium text-slate-700 mb-1 flex items-center gap-1">
+                  <Map size={12}/> Brick / Area
                 </label>
                 <input 
                   type="text"
                   value={newCustomerBrick}
                   onChange={(e) => setNewCustomerBrick(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-primary outline-none"
+                  className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-primary outline-none"
                   placeholder="e.g. Downtown"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
-                  <MapPin size={14}/> Address
+                <label className="block text-xs font-medium text-slate-700 mb-1 flex items-center gap-1">
+                  <MapPin size={12}/> Address
                 </label>
                 <input 
                   type="text"
                   value={newCustomerAddress}
                   onChange={(e) => setNewCustomerAddress(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-primary outline-none"
+                  className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-primary outline-none"
                   placeholder="Area / Street Details"
                 />
               </div>
 
-              <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 mt-2">
+              <div className="pt-3 flex justify-end gap-2 border-t border-slate-100 mt-2">
                 <button 
                   type="button" 
                   onClick={() => setShowNewCustomerModal(false)}
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium"
+                  className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-sm"
                 >
                   Cancel
                 </button>
@@ -557,7 +557,7 @@ const NewOrder = () => {
                   type="button" 
                   onClick={handleQuickAddCustomer}
                   disabled={!newCustomerName}
-                  className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-teal-800 disabled:opacity-50 font-medium shadow-md"
+                  className="px-3 py-1.5 bg-primary text-white rounded-lg hover:bg-teal-800 disabled:opacity-50 font-medium shadow-md text-sm"
                 >
                   Add Customer
                 </button>

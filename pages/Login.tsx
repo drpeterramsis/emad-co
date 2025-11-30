@@ -1,7 +1,6 @@
-
 import React, { useState } from 'react';
 import { loginUser } from '../utils/auth';
-import { Loader2, Lock, ArrowRight, ShieldCheck, AlertCircle, Mail } from 'lucide-react';
+import { Loader2, Lock, ArrowRight, ShieldCheck, AlertCircle, Mail, Pill } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface LoginProps {
@@ -39,29 +38,32 @@ const Login = ({ onLogin }: LoginProps) => {
   return (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-        <div className="bg-gradient-to-r from-teal-600 to-cyan-600 p-8 text-center">
-          <div className="bg-white/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
-             <ShieldCheck className="text-white" size={32} />
+        <div className="bg-gradient-to-r from-teal-600 to-cyan-600 p-8 text-center relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-full bg-white/5 pointer-events-none" />
+          <div className="bg-white/20 w-16 h-16 rounded-2xl rotate-45 flex items-center justify-center mx-auto mb-6 backdrop-blur-sm shadow-lg">
+             <div className="-rotate-45">
+               <Pill className="text-white" size={32} />
+             </div>
           </div>
-          <h1 className="text-2xl font-bold text-white mb-1">Emad Co. Sales Portal</h1>
-          <p className="text-teal-100 text-sm">Authorized Personnel Only</p>
+          <h1 className="text-2xl font-bold text-white mb-1 tracking-tight">Emad Co. Sales Portal</h1>
+          <p className="text-teal-100 text-sm font-medium">Authorized Personnel Only</p>
         </div>
         
         <div className="p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-2">
+              <label htmlFor="email" className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
                 Email Address
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-3 text-slate-400" size={18} />
+                <Mail className="absolute left-3 top-2.5 text-slate-400" size={18} />
                 <input
                   id="email"
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
+                  className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all text-sm"
                   placeholder="name@emadco.com"
                   autoComplete="email"
                   autoFocus
@@ -70,18 +72,18 @@ const Login = ({ onLogin }: LoginProps) => {
             </div>
 
             <div>
-              <label htmlFor="pass" className="block text-sm font-medium text-slate-700 mb-2">
+              <label htmlFor="pass" className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
                 Password
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-3 text-slate-400" size={18} />
+                <Lock className="absolute left-3 top-2.5 text-slate-400" size={18} />
                 <input
                   id="pass"
                   type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
+                  className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all text-sm"
                   placeholder="••••••••"
                   autoComplete="current-password"
                 />
@@ -89,8 +91,8 @@ const Login = ({ onLogin }: LoginProps) => {
             </div>
 
             {error && (
-              <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-sm rounded-lg flex items-start gap-2">
-                <AlertCircle size={16} className="mt-0.5 shrink-0" />
+              <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-xs rounded-lg flex items-start gap-2">
+                <AlertCircle size={14} className="mt-0.5 shrink-0" />
                 <span>{error}</span>
               </div>
             )}
@@ -98,25 +100,25 @@ const Login = ({ onLogin }: LoginProps) => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-slate-900 text-white py-3 rounded-lg font-medium hover:bg-slate-800 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-slate-900/20 disabled:opacity-70 disabled:cursor-not-allowed"
+              className="w-full bg-slate-900 text-white py-2.5 rounded-lg font-medium hover:bg-slate-800 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-slate-900/20 disabled:opacity-70 disabled:cursor-not-allowed text-sm"
             >
               {loading ? (
                 <>
-                  <Loader2 className="animate-spin" size={20} /> Verifying...
+                  <Loader2 className="animate-spin" size={18} /> Verifying...
                 </>
               ) : (
                 <>
-                  Login to Portal <ArrowRight size={20} />
+                  Login to Portal <ArrowRight size={18} />
                 </>
               )}
             </button>
           </form>
 
           <div className="mt-8 text-center border-t border-slate-100 pt-6">
-            <p className="text-xs text-slate-400">
-              Restricted Access System v2.0.026
+            <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">
+              Restricted Access System v2.0.031
             </p>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-[10px] text-slate-400 mt-1">
               &copy; {new Date().getFullYear()} Emad Co. Pharmaceutical
             </p>
           </div>

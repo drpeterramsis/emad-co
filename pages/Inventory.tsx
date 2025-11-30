@@ -194,7 +194,7 @@ const Inventory = () => {
                     )}
                   </div>
                   <h3 className="font-bold text-slate-800 text-sm mb-1 leading-tight h-10">{product.name}</h3>
-                  <div className="flex justify-between items-end mt-3 pt-3 border-t border-slate-100">
+                  <div className="flex justify-between items-end mt-3 pt-3 border-t border-slate-100 relative z-0">
                     <div>
                       <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">{t('price')}</p>
                       <p className="text-base font-semibold text-primary">EGP {product.basePrice}</p>
@@ -207,8 +207,8 @@ const Inventory = () => {
                     </div>
                   </div>
                   
-                  {/* Actions Bar - Static on mobile (below content), Overlay on desktop (hover) */}
-                  <div className="mt-3 md:mt-0 pt-2 md:pt-2 border-t md:border-t border-slate-100 flex justify-between items-center md:absolute md:inset-x-0 md:bottom-0 md:bg-white/95 md:p-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity rounded-b-xl">
+                  {/* Actions Bar - Simplified Mobile View: Static relative block on mobile, overlay on desktop */}
+                  <div className="mt-3 pt-2 border-t border-slate-100 flex justify-between items-center md:mt-0 md:pt-0 md:border-t-0 md:absolute md:inset-x-0 md:bottom-0 md:bg-white/95 md:p-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity rounded-b-xl z-10">
                       <button 
                         onClick={() => handleOpenProductModal(product)}
                         className="text-slate-500 hover:text-blue-600 text-xs font-medium flex items-center gap-1 px-2 py-1"

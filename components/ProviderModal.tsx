@@ -39,9 +39,9 @@ const ProviderModal = ({ isOpen, onClose, onSave, initialData }: ProviderModalPr
       });
       // Do not close here, let parent handle it or close manually if needed, 
       // but usually modal closes on success. Parent passes onClose.
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert('Failed to save provider');
+      alert(`Failed to save provider: ${error.message || "Please check your connection or input."}`);
     } finally {
       setIsSubmitting(false);
     }

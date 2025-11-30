@@ -258,8 +258,10 @@ const Inventory = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {products.map(product => {
               const isLowStock = product.stock < 100;
+              const isOutOfStock = product.stock === 0;
+
               return (
-                <div key={product.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow relative group">
+                <div key={product.id} className={`${isOutOfStock ? 'bg-red-50' : 'bg-white'} p-4 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow relative group`}>
                   <div className="flex justify-between items-start mb-3">
                     <div className="bg-slate-100 p-2 rounded-lg text-slate-600">
                       <Package size={20} />

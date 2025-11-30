@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { getOrders, deleteOrder, updateOrder, getCustomers, getTransactions } from '../utils/storage';
 import { Order, OrderStatus, CustomerType, Transaction, TransactionType } from '../types';
@@ -74,7 +75,7 @@ const InvoiceList = () => {
       await updateOrder(updated);
       await fetchOrders(); // Refresh list
       setSelectedOrder(updated); // Update modal state
-      alert('Notes saved successfully!');
+      alert(t('saveNote') + ' successfully!');
     } catch (e) {
       console.error(e);
       alert('Failed to save notes.');
@@ -187,21 +188,21 @@ const InvoiceList = () => {
           <h2 className="text-xl md:text-2xl font-bold text-slate-800">
             {t('invoices')} <span className="text-sm font-normal text-slate-500">({filteredOrders.length})</span>
           </h2>
-          <p className="text-slate-500 text-xs md:text-sm">History of all sales orders</p>
+          <p className="text-slate-500 text-xs md:text-sm">{t('invoiceHistory')}</p>
         </div>
 
         {/* Filters Bar */}
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-3 items-center">
           <div className="flex items-center gap-2 text-slate-500 mr-2">
             <Filter size={18} />
-            <span className="font-medium text-xs">Filters:</span>
+            <span className="font-medium text-xs">{t('filters')}:</span>
           </div>
           
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
             <input 
               type="text" 
-              placeholder="Search Customer or Invoice #..." 
+              placeholder={t('searchCustomerInvoice')}
               value={searchCustomer}
               onChange={(e) => setSearchCustomer(e.target.value)}
               className="pl-9 pr-4 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none w-full"
@@ -212,7 +213,7 @@ const InvoiceList = () => {
             <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
             <input 
               type="text" 
-              placeholder="Filter by Product..." 
+              placeholder={t('filterByProduct')}
               value={searchProduct}
               onChange={(e) => setSearchProduct(e.target.value)}
               className="pl-9 pr-4 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none w-full"
@@ -226,8 +227,8 @@ const InvoiceList = () => {
                onChange={(e) => setFilterStatus(e.target.value)}
                className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-slate-600 bg-white"
             >
-               <option value="All">All Status</option>
-               <option value={OrderStatus.PAID}>Paid</option>
+               <option value="All">{t('allStatus')}</option>
+               <option value={OrderStatus.PAID}>{t('paid')}</option>
                <option value={OrderStatus.PARTIAL}>Partial</option>
                <option value={OrderStatus.PENDING}>Pending</option>
                <option value={OrderStatus.RETURNED}>Returned</option>
@@ -242,7 +243,7 @@ const InvoiceList = () => {
                onChange={(e) => setFilterType(e.target.value)}
                className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-slate-600 bg-white"
             >
-               <option value="All">All Types</option>
+               <option value="All">{t('allTypes')}</option>
                {Object.values(CustomerType).map(t => (
                   <option key={t} value={t}>{t}</option>
                ))}
@@ -262,7 +263,7 @@ const InvoiceList = () => {
              onClick={() => { setSearchCustomer(''); setSearchProduct(''); setSearchMonth(''); setFilterType('All'); setFilterStatus('All'); }}
              className="text-xs text-slate-500 hover:text-red-500 underline"
            >
-             Clear
+             {t('clear')}
            </button>
         </div>
       </div>
@@ -272,19 +273,19 @@ const InvoiceList = () => {
           <table className="w-full text-left text-xs md:text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="p-3 font-medium text-slate-600">Date</th>
-                <th className="p-3 font-medium text-slate-600">Invoice #</th>
-                <th className="p-3 font-medium text-slate-600">Customer</th>
-                <th className="p-3 font-medium text-slate-600 text-center w-1/3 min-w-[200px]">Summary</th>
-                <th className="p-3 font-medium text-slate-600">Total</th>
-                <th className="p-3 font-medium text-slate-600">Paid</th>
-                <th className="p-3 font-medium text-slate-600">Status</th>
-                <th className="p-3 font-medium text-slate-600 text-right">Actions</th>
+                <th className="p-3 font-medium text-slate-600">{t('date')}</th>
+                <th className="p-3 font-medium text-slate-600">{t('invoiceId')}</th>
+                <th className="p-3 font-medium text-slate-600">{t('customer')}</th>
+                <th className="p-3 font-medium text-slate-600 text-center w-1/3 min-w-[200px]">{t('summary')}</th>
+                <th className="p-3 font-medium text-slate-600">{t('total')}</th>
+                <th className="p-3 font-medium text-slate-600">{t('paid')}</th>
+                <th className="p-3 font-medium text-slate-600">{t('status')}</th>
+                <th className="p-3 font-medium text-slate-600 text-right">{t('actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredOrders.length === 0 ? (
-                <tr><td colSpan={8} className="p-6 text-center text-slate-400">No invoices found matching filters.</td></tr>
+                <tr><td colSpan={8} className="p-6 text-center text-slate-400">{t('noInvoicesFound')}</td></tr>
               ) : (
                 filteredOrders.map(order => {
                   const totalDiscount = order.items.reduce((s, i) => s + (i.discount || 0), 0);
@@ -378,14 +379,14 @@ const InvoiceList = () => {
             {/* Modal Actions (Hidden on Print) */}
             <div className="p-4 border-b border-slate-200 flex justify-between items-start print:hidden">
               <div>
-                <h3 className="text-lg font-bold text-slate-800">Invoice Details</h3>
+                <h3 className="text-lg font-bold text-slate-800">{t('invoiceDetails')}</h3>
                 <p className="text-slate-500 text-xs">#{selectedOrder.id}</p>
               </div>
               <div className="flex gap-2">
                 <button 
                   onClick={() => setShowPrintSettings(!showPrintSettings)}
                   className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg"
-                  title="Print Settings"
+                  title={t('printSettings')}
                 >
                   <Edit size={18} />
                 </button>
@@ -393,7 +394,7 @@ const InvoiceList = () => {
                   onClick={handlePrint}
                   className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg flex items-center gap-2 text-sm"
                 >
-                  <Printer size={18} /> Print
+                  <Printer size={18} /> {t('print')}
                 </button>
                 <button onClick={() => setSelectedOrder(null)} className="p-2 text-slate-400 hover:text-slate-600">
                   <X size={20} />
@@ -404,20 +405,20 @@ const InvoiceList = () => {
             {/* Print Settings (Visible when toggled, Hidden on Print) */}
             {showPrintSettings && (
               <div className="p-4 bg-slate-50 border-b border-slate-200 print:hidden">
-                <h4 className="font-bold text-xs text-slate-700 mb-2">Print Settings</h4>
+                <h4 className="font-bold text-xs text-slate-700 mb-2">{t('printSettings')}</h4>
                 <div className="grid grid-cols-2 gap-4 mb-2">
                   <input 
                     type="text" 
                     value={invoiceHeader}
                     onChange={(e) => setInvoiceHeader(e.target.value)}
-                    placeholder="Invoice Heading (e.g. Company Name)"
+                    placeholder={t('invoiceHeading')}
                     className="p-2 border border-slate-300 rounded text-xs"
                   />
                   <input 
                     type="text" 
                     value={invoiceSubheader}
                     onChange={(e) => setInvoiceSubheader(e.target.value)}
-                    placeholder="Subheading (e.g. Sales Dept)"
+                    placeholder={t('invoiceSubheading')}
                     className="p-2 border border-slate-300 rounded text-xs"
                   />
                 </div>
@@ -425,7 +426,7 @@ const InvoiceList = () => {
                   onClick={savePrintSettings} 
                   className="text-xs bg-slate-800 text-white px-3 py-1 rounded flex items-center gap-1"
                 >
-                  <Save size={12} /> Save Settings
+                  <Save size={12} /> {t('saveSettings')}
                 </button>
               </div>
             )}
@@ -441,7 +442,7 @@ const InvoiceList = () => {
 
               <div className="flex justify-between items-start">
                 <div>
-                   <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Bill To:</p>
+                   <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">{t('billTo')}:</p>
                    {/* Editable "Bill To" for Printing */}
                    <input 
                      type="text" 
@@ -459,9 +460,9 @@ const InvoiceList = () => {
                    </div>
                 </div>
                 <div className="text-right">
-                   <p className="text-[10px] text-slate-500 uppercase font-bold">Invoice #</p>
+                   <p className="text-[10px] text-slate-500 uppercase font-bold">{t('invoiceId')}</p>
                    <p className="font-mono text-base text-slate-800">{selectedOrder.id}</p>
-                   <p className="text-xs text-slate-600 mt-0.5">Date: {formatDate(selectedOrder.date)}</p>
+                   <p className="text-xs text-slate-600 mt-0.5">{t('date')}: {formatDate(selectedOrder.date)}</p>
                 </div>
               </div>
 
@@ -469,13 +470,13 @@ const InvoiceList = () => {
                 <table className="w-full text-left text-xs mt-4">
                   <thead className="bg-slate-100 border-b-2 border-slate-300 print:bg-slate-50">
                     <tr>
-                      <th className="p-2 text-slate-800 font-bold">Item</th>
-                      <th className="p-2 text-slate-800 font-bold text-right">Price</th>
-                      <th className="p-2 text-slate-800 font-bold text-center">Qty</th>
-                      <th className="p-2 text-slate-800 font-bold text-center">Bonus</th>
-                      <th className="p-2 text-slate-800 font-bold text-center">Disc %</th>
-                      <th className="p-2 text-slate-800 font-bold text-center">Disc Amt</th>
-                      <th className="p-2 text-slate-800 font-bold text-right">Total</th>
+                      <th className="p-2 text-slate-800 font-bold">{t('product')}</th>
+                      <th className="p-2 text-slate-800 font-bold text-right">{t('price')}</th>
+                      <th className="p-2 text-slate-800 font-bold text-center">{t('quantity')}</th>
+                      <th className="p-2 text-slate-800 font-bold text-center">{t('bonus')}</th>
+                      <th className="p-2 text-slate-800 font-bold text-center">{t('discountPercent')}</th>
+                      <th className="p-2 text-slate-800 font-bold text-center">{t('discountAmt')}</th>
+                      <th className="p-2 text-slate-800 font-bold text-right">{t('total')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -511,28 +512,28 @@ const InvoiceList = () => {
                    return (
                    <>
                      <div className="w-64 flex justify-between text-xs">
-                       <span className="text-slate-600">Subtotal:</span>
+                       <span className="text-slate-600">{t('subtotal')}:</span>
                        <span className="font-medium">
                          {formatCurrency(subTotal)}
                        </span>
                      </div>
                      <div className="w-64 flex justify-between text-xs">
-                       <span className="text-slate-600">Discount:</span>
+                       <span className="text-slate-600">{t('discount')}:</span>
                        <span className="text-red-500 font-medium flex items-center gap-2">
                          {totalDiscount > 0 && <span className="text-[10px] text-slate-500">({totalPercent.toFixed(2)}%)</span>}
                          <span>- {formatCurrency(totalDiscount)}</span>
                        </span>
                      </div>
                      <div className="w-64 flex justify-between text-base font-bold border-t border-slate-300 pt-2 mt-2">
-                       <span>Total:</span>
+                       <span>{t('total')}:</span>
                        <span>{formatCurrency(selectedOrder.totalAmount)}</span>
                      </div>
                      <div className="w-64 flex justify-between text-xs pt-1">
-                       <span className="text-slate-500">Paid:</span>
+                       <span className="text-slate-500">{t('paid')}:</span>
                        <span className="text-green-600 font-medium">{formatCurrency(selectedOrder.paidAmount)}</span>
                      </div>
                      <div className="w-64 flex justify-between text-xs pt-1">
-                       <span className="text-slate-500">Balance:</span>
+                       <span className="text-slate-500">{t('balance')}:</span>
                        <span className="text-red-600 font-bold">{formatCurrency(selectedOrder.totalAmount - selectedOrder.paidAmount)}</span>
                      </div>
                    </>
@@ -543,13 +544,13 @@ const InvoiceList = () => {
               {/* Payment History Section */}
               {selectedOrderTxns.length > 0 && (
                 <div className="mt-6 pt-3 border-t border-slate-300 page-break-inside-avoid">
-                  <h4 className="text-xs font-bold text-slate-800 mb-2 uppercase tracking-wide">Payments Received</h4>
+                  <h4 className="text-xs font-bold text-slate-800 mb-2 uppercase tracking-wide">{t('paymentsReceived')}</h4>
                   <table className="w-full text-left text-[10px]">
                     <thead className="bg-slate-50 border-b border-slate-200">
                       <tr>
-                        <th className="p-1.5 text-slate-600">Date</th>
-                        <th className="p-1.5 text-slate-600">Description</th>
-                        <th className="p-1.5 text-slate-600 text-right">Amount</th>
+                        <th className="p-1.5 text-slate-600">{t('date')}</th>
+                        <th className="p-1.5 text-slate-600">{t('description')}</th>
+                        <th className="p-1.5 text-slate-600 text-right">{t('amount')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -563,14 +564,14 @@ const InvoiceList = () => {
                     </tbody>
                   </table>
                   <div className="text-right mt-1 text-xs font-bold text-green-700">
-                    Total Paid: {formatCurrency(selectedOrderTxns.reduce((sum, t) => sum + t.amount, 0))}
+                    {t('totalPaid')}: {formatCurrency(selectedOrderTxns.reduce((sum, t) => sum + t.amount, 0))}
                   </div>
                 </div>
               )}
 
               {/* Status Manager - Hidden on Print */}
               <div className="mt-4 pt-4 border-t border-slate-100 print:hidden">
-                 <h4 className="text-xs font-bold text-slate-700 flex items-center gap-2 mb-2"><CheckCircle size={14}/> Invoice Status</h4>
+                 <h4 className="text-xs font-bold text-slate-700 flex items-center gap-2 mb-2"><CheckCircle size={14}/> {t('invoiceStatus')}</h4>
                  <div className="flex items-center gap-2">
                     <select 
                       value={selectedOrder.status} 
@@ -584,35 +585,35 @@ const InvoiceList = () => {
                        <option value={OrderStatus.CANCELLED}>Cancelled</option>
                     </select>
                     <span className={`text-[10px] px-2 py-1 rounded-full font-medium border ${getStatusColor(selectedOrder.status)}`}>
-                       Current: {selectedOrder.status}
+                       {t('current')}: {selectedOrder.status}
                     </span>
                  </div>
                  {selectedOrder.status === OrderStatus.RETURNED && (
                    <div className="flex items-center gap-2 mt-2 text-[10px] text-rose-600 bg-rose-50 p-2 rounded">
                       <AlertTriangle size={12} />
-                      <span>Note: Marking as Returned does not automatically adjust stock. Please manage inventory manually.</span>
+                      <span>{t('returnWarning')}</span>
                    </div>
                  )}
-                 <p className="text-[10px] text-slate-400 mt-1">Manually updating status does not automatically refund payments.</p>
+                 <p className="text-[10px] text-slate-400 mt-1">{t('manualUpdateWarning')}</p>
               </div>
 
               {/* Notes Section */}
               <div className="pt-4 mt-4 border-t border-slate-100">
                  <div className="flex justify-between items-center mb-1 print:hidden">
-                    <h4 className="text-xs font-bold text-slate-700 flex items-center gap-2"><FileText size={14}/> Notes</h4>
-                    <button onClick={saveNotes} className="text-[10px] text-primary hover:underline font-medium">Save Note</button>
+                    <h4 className="text-xs font-bold text-slate-700 flex items-center gap-2"><FileText size={14}/> {t('notes')}</h4>
+                    <button onClick={saveNotes} className="text-[10px] text-primary hover:underline font-medium">{t('saveNote')}</button>
                  </div>
                  <textarea 
                    value={orderNotes}
                    onChange={(e) => setOrderNotes(e.target.value)}
                    className="w-full text-xs p-2 bg-slate-50 rounded border border-slate-200 focus:ring-1 focus:ring-primary outline-none resize-none h-20 print:bg-transparent print:border-none print:p-0 print:h-auto print:resize-none"
-                   placeholder="Add notes to this invoice..."
+                   placeholder={t('additionalNotes')}
                  />
               </div>
 
               {/* Print Footer */}
               <div className="hidden print:block fixed bottom-4 left-0 w-full text-center text-[10px] text-slate-400">
-                Printed on {new Date().toLocaleDateString()}
+                {t('printedOn')} {new Date().toLocaleDateString()}
               </div>
             </div>
             
@@ -622,7 +623,7 @@ const InvoiceList = () => {
                 onClick={() => setSelectedOrder(null)}
                 className="px-3 py-1.5 bg-slate-800 text-white rounded-lg hover:bg-slate-900 text-sm"
               >
-                Close
+                {t('close')}
               </button>
             </div>
           </div>

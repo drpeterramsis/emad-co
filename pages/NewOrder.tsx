@@ -1,11 +1,14 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { getCustomers, getProducts, saveOrder, getOrder, updateOrder, addCustomer } from '../utils/storage';
 import { Customer, Product, OrderItem, OrderStatus, CustomerType } from '../types';
 import { Trash2, Save, Loader2, Search, X, Plus, MapPin, Map, User, AlertTriangle, ChevronDown, FileText } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import LoadingOverlay from '../components/LoadingOverlay';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const NewOrder = () => {
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const editOrderId = searchParams.get('id');
@@ -256,10 +259,10 @@ const NewOrder = () => {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-slate-800">
-            {editOrderId ? 'Edit Sales Order' : 'New Sales Order'}
+            {editOrderId ? t('editSalesOrder') : t('newSalesOrder')}
           </h2>
           <p className="text-slate-500 text-xs">
-            {editOrderId ? 'Modify transaction details' : 'Record a transaction for a customer'}
+            {editOrderId ? t('editOrderSubtitle') : t('newOrderSubtitle')}
           </p>
         </div>
         
@@ -267,9 +270,9 @@ const NewOrder = () => {
         <button
           onClick={() => navigate('/invoices')}
           className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 text-sm font-medium shadow-sm transition-colors"
-          title="View Invoices"
+          title={t('invoices')}
         >
-          <FileText size={16} /> <span className="hidden md:inline">Invoices</span>
+          <FileText size={16} /> <span className="hidden md:inline">{t('invoices')}</span>
         </button>
       </div>
 
@@ -277,7 +280,7 @@ const NewOrder = () => {
         {/* Header Details */}
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">Customer</label>
+            <label className="block text-xs font-medium text-slate-700 mb-1">{t('customer')}</label>
             <div className="flex gap-2" ref={customerSearchContainerRef}>
               <div className="relative w-full">
                 <div className="relative">
@@ -285,7 +288,7 @@ const NewOrder = () => {
                   <input
                     type="text"
                     required
-                    placeholder="Search Customer..."
+                    placeholder={t('searchCustomerPlaceholder')}
                     value={customerSearch}
                     onChange={(e) => {
                       setCustomerSearch(e.target.value);
@@ -319,7 +322,7 @@ const NewOrder = () => {
                 {showCustomerList && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-xl border border-slate-200 max-h-56 overflow-y-auto z-20">
                     {filteredCustomers.length === 0 ? (
-                      <div className="p-3 text-center text-slate-500 text-xs">No customers found</div>
+                      <div className="p-3 text-center text-slate-500 text-xs">{t('noCustomersFound')}</div>
                     ) : (
                       filteredCustomers.map(c => (
                         <button
@@ -342,7 +345,7 @@ const NewOrder = () => {
                 
                 {/* Warning if typed but not selected */}
                 {!selectedCustomer && customerSearch && !showCustomerList && (
-                   <p className="text-[10px] text-orange-500 mt-1 absolute -bottom-5 left-0">Please select a customer from the list.</p>
+                   <p className="text-[10px] text-orange-500 mt-1 absolute -bottom-5 left-0">{t('selectCustomerWarning')}</p>
                 )}
               </div>
 
@@ -350,14 +353,14 @@ const NewOrder = () => {
                 type="button"
                 onClick={() => setShowNewCustomerModal(true)}
                 className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 border border-slate-200 flex-shrink-0 h-10 w-10 flex items-center justify-center"
-                title="Add New Customer"
+                title={t('addNewCustomer')}
               >
                 <Plus size={18} />
               </button>
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">Order Date</label>
+            <label className="block text-xs font-medium text-slate-700 mb-1">{t('orderDate')}</label>
             <input 
               type="date"
               required
@@ -372,7 +375,7 @@ const NewOrder = () => {
         {/* Product Selection */}
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
-            <h3 className="text-base font-semibold">Order Items</h3>
+            <h3 className="text-base font-semibold">{t('orderItems')}</h3>
             
             {/* Searchable Product Input */}
             <div className="relative w-full md:w-80" ref={searchContainerRef}>
@@ -380,7 +383,7 @@ const NewOrder = () => {
                 <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
                 <input 
                   type="text"
-                  placeholder="Search products..."
+                  placeholder={t('searchProductPlaceholder')}
                   value={productSearch}
                   onFocus={() => setShowProductList(true)}
                   onChange={(e) => {
@@ -407,7 +410,7 @@ const NewOrder = () => {
               {showProductList && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-xl border border-slate-200 max-h-56 overflow-y-auto z-10">
                   {filteredProducts.length === 0 ? (
-                    <div className="p-3 text-center text-slate-500 text-xs">No products found</div>
+                    <div className="p-3 text-center text-slate-500 text-xs">{t('noProductsFound')}</div>
                   ) : (
                     filteredProducts.map(p => (
                       <button
@@ -419,7 +422,7 @@ const NewOrder = () => {
                         <div>
                           <p className="font-medium text-slate-800 text-sm group-hover:text-primary transition-colors">{p.name}</p>
                           <p className={`text-[10px] ${p.stock <= 0 ? 'text-red-500 font-bold' : 'text-slate-500'}`}>
-                            Stock: {p.stock} {p.stock <= 0 && '(Negative Stock Warning)'}
+                            {t('stock')}: {p.stock} {p.stock <= 0 && `(${t('negativeStockWarning')})`}
                           </p>
                         </div>
                         <p className="font-bold text-slate-700 text-xs">EGP {p.basePrice}</p>
@@ -435,13 +438,13 @@ const NewOrder = () => {
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="p-2 font-medium text-slate-600 min-w-[150px]">Product</th>
-                  <th className="p-2 font-medium text-slate-600 w-20">Price</th>
-                  <th className="p-2 font-medium text-slate-600 w-16">Qty</th>
-                  <th className="p-2 font-medium text-slate-600 w-16 text-orange-600">Bounce</th>
-                  <th className="p-2 font-medium text-slate-600 w-24">Discount %</th>
-                  <th className="p-2 font-medium text-slate-600 w-20">Disc. Amt</th>
-                  <th className="p-2 font-medium text-slate-600 w-28 text-right">Subtotal</th>
+                  <th className="p-2 font-medium text-slate-600 min-w-[150px]">{t('product')}</th>
+                  <th className="p-2 font-medium text-slate-600 w-20">{t('price')}</th>
+                  <th className="p-2 font-medium text-slate-600 w-16">{t('quantity')}</th>
+                  <th className="p-2 font-medium text-slate-600 w-16 text-orange-600">{t('bonus')}</th>
+                  <th className="p-2 font-medium text-slate-600 w-24">{t('discountPercent')}</th>
+                  <th className="p-2 font-medium text-slate-600 w-20">{t('discountAmt')}</th>
+                  <th className="p-2 font-medium text-slate-600 w-28 text-right">{t('subtotal')}</th>
                   <th className="p-2 font-medium text-slate-600 w-10"></th>
                 </tr>
               </thead>
@@ -449,7 +452,7 @@ const NewOrder = () => {
                 {cart.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="p-8 text-center text-slate-400 text-sm">
-                      No items added yet. Search above to add products.
+                      {t('noItemsAdded')}
                     </td>
                   </tr>
                 ) : (
@@ -464,7 +467,7 @@ const NewOrder = () => {
                           {item.productName}
                           {isOverselling && (
                             <div className="text-[10px] text-red-500 flex items-center gap-1 mt-0.5 font-normal">
-                               <AlertTriangle size={10} /> Stock: {stock}
+                               <AlertTriangle size={10} /> {t('stock')}: {stock}
                             </div>
                           )}
                         </td>
@@ -542,7 +545,7 @@ const NewOrder = () => {
 
           <div className="mt-4 flex justify-end items-center gap-4 border-t border-slate-100 pt-3">
              <div className="text-right">
-               <p className="text-xs text-slate-500">Total Amount</p>
+               <p className="text-xs text-slate-500">{t('totalAmount')}</p>
                <p className="text-2xl font-bold text-primary">EGP {calculateTotal().toFixed(2)}</p>
              </div>
           </div>
@@ -554,7 +557,7 @@ const NewOrder = () => {
             onClick={() => navigate('/invoices')}
             className="px-4 py-2 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 font-medium shadow-sm text-sm"
           >
-            Cancel
+            {t('cancel')}
           </button>
           <button
             type="submit"
@@ -562,7 +565,7 @@ const NewOrder = () => {
             className="px-4 py-2 rounded-lg bg-primary text-white hover:bg-teal-800 font-medium shadow-lg shadow-teal-700/30 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
             {isSubmitting ? <Loader2 className="animate-spin" size={16}/> : <Save size={16} />}
-            {isSubmitting ? 'Saving...' : (editOrderId ? 'Update Order' : 'Complete Order')}
+            {isSubmitting ? t('saving') : (editOrderId ? t('updateOrder') : t('completeOrder'))}
           </button>
         </div>
       </form>
@@ -573,7 +576,7 @@ const NewOrder = () => {
           <div className="bg-white rounded-xl w-full max-w-lg shadow-2xl overflow-hidden">
              <div className="bg-slate-50 p-3 border-b border-slate-200 flex justify-between items-center">
                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                 <User size={18} className="text-primary"/> Quick Add Customer
+                 <User size={18} className="text-primary"/> {t('quickAddCustomer')}
                </h3>
                <button onClick={() => setShowNewCustomerModal(false)} className="text-slate-400 hover:text-slate-600">
                  <X size={18} />
@@ -582,7 +585,7 @@ const NewOrder = () => {
             
             <div className="p-5 space-y-3">
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Customer Name <span className="text-red-500">*</span></label>
+                <label className="block text-xs font-medium text-slate-700 mb-1">{t('customerNameLabel')} <span className="text-red-500">*</span></label>
                 <input 
                   type="text"
                   value={newCustomerName}
@@ -595,7 +598,7 @@ const NewOrder = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                   <label className="block text-xs font-medium text-slate-700 mb-1">Type</label>
+                   <label className="block text-xs font-medium text-slate-700 mb-1">{t('type')}</label>
                    <select 
                      value={newCustomerType}
                      onChange={(e) => setNewCustomerType(e.target.value as CustomerType)}
@@ -607,7 +610,7 @@ const NewOrder = () => {
                    </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Default Discount (%)</label>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">{t('defaultDiscount')}</label>
                   <input 
                     type="number" 
                     min="0"
@@ -623,7 +626,7 @@ const NewOrder = () => {
 
               <div>
                 <label className="block text-xs font-medium text-slate-700 mb-1 flex items-center gap-1">
-                  <Map size={12}/> Brick / Area
+                  <Map size={12}/> {t('brickAreaLabel')}
                 </label>
                 <input 
                   type="text"
@@ -636,7 +639,7 @@ const NewOrder = () => {
 
               <div>
                 <label className="block text-xs font-medium text-slate-700 mb-1 flex items-center gap-1">
-                  <MapPin size={12}/> Address
+                  <MapPin size={12}/> {t('addressLabel')}
                 </label>
                 <input 
                   type="text"
@@ -653,7 +656,7 @@ const NewOrder = () => {
                   onClick={() => setShowNewCustomerModal(false)}
                   className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg font-medium text-sm"
                 >
-                  Cancel
+                  {t('cancel')}
                 </button>
                 <button 
                   type="button" 
@@ -661,7 +664,7 @@ const NewOrder = () => {
                   disabled={!newCustomerName}
                   className="px-3 py-1.5 bg-primary text-white rounded-lg hover:bg-teal-800 disabled:opacity-50 font-medium shadow-md text-sm"
                 >
-                  Add Customer
+                  {t('addCustomer')}
                 </button>
               </div>
             </div>

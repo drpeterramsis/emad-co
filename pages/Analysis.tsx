@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { getOrders, getTransactions } from '../utils/storage';
 import { TransactionType } from '../types';
@@ -5,8 +6,10 @@ import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { formatCurrency } from '../utils/helpers';
 import {  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const Analysis = () => {
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
@@ -64,14 +67,14 @@ const Analysis = () => {
           <ArrowLeft size={24} className="text-slate-600" />
         </button>
         <div>
-          <h2 className="text-xl md:text-2xl font-bold text-slate-800">Monthly Analysis</h2>
-          <p className="text-slate-500 text-xs md:text-sm">Detailed breakdown of sales vs collections</p>
+          <h2 className="text-xl md:text-2xl font-bold text-slate-800">{t('analysisTitle')}</h2>
+          <p className="text-slate-500 text-xs md:text-sm">{t('analysisSubtitle')}</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 h-80">
-          <h3 className="font-bold text-slate-700 mb-4">Performance Overview</h3>
+          <h3 className="font-bold text-slate-700 mb-4">{t('performanceOverview')}</h3>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={[...monthlyData].reverse()} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -79,22 +82,22 @@ const Analysis = () => {
               <YAxis tick={{fontSize: 10}} />
               <Tooltip />
               <Legend />
-              <Bar dataKey="sales" fill="#0f766e" name="Sales" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="collected" fill="#0ea5e9" name="Collected" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="sales" fill="#0f766e" name={t('sales')} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="collected" fill="#0ea5e9" name={t('collected')} radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
         
          <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-             <h3 className="font-bold text-slate-700 mb-4">Data Table</h3>
+             <h3 className="font-bold text-slate-700 mb-4">{t('dataTable')}</h3>
              <div className="overflow-x-auto max-h-64">
                 <table className="w-full text-left text-sm">
                    <thead className="bg-slate-50 border-b">
                       <tr>
-                         <th className="p-2">Month</th>
-                         <th className="p-2 text-right">Sales</th>
-                         <th className="p-2 text-right">Collected</th>
-                         <th className="p-2 text-right">Difference</th>
+                         <th className="p-2">{t('month')}</th>
+                         <th className="p-2 text-right">{t('sales')}</th>
+                         <th className="p-2 text-right">{t('collected')}</th>
+                         <th className="p-2 text-right">{t('difference')}</th>
                       </tr>
                    </thead>
                    <tbody className="divide-y">

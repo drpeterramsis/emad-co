@@ -1,13 +1,16 @@
+
 import React, { useState } from 'react';
 import { loginUser } from '../utils/auth';
 import { Loader2, Lock, ArrowRight, ShieldCheck, AlertCircle, Mail, Pill } from 'lucide-react';
 import { UserProfile } from '../types';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface LoginProps {
   onLogin: (user: UserProfile) => void;
 }
 
 const Login = ({ onLogin }: LoginProps) => {
+  const { t } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -26,10 +29,10 @@ const Login = ({ onLogin }: LoginProps) => {
       if (result.success && result.user) {
         onLogin(result.user);
       } else {
-        setError(result.error || 'Unauthorized access.');
+        setError(result.error || t('unauthorized'));
       }
     } catch (err) {
-      setError('An error occurred during login. Please try again.');
+      setError(t('loginError'));
     } finally {
       setLoading(false);
     }
@@ -46,14 +49,14 @@ const Login = ({ onLogin }: LoginProps) => {
              </div>
           </div>
           <h1 className="text-2xl font-bold text-white mb-1 tracking-tight">Emad Co. Sales Portal</h1>
-          <p className="text-teal-100 text-sm font-medium">Authorized Personnel Only</p>
+          <p className="text-teal-100 text-sm font-medium">{t('authorizedPersonnel')}</p>
         </div>
         
         <div className="p-8">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label htmlFor="email" className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
-                Email Address
+                {t('emailAddress')}
               </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-2.5 text-slate-400" size={18} />
@@ -73,7 +76,7 @@ const Login = ({ onLogin }: LoginProps) => {
 
             <div>
               <label htmlFor="pass" className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
-                Password
+                {t('password')}
               </label>
               <div className="relative">
                 <Lock className="absolute left-3 top-2.5 text-slate-400" size={18} />
@@ -104,11 +107,11 @@ const Login = ({ onLogin }: LoginProps) => {
             >
               {loading ? (
                 <>
-                  <Loader2 className="animate-spin" size={18} /> Verifying...
+                  <Loader2 className="animate-spin" size={18} /> {t('verifying')}
                 </>
               ) : (
                 <>
-                  Login to Portal <ArrowRight size={18} />
+                  {t('loginToPortal')} <ArrowRight size={18} />
                 </>
               )}
             </button>
@@ -116,7 +119,7 @@ const Login = ({ onLogin }: LoginProps) => {
 
           <div className="mt-8 text-center border-t border-slate-100 pt-6">
             <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">
-              Restricted Access System v2.0.033
+              {t('restrictedAccess')} v2.0.038
             </p>
             <p className="text-[10px] text-slate-400 mt-1">
               Developer Dr. Peter Ramsis all rights reserved

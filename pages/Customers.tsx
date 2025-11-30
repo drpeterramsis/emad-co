@@ -1,9 +1,12 @@
+
 import React, { useState, useEffect } from 'react';
 import { getCustomers, addCustomer, deleteCustomer, updateCustomer } from '../utils/storage';
 import { Customer, CustomerType } from '../types';
 import { Users, Plus, MapPin, Search, Loader2, Trash2, Map, Edit2 } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const Customers = () => {
+  const { t } = useLanguage();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -67,7 +70,7 @@ const Customers = () => {
     );
 
     if (isDuplicate) {
-      setErrorMsg("Customer with this name already exists.");
+      setErrorMsg(t('duplicateCustomer'));
       return;
     }
 
@@ -102,21 +105,21 @@ const Customers = () => {
     } catch (err: any) {
       console.error("Error saving customer:", err);
       // More specific error message if possible
-      const message = err.message || "Failed to save customer. Please check your connection and try again.";
+      const message = err.message || t('failedToSaveCustomer');
       setErrorMsg(message);
     }
   };
 
   const handleDelete = async (customerId: string, customerName: string) => {
-    if (window.confirm(`Are you sure you want to delete ${customerName}?`)) {
-      if (window.confirm(`WARNING: This will permanently delete ${customerName} AND ALL associated orders and transactions. This action cannot be undone. Are you absolutely sure?`)) {
+    if (window.confirm(`${t('deleteCustomerConfirm')} ${customerName}?`)) {
+      if (window.confirm(`${t('deleteCustomerWarning')}`)) {
         try {
           setLoading(true);
           await deleteCustomer(customerId);
           await fetchCustomers();
         } catch (err) {
           console.error("Error deleting customer:", err);
-          alert("Failed to delete customer. Please try again.");
+          alert(t('failedToSaveCustomer'));
           setLoading(false);
         }
       }
@@ -156,15 +159,15 @@ const Customers = () => {
     <div className="p-4 md:p-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <div>
-          <h2 className="text-xl md:text-2xl font-bold text-slate-800">Customers</h2>
-          <p className="text-slate-500 text-xs md:text-sm">Manage your client base ({filteredCustomers.length} records)</p>
+          <h2 className="text-xl md:text-2xl font-bold text-slate-800">{t('customers')}</h2>
+          <p className="text-slate-500 text-xs md:text-sm">{t('manageClients')} ({filteredCustomers.length} {t('totalRecords')})</p>
         </div>
         <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
           <div className="relative w-full md:w-64">
             <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
             <input 
               type="text" 
-              placeholder="Search customers..." 
+              placeholder={t('searchCustomers')} 
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none w-full text-sm"
@@ -174,7 +177,7 @@ const Customers = () => {
             onClick={handleOpenAddModal}
             className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2 shadow-lg shadow-teal-700/30 whitespace-nowrap text-sm"
           >
-            <Plus size={16} /> Add Customer
+            <Plus size={16} /> {t('addCustomer')}
           </button>
         </div>
       </div>
@@ -184,17 +187,17 @@ const Customers = () => {
           <table className="w-full text-left text-xs md:text-sm">
             <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10 shadow-sm">
               <tr>
-                <th className="p-3 font-medium text-slate-600">Name</th>
-                <th className="p-3 font-medium text-slate-600">Type</th>
-                <th className="p-3 font-medium text-slate-600">Brick / Area</th>
-                <th className="p-3 font-medium text-slate-600">Address</th>
-                <th className="p-3 font-medium text-slate-600">Default Discount</th>
-                <th className="p-3 font-medium text-slate-600 text-right">Actions</th>
+                <th className="p-3 font-medium text-slate-600">{t('name')}</th>
+                <th className="p-3 font-medium text-slate-600">{t('type')}</th>
+                <th className="p-3 font-medium text-slate-600">{t('brickAreaLabel')}</th>
+                <th className="p-3 font-medium text-slate-600">{t('addressLabel')}</th>
+                <th className="p-3 font-medium text-slate-600">{t('defaultDiscount')}</th>
+                <th className="p-3 font-medium text-slate-600 text-right">{t('actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredCustomers.length === 0 ? (
-                 <tr><td colSpan={6} className="p-6 text-center text-slate-400">No customers found.</td></tr>
+                 <tr><td colSpan={6} className="p-6 text-center text-slate-400">{t('noCustomersFound')}</td></tr>
               ) : (
                 filteredCustomers.map(customer => (
                   <tr key={customer.id} className="hover:bg-slate-50 transition-colors">
@@ -229,7 +232,7 @@ const Customers = () => {
                         <button
                           onClick={() => handleOpenEditModal(customer)}
                           className="text-slate-400 hover:text-blue-500 transition-colors p-1.5 rounded-full hover:bg-blue-50"
-                          title="Edit Customer"
+                          title={t('editCustomer')}
                         >
                           <Edit2 size={16} />
                         </button>
@@ -255,7 +258,7 @@ const Customers = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-xl w-full max-w-md shadow-2xl">
             <h3 className="text-lg font-bold mb-4 text-slate-800">
-              {editingId ? 'Edit Customer' : 'New Customer'}
+              {editingId ? t('editCustomer') : t('newCustomer')}
             </h3>
             {errorMsg && (
               <div className="mb-4 p-2 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-center gap-2">
@@ -265,7 +268,7 @@ const Customers = () => {
             )}
             <form onSubmit={handleSave} className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Customer Name</label>
+                <label className="block text-xs font-medium text-slate-700 mb-1">{t('customerNameLabel')}</label>
                 <input 
                   type="text" 
                   required
@@ -278,7 +281,7 @@ const Customers = () => {
               
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                   <label className="block text-xs font-medium text-slate-700 mb-1">Type</label>
+                   <label className="block text-xs font-medium text-slate-700 mb-1">{t('type')}</label>
                    <select 
                      value={newType}
                      onChange={(e) => setNewType(e.target.value as CustomerType)}
@@ -290,7 +293,7 @@ const Customers = () => {
                    </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Default Discount (%)</label>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">{t('defaultDiscount')}</label>
                   <input 
                     type="number" 
                     min="0"
@@ -304,7 +307,7 @@ const Customers = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Brick / Area</label>
+                <label className="block text-xs font-medium text-slate-700 mb-1">{t('brickAreaLabel')}</label>
                 <input 
                   type="text" 
                   value={newBrick}
@@ -315,7 +318,7 @@ const Customers = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Address</label>
+                <label className="block text-xs font-medium text-slate-700 mb-1">{t('addressLabel')}</label>
                 <input 
                   type="text" 
                   value={newAddress}
@@ -331,13 +334,13 @@ const Customers = () => {
                   onClick={() => setShowModal(false)}
                   className="px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm"
                 >
-                  Cancel
+                  {t('cancel')}
                 </button>
                 <button 
                   type="submit"
                   className="px-3 py-2 bg-primary text-white rounded-lg hover:bg-teal-800 shadow text-sm"
                 >
-                  {editingId ? 'Update Customer' : 'Save Customer'}
+                  {editingId ? t('updateCustomer') : t('saveCustomer')}
                 </button>
               </div>
             </form>

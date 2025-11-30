@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { getOrders, saveOrder, deleteOrder, getProducts } from '../utils/storage';
 import { Order, OrderStatus, Product, OrderItem } from '../types';
@@ -268,7 +269,7 @@ const BillGenerator = () => {
                     value={customerName} 
                     onChange={e => setCustomerName(e.target.value)}
                     className="w-full text-base font-bold border-b border-slate-300 focus:border-primary outline-none py-1 bg-transparent"
-                    placeholder="Enter Client Name"
+                    placeholder={t('customerNameInput')}
                    />
                  </div>
                </div>
@@ -377,7 +378,7 @@ const BillGenerator = () => {
                   value={notes} 
                   onChange={e => setNotes(e.target.value)}
                   className="w-full bg-slate-50 p-2 rounded border border-slate-200 text-xs h-20 resize-none outline-none focus:border-primary print:bg-transparent print:border-none print:p-0 print:h-auto"
-                  placeholder="Additional notes..."
+                  placeholder={t('additionalNotes')}
                 />
               </div>
               <div className="w-full md:w-80">
@@ -395,7 +396,7 @@ const BillGenerator = () => {
             
             {/* Print Footer */}
             <div className="hidden print:block fixed bottom-4 left-0 w-full text-center text-[10px] text-slate-400">
-               Page 1 of 1
+               {t('printedOn')} 1 of 1
             </div>
           </div>
 

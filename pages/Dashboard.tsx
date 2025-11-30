@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { getFinancialStats, getOrders, getCustomers } from '../utils/storage';
 import { Order, DashboardStats } from '../types';
@@ -65,13 +66,13 @@ const Dashboard = () => {
       <header className="flex justify-between items-center">
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-slate-800">{t('dashboard')}</h2>
-          <p className="text-slate-500 text-xs md:text-sm">Overview of your sales performance</p>
+          <p className="text-slate-500 text-xs md:text-sm">{t('dashboardOverview')}</p>
         </div>
         <button 
           onClick={() => navigate('/analysis')}
           className="text-primary hover:bg-teal-50 px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors border border-transparent hover:border-teal-100"
         >
-           <TrendingUp size={16} /> Monthly Analysis
+           <TrendingUp size={16} /> {t('monthlyAnalysis')}
         </button>
       </header>
 

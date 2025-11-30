@@ -5,11 +5,9 @@ import { Order, OrderStatus, Product, OrderItem } from '../types';
 import { Trash2, Save, Printer, Plus, Edit, FileText, Loader2, ArrowLeft, Download } from 'lucide-react';
 import { formatDate, formatCurrency, numberToArabicTafqeet } from '../utils/helpers';
 import { useLanguage } from '../contexts/LanguageContext';
-import { useNavigate } from 'react-router-dom';
 
 const BillGenerator = () => {
   const { t, dir, language } = useLanguage();
-  const navigate = useNavigate();
   const [mode, setMode] = useState<'create' | 'list'>('create');
   
   // Create/Edit State
@@ -42,10 +40,17 @@ const BillGenerator = () => {
 
   const fetchDrafts = async () => {
     setLoading(true);
-    const allOrders = await getOrders();
-    const draftOrders = allOrders.filter(o => o.isDraft).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    setDrafts(draftOrders);
-    setLoading(false);
+    try {
+      const allOrders = await getOrders();
+      const draftOrders = allOrders
+        .filter(o => o.isDraft || o.status === OrderStatus.DRAFT)
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setDrafts(draftOrders);
+    } catch (e) {
+      console.error("Error fetching drafts", e);
+    } finally {
+      setLoading(false);
+    }
   };
   
   const fetchProducts = async () => {
@@ -126,7 +131,7 @@ const BillGenerator = () => {
       await saveOrder(draftOrder);
       alert(t('draftSaved'));
       await fetchDrafts();
-      if(mode === 'create') setMode('list');
+      setMode('list');
     } catch (e) {
       console.error(e);
       alert("Failed to save draft. If using Supabase, ensure 'is_draft' column exists.");
@@ -164,7 +169,7 @@ const BillGenerator = () => {
   const tafqeet = numberToArabicTafqeet(totalAmount);
 
   if (loading && mode === 'list') {
-    return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
+    return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" size={32} /></div>;
   }
 
   return (

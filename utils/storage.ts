@@ -101,7 +101,7 @@ export const getOrders = async (): Promise<Order[]> => {
       customerName: o.customer_name,
       customerId: o.customer_id,
       // Robust check for draft status: use column if exists, otherwise fallback to status string
-      isDraft: o.is_draft || o.status === OrderStatus.DRAFT,
+      isDraft: !!(o.is_draft || o.status === OrderStatus.DRAFT),
       draftMetadata: o.draft_metadata
     })) || [];
   }
@@ -110,7 +110,7 @@ export const getOrders = async (): Promise<Order[]> => {
   // Ensure consistency for LocalStorage
   return localOrders.map((o: any) => ({
     ...o,
-    isDraft: o.isDraft || o.status === OrderStatus.DRAFT
+    isDraft: !!(o.isDraft || o.status === OrderStatus.DRAFT)
   }));
 };
 
@@ -124,7 +124,7 @@ export const getOrder = async (orderId: string): Promise<Order | null> => {
       paidAmount: Number(data.paid_amount),
       customerName: data.customer_name,
       customerId: data.customer_id,
-      isDraft: data.is_draft || data.status === OrderStatus.DRAFT,
+      isDraft: !!(data.is_draft || data.status === OrderStatus.DRAFT),
       draftMetadata: data.draft_metadata
     };
   } else {
@@ -167,13 +167,9 @@ export const saveOrder = async (order: Order) => {
       status: order.status,
       notes: order.notes,
       // Ensure we attempt to write draft fields. 
-      // NOTE: User must run SQL migration to add 'is_draft' and 'draft_metadata' columns for this to work.
       is_draft: order.isDraft || false,
       draft_metadata: order.draftMetadata
     };
-    
-    // For Drafts, if customerId is a placeholder, try to avoid FK constraint issues if possible
-    // This assumes the DB might have strict constraints. If so, user should ensure a valid customer ID or nullable column.
     
     const { error } = await supabase.from('orders').upsert(dbOrder);
     if (error) throw error;
@@ -246,7 +242,6 @@ export const deleteOrder = async (orderId: string) => {
     const { data: order } = await supabase.from('orders').select('*').eq('id', orderId).single();
     if (order) {
       // Only restore stock if it wasn't a draft
-      // We check both column and status to be safe if column missing
       const isDraft = order.is_draft || order.status === OrderStatus.DRAFT;
       if (!isDraft && order.items) {
         const items = order.items as any[];
@@ -564,7 +559,6 @@ export const getFinancialStats = async () => {
 
   const orders = await getOrders();
   // Filter out drafts from sales stats
-  // Check using status as well, in case isDraft is undefined due to missing schema
   const activeOrders = orders.filter(o => !o.isDraft && o.status !== OrderStatus.DRAFT);
   const totalSales = activeOrders.reduce((sum, o) => sum + o.totalAmount, 0);
 

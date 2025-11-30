@@ -131,7 +131,11 @@ const AppContent = () => {
             className={`fixed bottom-0 ${dir === 'rtl' ? 'left-0' : 'right-0'} bg-slate-50/90 backdrop-blur-sm border-t border-slate-200 py-1.5 px-6 flex justify-between items-center text-[11px] text-slate-400 z-20 print:hidden transition-all duration-300 
               ${isMobile ? 'w-full' : (isSidebarCollapsed ? `w-[calc(100%-5rem)]` : `w-[calc(100%-16rem)]`)}`}
           >
-            <span>&copy; {new Date().getFullYear()} Emad Co. Pharmaceutical</span>
+            <div className="flex gap-4 items-center">
+              <span>&copy; {new Date().getFullYear()} Emad Co. Pharmaceutical</span>
+              <span className="text-slate-500 hidden sm:inline">|</span>
+              <span className="text-[10px] text-slate-500 opacity-75 hover:opacity-100 transition-opacity cursor-default" title="Developer">Dev by Dr. Peter Ramsis</span>
+            </div>
             <span className="font-mono font-medium">v2.0.030</span>
           </footer>
         </main>

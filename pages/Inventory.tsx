@@ -18,7 +18,7 @@ const Inventory = () => {
   const [processing, setProcessing] = useState(false);
 
   // Settings State
-  const [settings, setSettings] = useState({ factoryPercent: 60, customerPercent: 100 });
+  const [settings, setSettings] = useState({ factoryPercent: 30, customerPercent: 75 });
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   // Modals

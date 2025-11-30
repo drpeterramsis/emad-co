@@ -32,6 +32,7 @@ const Collections = () => {
   const [transferAmount, setTransferAmount] = useState('');
   const [transferDate, setTransferDate] = useState(new Date().toISOString().split('T')[0]);
   const [transferDesc, setTransferDesc] = useState('Transfer to HQ Bank Account');
+  const [transferSource, setTransferSource] = useState<'CASH' | 'EXTERNAL'>('CASH');
   const [editingDeposit, setEditingDeposit] = useState<Transaction | null>(null);
 
   // General Expense State
@@ -180,11 +181,13 @@ const Collections = () => {
       setTransferAmount(deposit.amount.toString());
       setTransferDate(new Date(deposit.date).toISOString().split('T')[0]);
       setTransferDesc(deposit.description);
+      setTransferSource('CASH'); // Default to cash for edits unless we track it
     } else {
       setEditingDeposit(null);
       setTransferAmount('');
       setTransferDate(new Date().toISOString().split('T')[0]);
       setTransferDesc('Transfer to HQ Bank Account');
+      setTransferSource('CASH');
     }
     setShowTransferModal(true);
   };
@@ -199,8 +202,8 @@ const Collections = () => {
       return;
     }
     
-    // Check constraints only for new deposits
-    if (!editingDeposit && amount > stats.repCashOnHand) {
+    // Check constraints only for new deposits if source is CASH
+    if (!editingDeposit && transferSource === 'CASH' && amount > stats.repCashOnHand) {
        alert("Invalid transfer amount. Cannot exceed Cash on Hand.");
        return;
     }
@@ -942,6 +945,31 @@ const Collections = () => {
             <h3 className="text-lg font-bold mb-3">{editingDeposit ? t('editDeposit') : t('depositCashToHQ')}</h3>
             <form onSubmit={handleDepositToHQ}>
               <div className="mb-3">
+                 <label className="block text-xs font-medium text-slate-700 mb-1">Source of Funds</label>
+                 <div className="flex gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="radio" 
+                        name="source" 
+                        checked={transferSource === 'CASH'} 
+                        onChange={() => setTransferSource('CASH')} 
+                        className="text-primary focus:ring-primary"
+                      />
+                      <span className="text-sm">Collections (Cash)</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="radio" 
+                        name="source" 
+                        checked={transferSource === 'EXTERNAL'} 
+                        onChange={() => setTransferSource('EXTERNAL')} 
+                        className="text-primary focus:ring-primary"
+                      />
+                      <span className="text-sm">External / Personal</span>
+                    </label>
+                 </div>
+              </div>
+              <div className="mb-3">
                 <label className="block text-xs font-medium text-slate-700 mb-1">{t('date')}</label>
                 <input 
                    type="date"
@@ -966,7 +994,7 @@ const Collections = () => {
                   <span className="absolute left-3 top-2 text-slate-400 text-xs">EGP</span>
                   <input 
                     type="number" 
-                    max={editingDeposit ? undefined : stats.repCashOnHand} // Limit only on new
+                    max={(editingDeposit || transferSource === 'EXTERNAL') ? undefined : stats.repCashOnHand} // Limit only on new cash
                     required
                     value={transferAmount}
                     onChange={(e) => setTransferAmount(e.target.value)}
@@ -974,7 +1002,7 @@ const Collections = () => {
                     placeholder="0.00"
                   />
                 </div>
-                {!editingDeposit && <p className="text-[10px] text-slate-500 mt-1">{t('available')}: {formatCurrency(stats.repCashOnHand)}</p>}
+                {!editingDeposit && transferSource === 'CASH' && <p className="text-[10px] text-slate-500 mt-1">{t('available')}: {formatCurrency(stats.repCashOnHand)}</p>}
               </div>
               <div className="flex justify-end gap-2">
                 <button type="button" onClick={() => setShowTransferModal(false)} className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">{t('cancel')}</button>

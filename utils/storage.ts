@@ -1,3 +1,4 @@
+
 import { Product, Customer, Order, Transaction, OrderStatus, TransactionType, Provider, PaymentMethod } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_CUSTOMERS } from '../constants';
 import { supabase, isSupabaseEnabled } from '../services/supabaseClient';
@@ -13,8 +14,7 @@ const STORAGE_KEYS = {
 // Initialize Storage
 export const initStorage = async () => {
   if (isSupabaseEnabled && supabase) {
-    // Supabase initialization logic (simplified for brevity as structure exists)
-    // In a real scenario, we'd ensure tables for providers exist
+    // Supabase initialization logic
   } else {
     // Local Storage Fallback
     if (!localStorage.getItem(STORAGE_KEYS.PRODUCTS)) {
@@ -99,7 +99,9 @@ export const getOrders = async (): Promise<Order[]> => {
       totalAmount: Number(o.total_amount), 
       paidAmount: Number(o.paid_amount),
       customerName: o.customer_name,
-      customerId: o.customer_id
+      customerId: o.customer_id,
+      isDraft: o.is_draft,
+      draftMetadata: o.draft_metadata
     })) || [];
   }
   return JSON.parse(localStorage.getItem(STORAGE_KEYS.ORDERS) || '[]');
@@ -114,7 +116,9 @@ export const getOrder = async (orderId: string): Promise<Order | null> => {
       totalAmount: Number(data.total_amount),
       paidAmount: Number(data.paid_amount),
       customerName: data.customer_name,
-      customerId: data.customer_id
+      customerId: data.customer_id,
+      isDraft: data.is_draft,
+      draftMetadata: data.draft_metadata
     };
   } else {
     const orders = await getOrders();
@@ -154,40 +158,52 @@ export const saveOrder = async (order: Order) => {
       total_amount: order.totalAmount,
       paid_amount: order.paidAmount,
       status: order.status,
-      notes: order.notes
+      notes: order.notes,
+      is_draft: order.isDraft || false,
+      draft_metadata: order.draftMetadata
     };
     
     const { error } = await supabase.from('orders').upsert(dbOrder);
     if (error) throw error;
 
-    for (const item of order.items) {
-       const totalQty = item.quantity + (item.bonusQuantity || 0);
-       const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
-       if (prod) {
-         await supabase.from('products').update({ stock: prod.stock - totalQty }).eq('id', item.productId);
-       }
+    // Only update stock if NOT a draft
+    if (!order.isDraft) {
+      for (const item of order.items) {
+         const totalQty = item.quantity + (item.bonusQuantity || 0);
+         const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
+         if (prod) {
+           await supabase.from('products').update({ stock: prod.stock - totalQty }).eq('id', item.productId);
+         }
+      }
     }
 
   } else {
     const orders = await getOrders();
-    orders.push(order);
+    // Check if exists (upsert logic for local storage)
+    const existingIndex = orders.findIndex(o => o.id === order.id);
+    if (existingIndex >= 0) {
+      orders[existingIndex] = order;
+    } else {
+      orders.push(order);
+    }
     localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     
-    const products = await getProducts();
-    order.items.forEach(item => {
-      const pIndex = products.findIndex(p => p.id === item.productId);
-      if (pIndex >= 0) {
-        products[pIndex].stock -= (item.quantity + (item.bonusQuantity || 0));
-      }
-    });
-    localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+    // Only update stock if NOT a draft and it's a new order
+    if (!order.isDraft && existingIndex === -1) {
+      const products = await getProducts();
+      order.items.forEach(item => {
+        const pIndex = products.findIndex(p => p.id === item.productId);
+        if (pIndex >= 0) {
+          products[pIndex].stock -= (item.quantity + (item.bonusQuantity || 0));
+        }
+      });
+      localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+    }
   }
 };
 
 export const updateOrder = async (order: Order) => {
   if (isSupabaseEnabled && supabase) {
-    // For simplicity, assuming simple updates not affecting stock logic drastically 
-    // In a full app, we need to diff items to adjust stock perfectly
     const dbOrder = {
       customer_id: order.customerId,
       customer_name: order.customerName,
@@ -196,7 +212,11 @@ export const updateOrder = async (order: Order) => {
       total_amount: order.totalAmount,
       notes: order.notes,
       paid_amount: order.paidAmount,
-      status: order.status
+      status: order.status,
+      // Draft fields typically don't change from draft to non-draft via this simple update usually, 
+      // but if so, we'd need complex stock logic. Assuming updateOrder keeps draft status or is simple edits.
+      is_draft: order.isDraft,
+      draft_metadata: order.draftMetadata
     };
     const { error } = await supabase.from('orders').update(dbOrder).eq('id', order.id);
     if (error) throw error;
@@ -206,7 +226,6 @@ export const updateOrder = async (order: Order) => {
     
     if (index === -1) throw new Error("Order not found");
     
-    // Note: Stock adjustment on update is complex, simplifying here to just save fields
     orders[index] = { ...orders[index], ...order };
     localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
   }
@@ -216,13 +235,16 @@ export const deleteOrder = async (orderId: string) => {
   if (isSupabaseEnabled && supabase) {
     const { data: order } = await supabase.from('orders').select('*').eq('id', orderId).single();
     if (order && order.items) {
-      const items = order.items as any[];
-      for (const item of items) {
-         const qtyToRestore = item.quantity + (item.bonusQuantity || 0);
-         const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
-         if (prod) {
-           await supabase.from('products').update({ stock: prod.stock + qtyToRestore }).eq('id', item.productId);
-         }
+      // Only restore stock if it wasn't a draft
+      if (!order.is_draft) {
+        const items = order.items as any[];
+        for (const item of items) {
+           const qtyToRestore = item.quantity + (item.bonusQuantity || 0);
+           const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
+           if (prod) {
+             await supabase.from('products').update({ stock: prod.stock + qtyToRestore }).eq('id', item.productId);
+           }
+        }
       }
     }
     await supabase.from('transactions').delete().eq('reference_id', orderId);
@@ -233,12 +255,15 @@ export const deleteOrder = async (orderId: string) => {
     const orderToDelete = orders.find(o => o.id === orderId);
     
     if (orderToDelete) {
-      let products = await getProducts();
-      orderToDelete.items.forEach(item => {
-        const pIndex = products.findIndex(p => p.id === item.productId);
-        if (pIndex >= 0) products[pIndex].stock += (item.quantity + (item.bonusQuantity || 0));
-      });
-      localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+      // Only restore stock if it wasn't a draft
+      if (!orderToDelete.isDraft) {
+        let products = await getProducts();
+        orderToDelete.items.forEach(item => {
+          const pIndex = products.findIndex(p => p.id === item.productId);
+          if (pIndex >= 0) products[pIndex].stock += (item.quantity + (item.bonusQuantity || 0));
+        });
+        localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+      }
     }
     let transactions = await getTransactions();
     transactions = transactions.filter(t => t.referenceId !== orderId);
@@ -248,7 +273,8 @@ export const deleteOrder = async (orderId: string) => {
   }
 };
 
-// --- TRANSACTIONS ---
+// ... existing transactions, providers, product management ...
+// (We just need to make sure existing methods are exported)
 
 export const addTransaction = async (transaction: Transaction) => {
   if (isSupabaseEnabled && supabase) {
@@ -263,10 +289,8 @@ export const addTransaction = async (transaction: Transaction) => {
        provider_id: transaction.providerId,
        provider_name: transaction.providerName
      };
-     
      const { error } = await supabase.from('transactions').insert(dbTxn);
      if (error) throw error;
-
      if (transaction.type === TransactionType.PAYMENT_RECEIVED && transaction.referenceId) {
         const { data: order } = await supabase.from('orders').select('*').eq('id', transaction.referenceId).single();
         if (order) {
@@ -281,7 +305,6 @@ export const addTransaction = async (transaction: Transaction) => {
     const transactions = await getTransactions();
     transactions.push(transaction);
     localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
-
     if (transaction.type === TransactionType.PAYMENT_RECEIVED && transaction.referenceId) {
       const orders = await getOrders();
       const orderIndex = orders.findIndex(o => o.id === transaction.referenceId);
@@ -322,7 +345,6 @@ export const deleteTransaction = async (transactionId: string) => {
   if (isSupabaseEnabled && supabase) {
     const { data: txn } = await supabase.from('transactions').select('*').eq('id', transactionId).single();
     if (!txn) return;
-
     if (txn.type === TransactionType.PAYMENT_RECEIVED && txn.reference_id) {
       const { data: order } = await supabase.from('orders').select('*').eq('id', txn.reference_id).single();
       if (order) {
@@ -335,11 +357,9 @@ export const deleteTransaction = async (transactionId: string) => {
     }
     const { error } = await supabase.from('transactions').delete().eq('id', transactionId);
     if (error) throw error;
-
   } else {
     let transactions = await getTransactions();
     const txn = transactions.find(t => t.id === transactionId);
-    
     if (txn && txn.type === TransactionType.PAYMENT_RECEIVED && txn.referenceId) {
       const orders = await getOrders();
       const orderIndex = orders.findIndex(o => o.id === txn.referenceId);
@@ -360,8 +380,6 @@ export const deleteTransaction = async (transactionId: string) => {
   }
 };
 
-// --- PROVIDERS ---
-
 export const addProvider = async (provider: Provider) => {
   if (isSupabaseEnabled && supabase) {
     const dbProv = {
@@ -378,8 +396,6 @@ export const addProvider = async (provider: Provider) => {
     localStorage.setItem(STORAGE_KEYS.PROVIDERS, JSON.stringify(providers));
   }
 };
-
-// --- PRODUCT MANAGEMENT ---
 
 export const addProduct = async (product: Product) => {
   if (isSupabaseEnabled && supabase) {
@@ -418,7 +434,6 @@ export const updateProduct = async (product: Product) => {
 };
 
 export const restockProduct = async (productId: string, quantity: number, cost: number, providerId: string, providerName: string, method: PaymentMethod, date: string) => {
-  // 1. Update Stock
   const products = await getProducts();
   const product = products.find(p => p.id === productId);
   if (!product) throw new Error("Product not found");
@@ -426,7 +441,6 @@ export const restockProduct = async (productId: string, quantity: number, cost: 
   product.stock += quantity;
   await updateProduct(product);
 
-  // 2. Add Expense Transaction
   const expense: Transaction = {
     id: `TXN-${Date.now()}`,
     type: TransactionType.EXPENSE,
@@ -441,8 +455,6 @@ export const restockProduct = async (productId: string, quantity: number, cost: 
 
   await addTransaction(expense);
 };
-
-// --- CUSTOMERS ---
 
 export const addCustomer = async (customer: Customer) => {
   if (isSupabaseEnabled && supabase) {
@@ -534,15 +546,15 @@ export const getFinancialStats = async () => {
     } else if (t.type === TransactionType.EXPENSE) {
        totalExpenses += t.amount;
        if (t.paymentMethod === PaymentMethod.CASH) {
-          // If expense paid by Rep's Cash Hand
           repCashOnHand -= t.amount;
        }
-       // If expense paid by Bank Transfer, it doesn't affect Rep Cash Hand, but counts as expense
     }
   });
 
   const orders = await getOrders();
-  const totalSales = orders.reduce((sum, o) => sum + o.totalAmount, 0);
+  // Filter out drafts from sales stats
+  const activeOrders = orders.filter(o => !o.isDraft);
+  const totalSales = activeOrders.reduce((sum, o) => sum + o.totalAmount, 0);
 
   return { repCashOnHand, transferredToHQ, totalCollected, totalSales, totalExpenses };
 };

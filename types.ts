@@ -12,7 +12,8 @@ export enum OrderStatus {
   PARTIAL = 'Partial',
   PAID = 'Paid',
   CANCELLED = 'Cancelled',
-  RETURNED = 'Returned'
+  RETURNED = 'Returned',
+  DRAFT = 'Draft'
 }
 
 export enum TransactionType {
@@ -66,6 +67,7 @@ export interface OrderItem {
   discountPercent?: number; // Percentage deduction
   subtotal: number;
   paidQuantity?: number; // How many units have been paid for
+  batchNumber?: string; // For Draft Bills
 }
 
 export interface Order {
@@ -78,6 +80,11 @@ export interface Order {
   paidAmount: number; // How much has been collected so far
   status: OrderStatus;
   notes?: string;
+  isDraft?: boolean; // If true, excluded from financials/stock
+  draftMetadata?: {
+    heading?: string;
+    subheading?: string;
+  };
 }
 
 export interface Transaction {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -9,9 +9,12 @@ import {
   Users,
   LogOut,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  FileSpreadsheet,
+  Globe
 } from 'lucide-react';
 import { UserProfile } from '../types';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface SidebarProps {
   user: UserProfile;
@@ -22,13 +25,16 @@ interface SidebarProps {
 }
 
 const Sidebar = ({ user, onLogout, isCollapsed, toggleSidebar, isMobile }: SidebarProps) => {
+  const { t, language, setLanguage, dir } = useLanguage();
+
   const navItems = [
-    { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/new-order', icon: ShoppingCart, label: 'New Sale' },
-    { to: '/invoices', icon: FileText, label: 'Invoices' },
-    { to: '/collections', icon: Briefcase, label: 'Collections' },
-    { to: '/inventory', icon: Package, label: 'Inventory' },
-    { to: '/customers', icon: Users, label: 'Customers' },
+    { to: '/', icon: LayoutDashboard, label: t('dashboard') },
+    { to: '/new-order', icon: ShoppingCart, label: t('newSale') },
+    { to: '/invoices', icon: FileText, label: t('invoices') },
+    { to: '/collections', icon: Briefcase, label: t('collections') },
+    { to: '/inventory', icon: Package, label: t('inventory') },
+    { to: '/customers', icon: Users, label: t('customers') },
+    { to: '/bill-generator', icon: FileSpreadsheet, label: t('billGenerator') },
   ];
 
   // Get initials
@@ -41,20 +47,24 @@ const Sidebar = ({ user, onLogout, isCollapsed, toggleSidebar, isMobile }: Sideb
 
   // Mobile classes logic
   const mobileClasses = isMobile 
-    ? `transform ${isCollapsed ? '-translate-x-full' : 'translate-x-0'} w-64` 
+    ? `transform ${isCollapsed ? (dir === 'rtl' ? 'translate-x-full' : '-translate-x-full') : 'translate-x-0'} w-64` 
     : `${isCollapsed ? 'w-20' : 'w-64'}`;
+
+  // Direction specific border logic
+  const borderSide = dir === 'rtl' ? 'border-l' : 'border-r';
+  const sidebarPos = dir === 'rtl' ? 'right-0' : 'left-0';
 
   return (
     <div 
-      className={`bg-slate-900 text-white min-h-screen flex flex-col fixed left-0 top-0 h-full overflow-y-auto print:hidden z-40 transition-all duration-300 ${mobileClasses}`}
+      className={`bg-slate-900 text-white min-h-screen flex flex-col fixed top-0 h-full overflow-y-auto print:hidden z-40 transition-all duration-300 ${mobileClasses} ${sidebarPos}`}
     >
       <div className={`p-6 border-b border-slate-700 flex items-center ${isCollapsed && !isMobile ? 'justify-center' : 'justify-between'}`}>
         {(!isCollapsed || isMobile) && (
           <div>
             <h1 className="text-2xl font-bold bg-gradient-to-r from-teal-400 to-cyan-400 bg-clip-text text-transparent whitespace-nowrap">
-              Emad Co.
+              {t('welcome')}
             </h1>
-            <p className="text-slate-400 text-sm">Sales Portal</p>
+            <p className="text-slate-400 text-sm">{t('salesPortal')}</p>
           </div>
         )}
         {isCollapsed && !isMobile && (
@@ -67,7 +77,7 @@ const Sidebar = ({ user, onLogout, isCollapsed, toggleSidebar, isMobile }: Sideb
             onClick={toggleSidebar}
             className={`text-slate-400 hover:text-white transition-colors ${isCollapsed ? 'hidden' : 'block'}`}
           >
-            <ChevronLeft size={20} />
+            {dir === 'rtl' ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
           </button>
         )}
       </div>
@@ -79,7 +89,7 @@ const Sidebar = ({ user, onLogout, isCollapsed, toggleSidebar, isMobile }: Sideb
             onClick={toggleSidebar}
             className="text-slate-400 hover:text-white transition-colors"
           >
-            <ChevronRight size={20} />
+            {dir === 'rtl' ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
           </button>
         </div>
       )}
@@ -105,8 +115,18 @@ const Sidebar = ({ user, onLogout, isCollapsed, toggleSidebar, isMobile }: Sideb
         ))}
       </nav>
       
-      <div className="p-4 border-t border-slate-800">
-        <div className={`flex items-center gap-3 mb-4 ${isCollapsed && !isMobile ? 'justify-center' : ''}`}>
+      <div className="p-4 border-t border-slate-800 space-y-4">
+        {/* Language Toggle */}
+        <button
+          onClick={() => setLanguage(language === 'en' ? 'ar' : 'en')}
+          className={`w-full flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors text-sm ${isCollapsed && !isMobile ? 'justify-center' : ''}`}
+          title={t('language')}
+        >
+          <Globe size={isCollapsed && !isMobile ? 20 : 16} />
+          {(!isCollapsed || isMobile) && <span>{t('switchLang')}</span>}
+        </button>
+
+        <div className={`flex items-center gap-3 ${isCollapsed && !isMobile ? 'justify-center' : ''}`}>
           <div className="w-9 h-9 rounded-full bg-teal-600 flex items-center justify-center text-xs font-bold text-white shrink-0 border-2 border-slate-800">
             {initials}
           </div>
@@ -121,10 +141,10 @@ const Sidebar = ({ user, onLogout, isCollapsed, toggleSidebar, isMobile }: Sideb
         <button 
           onClick={onLogout}
           className={`w-full flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors text-sm ${isCollapsed && !isMobile ? 'justify-center' : ''}`}
-          title={isCollapsed && !isMobile ? "Sign Out" : undefined}
+          title={isCollapsed && !isMobile ? t('signOut') : undefined}
         >
           <LogOut size={isCollapsed && !isMobile ? 20 : 16} /> 
-          {(!isCollapsed || isMobile) && "Sign Out"}
+          {(!isCollapsed || isMobile) && t('signOut')}
         </button>
       </div>
     </div>

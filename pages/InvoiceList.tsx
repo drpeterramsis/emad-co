@@ -4,8 +4,10 @@ import { Order, OrderStatus, CustomerType, Transaction, TransactionType } from '
 import { Search, Loader2, Edit, Trash2, Filter, Eye, X, Printer, Save, FileText, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { formatDate, formatCurrency } from '../utils/helpers';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const InvoiceList = () => {
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [customerTypes, setCustomerTypes] = useState<Record<string, string>>({});
@@ -38,7 +40,11 @@ const InvoiceList = () => {
       getOrders(),
       getCustomers()
     ]);
-    setOrders(ordersData);
+    
+    // Filter OUT drafts
+    const realOrders = ordersData.filter(o => !o.isDraft);
+    
+    setOrders(realOrders);
 
     // Create lookup map for customer types
     const map: Record<string, string> = {};
@@ -167,7 +173,7 @@ const InvoiceList = () => {
     <div className="p-4 md:p-8">
       <div className="flex flex-col gap-6 mb-8 print:hidden">
         <div>
-          <h2 className="text-2xl md:text-3xl font-bold text-slate-800">Invoices</h2>
+          <h2 className="text-2xl md:text-3xl font-bold text-slate-800">{t('invoices')}</h2>
           <p className="text-slate-500">History of all sales orders</p>
         </div>
 

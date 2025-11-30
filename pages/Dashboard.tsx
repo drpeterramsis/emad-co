@@ -7,8 +7,10 @@ import {
 } from 'recharts';
 import { DollarSign, TrendingUp, Briefcase, AlertCircle, Loader2, Wallet } from 'lucide-react';
 import { formatCurrency } from '../utils/helpers';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const Dashboard = () => {
+  const { t } = useLanguage();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [loadingData, setLoadingData] = useState(true);
@@ -23,8 +25,10 @@ const Dashboard = () => {
       getFinancialStats(),
       getOrders()
     ]);
+    // Filter drafts from recent orders list for dashboard display
+    const activeOrders = fetchedOrders.filter(o => !o.isDraft);
     setStats(fetchedStats);
-    setRecentOrders(fetchedOrders);
+    setRecentOrders(activeOrders);
     setLoadingData(false);
   };
   
@@ -35,8 +39,8 @@ const Dashboard = () => {
   }));
 
   const collectionData = stats ? [
-    { name: 'Collected', value: stats.totalCollected },
-    { name: 'Outstanding', value: stats.totalSales - stats.totalCollected },
+    { name: t('collected'), value: stats.totalCollected },
+    { name: t('outstanding'), value: stats.totalSales - stats.totalCollected },
   ] : [];
 
   const COLORS = ['#0f766e', '#cbd5e1'];
@@ -55,7 +59,7 @@ const Dashboard = () => {
     <div className="p-4 md:p-8 space-y-8">
       <header className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl md:text-3xl font-bold text-slate-800">Dashboard</h2>
+          <h2 className="text-2xl md:text-3xl font-bold text-slate-800">{t('dashboard')}</h2>
           <p className="text-slate-500 text-sm md:text-base">Overview of your sales performance</p>
         </div>
       </header>
@@ -63,31 +67,31 @@ const Dashboard = () => {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6">
         <StatCard 
-          title="Total Sales" 
+          title={t('totalSales')}
           value={formatCurrency(stats.totalSales)}
           icon={TrendingUp} 
           color="bg-blue-500" 
         />
         <StatCard 
-          title="Collected" 
+          title={t('collected')} 
           value={formatCurrency(stats.totalCollected)} 
           icon={DollarSign} 
           color="bg-teal-600" 
         />
         <StatCard 
-          title="Outstanding" 
+          title={t('outstanding')} 
           value={formatCurrency(outstanding)}
           icon={AlertCircle} 
           color="bg-red-500" 
         />
         <StatCard 
-          title="Cash on Hand" 
+          title={t('cashOnHand')} 
           value={formatCurrency(stats.repCashOnHand)} 
           icon={Wallet} 
           color="bg-amber-500" 
         />
         <StatCard 
-          title="Transferred to HQ" 
+          title={t('transferredToHQ')} 
           value={formatCurrency(stats.transferredToHQ)} 
           icon={Briefcase} 
           color="bg-slate-600" 
@@ -97,7 +101,7 @@ const Dashboard = () => {
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 lg:col-span-2">
-          <h3 className="text-lg font-semibold mb-4 text-slate-800">Recent Sales Trend</h3>
+          <h3 className="text-lg font-semibold mb-4 text-slate-800">{t('recentSalesTrend')}</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={salesData}>
@@ -112,7 +116,7 @@ const Dashboard = () => {
         </div>
 
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <h3 className="text-lg font-semibold mb-4 text-slate-800">Collection Status</h3>
+          <h3 className="text-lg font-semibold mb-4 text-slate-800">{t('collectionStatus')}</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -135,10 +139,10 @@ const Dashboard = () => {
           </div>
           <div className="flex justify-center gap-4 mt-4">
             <div className="flex items-center gap-2 text-sm text-slate-600">
-              <span className="w-3 h-3 rounded-full bg-primary"></span> Collected
+              <span className="w-3 h-3 rounded-full bg-primary"></span> {t('collected')}
             </div>
             <div className="flex items-center gap-2 text-sm text-slate-600">
-              <span className="w-3 h-3 rounded-full bg-slate-300"></span> Outstanding
+              <span className="w-3 h-3 rounded-full bg-slate-300"></span> {t('outstanding')}
             </div>
           </div>
         </div>

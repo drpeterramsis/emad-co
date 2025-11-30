@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
@@ -11,6 +12,7 @@ import BillGenerator from './pages/BillGenerator';
 import Analysis from './pages/Analysis';
 import Login from './pages/Login';
 import Returns from './pages/Returns';
+import Reports from './pages/Reports';
 import { initStorage } from './utils/storage';
 import { UserProfile } from './types';
 import { Menu, Pill } from 'lucide-react';
@@ -123,6 +125,7 @@ const AppContent = () => {
               <Route path="/new-order" element={<NewOrder />} />
               <Route path="/returns" element={<Returns />} />
               <Route path="/invoices" element={<InvoiceList />} />
+              <Route path="/reports" element={<Reports />} />
               <Route path="/collections" element={<Collections />} />
               <Route path="/inventory" element={<Inventory />} />
               <Route path="/customers" element={<Customers />} />
@@ -142,7 +145,7 @@ const AppContent = () => {
               <span className="text-slate-500 hidden sm:inline">|</span>
               <span className="text-[10px] text-slate-500 opacity-75 hover:opacity-100 transition-opacity cursor-default" title="Developer">Dev by Dr. Peter Ramsis</span>
             </div>
-            <span className="font-mono font-medium">v2.0.044</span>
+            <span className="font-mono font-medium">v2.0.045</span>
           </footer>
         </main>
       </div>

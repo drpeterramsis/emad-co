@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { 
@@ -13,7 +14,8 @@ import {
   FileSpreadsheet,
   Globe,
   Pill,
-  RotateCcw
+  RotateCcw,
+  BarChart3
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -34,6 +36,7 @@ const Sidebar = ({ user, onLogout, isCollapsed, toggleSidebar, isMobile }: Sideb
     { to: '/new-order', icon: ShoppingCart, label: t('newSale') },
     { to: '/returns', icon: RotateCcw, label: t('customerReturn') },
     { to: '/invoices', icon: FileText, label: t('invoices') },
+    { to: '/reports', icon: BarChart3, label: t('advancedReports') },
     { to: '/collections', icon: Briefcase, label: t('collections') },
     { to: '/inventory', icon: Package, label: t('inventory') },
     { to: '/customers', icon: Users, label: t('customers') },

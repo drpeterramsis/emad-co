@@ -1,5 +1,6 @@
 
 
+
 export const translations = {
   en: {
     // Common
@@ -10,6 +11,7 @@ export const translations = {
     inventory: 'Inventory',
     customers: 'Customers',
     billGenerator: 'Bill Generator',
+    advancedReports: 'Reports',
     signOut: 'Sign Out',
     welcome: 'Emad Co.',
     salesPortal: 'Sales Portal',
@@ -246,6 +248,25 @@ export const translations = {
     addItem: 'Add Item',
     additionalNotes: 'Additional notes...',
     
+    // Reports
+    reportSubtitle: 'Generate custom reports by product, customer, or time.',
+    reportFilters: 'Report Filters',
+    dateRange: 'Date Range',
+    allCustomers: 'All Customers',
+    allProducts: 'All Products',
+    noneFlatList: 'None (Flat List)',
+    productsSold: 'Products Sold',
+    ordersCount: 'Orders Count',
+    averageValue: 'Average Value',
+    reportResults: 'Report Results',
+    records: 'Records',
+    lastActivity: 'Last Activity',
+    totalRevenue: 'Total Revenue',
+    unitsSold: 'Units Sold',
+    bonusUnits: 'Bonus Units',
+    ordersInvolved: 'Orders Involved',
+    noDataFound: 'No data matches your criteria.',
+    
     // Analysis
     analysisTitle: 'Monthly Analysis',
     analysisSubtitle: 'Detailed breakdown of sales vs collections',
@@ -273,6 +294,7 @@ export const translations = {
     inventory: 'المخزون',
     customers: 'العملاء',
     billGenerator: 'منشئ الفواتير',
+    advancedReports: 'التقارير',
     signOut: 'تسجيل خروج',
     welcome: 'شركة عماد',
     salesPortal: 'بوابة المبيعات',
@@ -508,6 +530,25 @@ export const translations = {
     noDrafts: 'لا توجد مسودات محفوظة.',
     addItem: 'إضافة صنف',
     additionalNotes: 'ملاحظات إضافية...',
+    
+    // Reports
+    reportSubtitle: 'إنشاء تقارير مخصصة حسب المنتج أو العميل أو الوقت.',
+    reportFilters: 'عوامل تصفية التقرير',
+    dateRange: 'نطاق التاريخ',
+    allCustomers: 'كل العملاء',
+    allProducts: 'كل المنتجات',
+    noneFlatList: 'لا يوجد (قائمة مفصلة)',
+    productsSold: 'المنتجات المباعة',
+    ordersCount: 'عدد الطلبات',
+    averageValue: 'متوسط القيمة',
+    reportResults: 'نتائج التقرير',
+    records: 'سجلات',
+    lastActivity: 'آخر نشاط',
+    totalRevenue: 'إجمالي الإيرادات',
+    unitsSold: 'الوحدات المباعة',
+    bonusUnits: 'وحدات البونص',
+    ordersInvolved: 'الطلبات المتضمنة',
+    noDataFound: 'لا توجد بيانات تطابق معاييرك.',
     
     // Analysis
     analysisTitle: 'التحليل الشهري',

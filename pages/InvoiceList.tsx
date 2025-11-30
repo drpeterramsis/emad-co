@@ -124,9 +124,9 @@ const InvoiceList = () => {
     // Types: Pharmacy, Store, HCP, Direct Sale
     const type = typeString as CustomerType;
     if (typeString === CustomerType.PHARMACY) return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-    if (typeString === CustomerType.STORE) return 'bg-blue-100 text-blue-700 border-blue-200';
-    if (typeString === CustomerType.HCP) return 'bg-purple-100 text-purple-700 border-purple-200';
-    if (typeString === CustomerType.DIRECT) return 'bg-amber-100 text-amber-700 border-amber-200';
+    if (typeString === CustomerType.STORE) return 'bg-red-100 text-red-700 border-red-200';
+    if (typeString === CustomerType.HCP) return 'bg-blue-100 text-blue-700 border-blue-200';
+    if (typeString === CustomerType.DIRECT) return 'bg-yellow-100 text-yellow-800 border-yellow-200';
     return 'bg-slate-100 text-slate-500 border-slate-200';
   };
 
@@ -184,7 +184,9 @@ const InvoiceList = () => {
     <div className="p-4 md:p-6">
       <div className="flex flex-col gap-4 mb-6 print:hidden">
         <div>
-          <h2 className="text-xl md:text-2xl font-bold text-slate-800">{t('invoices')}</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-slate-800">
+            {t('invoices')} <span className="text-sm font-normal text-slate-500">({filteredOrders.length})</span>
+          </h2>
           <p className="text-slate-500 text-xs md:text-sm">History of all sales orders</p>
         </div>
 

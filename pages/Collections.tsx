@@ -503,6 +503,7 @@ const Collections = () => {
               </div>
            </div>
 
+           <div className="text-xs text-slate-500 font-medium">Total Records: {unpaidOrders.length}</div>
            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs md:text-sm">
@@ -566,6 +567,7 @@ const Collections = () => {
               </div>
            </div>
 
+           <div className="text-xs text-slate-500 font-medium">Total Records: {collectionHistory.length}</div>
            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
              <div className="overflow-x-auto">
                <table className="w-full text-left text-xs md:text-sm">
@@ -617,6 +619,7 @@ const Collections = () => {
               </button>
            </div>
 
+           <div className="text-xs text-slate-500 font-medium">Total Records: {depositHistory.length}</div>
            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
              <div className="overflow-x-auto">
                <table className="w-full text-left text-xs md:text-sm">
@@ -710,6 +713,7 @@ const Collections = () => {
                </p>
             </div>
 
+            <div className="text-xs text-slate-500 font-medium print:hidden">Total Records: {filteredStatementData.length}</div>
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden print:shadow-none print:border">
                <div className="overflow-x-auto">
                  <table className="w-full text-left text-xs">

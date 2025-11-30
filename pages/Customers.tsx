@@ -60,6 +60,17 @@ const Customers = () => {
     e.preventDefault();
     setErrorMsg('');
 
+    // Duplicate Check
+    const normalizedName = newName.trim().toLowerCase();
+    const isDuplicate = customers.some(c => 
+      c.name.trim().toLowerCase() === normalizedName && c.id !== editingId
+    );
+
+    if (isDuplicate) {
+      setErrorMsg("Customer with this name already exists.");
+      return;
+    }
+
     try {
       if (editingId) {
         // Update existing customer
@@ -117,11 +128,11 @@ const Customers = () => {
       case CustomerType.PHARMACY:
         return 'bg-emerald-100 text-emerald-700 border-emerald-200';
       case CustomerType.STORE:
-        return 'bg-blue-100 text-blue-700 border-blue-200';
+        return 'bg-red-100 text-red-700 border-red-200';
       case CustomerType.HCP:
-        return 'bg-purple-100 text-purple-700 border-purple-200';
+        return 'bg-blue-100 text-blue-700 border-blue-200';
       case CustomerType.DIRECT:
-        return 'bg-amber-100 text-amber-700 border-amber-200';
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       default:
         return 'bg-slate-100 text-slate-600 border-slate-200';
     }
@@ -247,7 +258,8 @@ const Customers = () => {
               {editingId ? 'Edit Customer' : 'New Customer'}
             </h3>
             {errorMsg && (
-              <div className="mb-4 p-2 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg">
+              <div className="mb-4 p-2 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-center gap-2">
+                <span>•</span>
                 {errorMsg}
               </div>
             )}

@@ -116,10 +116,10 @@ const Login = ({ onLogin }: LoginProps) => {
 
           <div className="mt-8 text-center border-t border-slate-100 pt-6">
             <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">
-              Restricted Access System v2.0.031
+              Restricted Access System v2.0.033
             </p>
             <p className="text-[10px] text-slate-400 mt-1">
-              &copy; {new Date().getFullYear()} Emad Co. Pharmaceutical
+              Developer Dr. Peter Ramsis all rights reserved
             </p>
           </div>
         </div>

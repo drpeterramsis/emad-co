@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getCustomers, getProducts, saveOrder, getOrder, updateOrder, addCustomer } from '../utils/storage';
 import { Customer, Product, OrderItem, OrderStatus, CustomerType } from '../types';
-import { Trash2, Save, Loader2, Search, X, Plus, MapPin, Map, User } from 'lucide-react';
+import { Trash2, Save, Loader2, Search, X, Plus, MapPin, Map, User, AlertTriangle } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import LoadingOverlay from '../components/LoadingOverlay';
 
@@ -71,6 +71,11 @@ const NewOrder = () => {
   const getCustomerDefaultDiscount = () => {
     const c = customers.find(x => x.id === selectedCustomer);
     return c?.defaultDiscount || 0;
+  };
+
+  const getProductStock = (productId: string) => {
+    const p = products.find(x => x.id === productId);
+    return p?.stock || 0;
   };
 
   const addProductToCart = (product: Product) => {
@@ -326,12 +331,13 @@ const NewOrder = () => {
                         key={p.id}
                         type="button"
                         onClick={() => addProductToCart(p)}
-                        disabled={p.stock <= 0}
-                        className="w-full text-left px-3 py-2 hover:bg-slate-50 border-b border-slate-50 last:border-0 flex justify-between items-center group disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full text-left px-3 py-2 hover:bg-slate-50 border-b border-slate-50 last:border-0 flex justify-between items-center group"
                       >
                         <div>
                           <p className="font-medium text-slate-800 text-sm group-hover:text-primary transition-colors">{p.name}</p>
-                          <p className="text-[10px] text-slate-500">Stock: {p.stock}</p>
+                          <p className={`text-[10px] ${p.stock <= 0 ? 'text-red-500 font-bold' : 'text-slate-500'}`}>
+                            Stock: {p.stock} {p.stock <= 0 && '(Negative Stock Warning)'}
+                          </p>
                         </div>
                         <p className="font-bold text-slate-700 text-xs">EGP {p.basePrice}</p>
                       </button>
@@ -364,75 +370,88 @@ const NewOrder = () => {
                     </td>
                   </tr>
                 ) : (
-                  cart.map((item, index) => (
-                    <tr key={index}>
-                      <td className="p-2 font-medium text-slate-800 text-xs md:text-sm">{item.productName}</td>
-                      <td className="p-2">
-                        <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={item.unitPrice}
-                          onChange={(e) => updateCartItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          className="w-16 rounded border border-slate-300 p-1 text-center text-xs"
-                        />
-                      </td>
-                      <td className="p-2">
-                        <input
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={(e) => updateCartItem(index, 'quantity', parseInt(e.target.value) || 1)}
-                          className="w-14 rounded border border-slate-300 p-1 text-center font-bold text-xs"
-                        />
-                      </td>
-                      <td className="p-2">
-                        <input
-                          type="number"
-                          min="0"
-                          value={item.bonusQuantity}
-                          onChange={(e) => updateCartItem(index, 'bonusQuantity', parseInt(e.target.value) || 0)}
-                          className="w-14 rounded border border-orange-200 p-1 bg-orange-50 text-orange-800 text-center text-xs"
-                        />
-                      </td>
-                      <td className="p-2">
-                        <div className="relative">
+                  cart.map((item, index) => {
+                    const stock = getProductStock(item.productId);
+                    const totalQty = item.quantity + (item.bonusQuantity || 0);
+                    const isOverselling = totalQty > stock;
+                    
+                    return (
+                      <tr key={index}>
+                        <td className="p-2 font-medium text-slate-800 text-xs md:text-sm">
+                          {item.productName}
+                          {isOverselling && (
+                            <div className="text-[10px] text-red-500 flex items-center gap-1 mt-0.5 font-normal">
+                               <AlertTriangle size={10} /> Stock: {stock}
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-2">
                           <input
                             type="number"
                             min="0"
-                            max="100"
                             step="any"
-                            value={item.discountPercent || 0}
-                            onChange={(e) => updateCartItem(index, 'discountPercent', parseFloat(e.target.value) || 0)}
-                            className="w-20 rounded border border-slate-300 p-1 pr-5 text-center text-xs"
+                            value={item.unitPrice}
+                            onChange={(e) => updateCartItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                            className="w-16 rounded border border-slate-300 p-1 text-center text-xs"
                           />
-                          <span className="absolute right-2 top-1.5 text-slate-400 text-[10px]">%</span>
-                        </div>
-                      </td>
-                      <td className="p-2">
-                        <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={item.discount}
-                          onChange={(e) => updateCartItem(index, 'discount', parseFloat(e.target.value) || 0)}
-                          className="w-20 rounded border border-slate-300 p-1 text-center text-xs"
-                        />
-                      </td>
-                      <td className="p-2 font-bold text-slate-800 text-right text-xs">
-                        EGP {item.subtotal.toFixed(2)}
-                      </td>
-                      <td className="p-2 text-right">
-                        <button
-                          type="button"
-                          onClick={() => removeCartItem(index)}
-                          className="text-red-400 hover:text-red-600 transition-colors"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+                        <td className="p-2 relative">
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) => updateCartItem(index, 'quantity', parseInt(e.target.value) || 1)}
+                            className={`w-14 rounded border p-1 text-center font-bold text-xs ${isOverselling ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-300'}`}
+                          />
+                        </td>
+                        <td className="p-2">
+                          <input
+                            type="number"
+                            min="0"
+                            value={item.bonusQuantity}
+                            onChange={(e) => updateCartItem(index, 'bonusQuantity', parseInt(e.target.value) || 0)}
+                            className={`w-14 rounded border p-1 text-center text-xs ${isOverselling ? 'border-red-300 bg-red-50 text-red-700' : 'border-orange-200 bg-orange-50 text-orange-800'}`}
+                          />
+                        </td>
+                        <td className="p-2">
+                          <div className="relative">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="any"
+                              value={item.discountPercent || 0}
+                              onChange={(e) => updateCartItem(index, 'discountPercent', parseFloat(e.target.value) || 0)}
+                              className="w-20 rounded border border-slate-300 p-1 pr-5 text-center text-xs"
+                            />
+                            <span className="absolute right-2 top-1.5 text-slate-400 text-[10px]">%</span>
+                          </div>
+                        </td>
+                        <td className="p-2">
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={item.discount}
+                            onChange={(e) => updateCartItem(index, 'discount', parseFloat(e.target.value) || 0)}
+                            className="w-20 rounded border border-slate-300 p-1 text-center text-xs"
+                          />
+                        </td>
+                        <td className="p-2 font-bold text-slate-800 text-right text-xs">
+                          EGP {item.subtotal.toFixed(2)}
+                        </td>
+                        <td className="p-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => removeCartItem(index)}
+                            className="text-red-400 hover:text-red-600 transition-colors"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { getCustomers, getProducts, saveOrder, getOrder, updateOrder, addCustomer } from '../utils/storage';
 import { Customer, Product, OrderItem, OrderStatus, CustomerType } from '../types';
@@ -231,11 +232,17 @@ const NewOrder = () => {
     setShowCustomerList(false);
   };
 
-  // Filter Logic - Updated to sort by stock DESC
+  // Filter Logic - Updated to sort by stock DESC (ZA order)
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
     p.basePrice.toString().includes(productSearch)
-  ).sort((a, b) => b.stock - a.stock);
+  ).sort((a, b) => {
+    // Primary sort: Stock High to Low
+    const stockDiff = b.stock - a.stock;
+    if (stockDiff !== 0) return stockDiff;
+    // Secondary sort: Name A-Z
+    return a.name.localeCompare(b.name);
+  });
 
   const filteredCustomers = customers.filter(c => 
     c.name.toLowerCase().includes(customerSearch.toLowerCase())

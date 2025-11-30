@@ -1,6 +1,7 @@
 
 
 
+
 export const translations = {
   en: {
     // Common
@@ -189,6 +190,13 @@ export const translations = {
     contactInfo: 'Contact Info',
     bankDetails: 'Bank Details',
     saveProvider: 'Save Provider',
+    inventorySettings: 'Inventory Settings',
+    factoryPercent: 'Factory Rate % (Capital)',
+    pharmacyPercent: 'Pharmacy Rate % (Sales Value)',
+    totalCapital: 'Total Capital',
+    pharmacyValue: 'Pharmacy Value',
+    totalItems: 'Total Items',
+    totalStock: 'Total Stock',
     
     // Invoice List
     invoiceHistory: 'History of all sales orders',
@@ -472,6 +480,13 @@ export const translations = {
     contactInfo: 'معلومات الاتصال',
     bankDetails: 'التفاصيل البنكية',
     saveProvider: 'حفظ المورد',
+    inventorySettings: 'إعدادات المخزون',
+    factoryPercent: 'نسبة المصنع (رأس المال)',
+    pharmacyPercent: 'نسبة الصيدلية (قيمة البيع)',
+    totalCapital: 'إجمالي رأس المال',
+    pharmacyValue: 'قيمة الصيدلية',
+    totalItems: 'إجمالي الأصناف',
+    totalStock: 'إجمالي المخزون',
     
     // Invoice List
     invoiceHistory: 'سجل جميع أوامر البيع',

@@ -1,7 +1,8 @@
+
 import React, { useEffect, useState } from 'react';
 import { getProducts, getProviders, addProduct, updateProduct, restockProduct, addProvider, getTransactions } from '../utils/storage';
 import { Product, Provider, PaymentMethod, Transaction, TransactionType } from '../types';
-import { Package, AlertTriangle, Loader2, Plus, Edit2, ShoppingBag, Truck, Building2, Calendar, DollarSign, History } from 'lucide-react';
+import { Package, AlertTriangle, Loader2, Plus, Edit2, ShoppingBag, Truck, Building2, Calendar, DollarSign, History, Settings, Coins, Layers } from 'lucide-react';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import LoadingOverlay from '../components/LoadingOverlay';
 import ProviderModal from '../components/ProviderModal';
@@ -15,6 +16,10 @@ const Inventory = () => {
   const [purchases, setPurchases] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+
+  // Settings State
+  const [settings, setSettings] = useState({ factoryPercent: 60, customerPercent: 100 });
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   // Modals
   const [showProductModal, setShowProductModal] = useState(false);
@@ -36,6 +41,12 @@ const Inventory = () => {
 
   useEffect(() => {
     fetchData();
+    const savedSettings = localStorage.getItem('emad_inventory_settings');
+    if(savedSettings) {
+      try {
+        setSettings(JSON.parse(savedSettings));
+      } catch(e) { console.error(e); }
+    }
   }, []);
 
   const fetchData = async () => {
@@ -50,6 +61,16 @@ const Inventory = () => {
     setPurchases(txns.filter(t => t.type === TransactionType.EXPENSE).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     setLoading(false);
   };
+
+  const handleSaveSettings = () => {
+     localStorage.setItem('emad_inventory_settings', JSON.stringify(settings));
+     setShowSettingsModal(false);
+  }
+
+  // Calculations
+  const totalStock = products.reduce((acc, p) => acc + p.stock, 0);
+  const totalCapital = products.reduce((acc, p) => acc + (p.stock * p.basePrice * (settings.factoryPercent / 100)), 0);
+  const totalPharmacyVal = products.reduce((acc, p) => acc + (p.stock * p.basePrice * (settings.customerPercent / 100)), 0);
 
   const handleOpenProductModal = (product?: Product) => {
     if (product) {
@@ -140,11 +161,50 @@ const Inventory = () => {
     <div className="p-4 md:p-6 pb-20">
       {processing && <LoadingOverlay />}
       
+      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-slate-800">{t('inventoryTitle')}</h2>
           <p className="text-slate-500 text-xs md:text-sm">{t('inventorySubtitle')}</p>
         </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex items-center gap-2 mb-1">
+               <Package size={16} className="text-slate-500" />
+               <span className="text-xs text-slate-500 font-bold uppercase">{t('totalItems')}</span>
+            </div>
+            <p className="text-lg font-bold text-slate-800">{products.length}</p>
+         </div>
+         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex items-center gap-2 mb-1">
+               <Layers size={16} className="text-slate-500" />
+               <span className="text-xs text-slate-500 font-bold uppercase">{t('totalStock')}</span>
+            </div>
+            <p className="text-lg font-bold text-slate-800">{totalStock}</p>
+         </div>
+         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex items-center gap-2 mb-1">
+               <Coins size={16} className="text-amber-500" />
+               <span className="text-xs text-slate-500 font-bold uppercase">{t('totalCapital')}</span>
+            </div>
+            <p className="text-lg font-bold text-amber-600 truncate" title={formatCurrency(totalCapital)}>{formatCurrency(totalCapital)}</p>
+            <p className="text-[10px] text-slate-400">@ {settings.factoryPercent}% {t('factoryPercent')}</p>
+         </div>
+         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex items-center gap-2 mb-1">
+               <DollarSign size={16} className="text-emerald-500" />
+               <span className="text-xs text-slate-500 font-bold uppercase">{t('pharmacyValue')}</span>
+            </div>
+            <p className="text-lg font-bold text-emerald-600 truncate" title={formatCurrency(totalPharmacyVal)}>{formatCurrency(totalPharmacyVal)}</p>
+            <p className="text-[10px] text-slate-400">@ {settings.customerPercent}% {t('pharmacyPercent')}</p>
+         </div>
+      </div>
+
+      {/* Tabs & Actions */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
         <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 w-full md:w-auto">
             <button 
               onClick={() => setActiveTab('products')} 
@@ -165,19 +225,36 @@ const Inventory = () => {
               {t('providers')}
             </button>
         </div>
+        
+        <div className="flex gap-2 w-full md:w-auto justify-end">
+            <button 
+               onClick={() => setShowSettingsModal(true)}
+               className="flex items-center gap-2 bg-white border border-slate-300 text-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-50 text-sm"
+               title={t('inventorySettings')}
+             >
+               <Settings size={16} /> <span className="hidden md:inline">{t('inventorySettings')}</span>
+             </button>
+             {activeTab === 'products' && (
+               <button 
+                 onClick={() => handleOpenProductModal()}
+                 className="flex items-center gap-2 bg-slate-800 text-white px-3 py-1.5 rounded-lg hover:bg-slate-700 text-sm"
+               >
+                 <Plus size={16} /> {t('addNewProduct')}
+               </button>
+             )}
+             {activeTab === 'providers' && (
+               <button 
+                 onClick={() => setShowProviderModal(true)}
+                 className="flex items-center gap-2 bg-slate-800 text-white px-3 py-1.5 rounded-lg hover:bg-slate-700 text-sm"
+               >
+                 <Plus size={16} /> {t('addProvider')}
+               </button>
+             )}
+        </div>
       </div>
 
       {activeTab === 'products' && (
         <>
-          <div className="flex justify-end mb-4">
-             <button 
-               onClick={() => handleOpenProductModal()}
-               className="flex items-center gap-2 bg-slate-800 text-white px-3 py-1.5 rounded-lg hover:bg-slate-700 text-sm"
-             >
-               <Plus size={16} /> {t('addNewProduct')}
-             </button>
-          </div>
-          
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {products.map(product => {
               const isLowStock = product.stock < 100;
@@ -230,16 +307,7 @@ const Inventory = () => {
       )}
 
       {activeTab === 'providers' && (
-        <>
-          <div className="flex justify-end mb-4">
-             <button 
-               onClick={() => setShowProviderModal(true)}
-               className="flex items-center gap-2 bg-slate-800 text-white px-3 py-1.5 rounded-lg hover:bg-slate-700 text-sm"
-             >
-               <Plus size={16} /> {t('addProvider')}
-             </button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {providers.map(prov => (
               <div key={prov.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                  <div className="flex items-center gap-3 mb-3">
@@ -257,8 +325,7 @@ const Inventory = () => {
                 {t('noProviders')}
               </div>
             )}
-          </div>
-        </>
+        </div>
       )}
 
       {activeTab === 'purchases' && (
@@ -299,6 +366,51 @@ const Inventory = () => {
 
       {/* MODALS */}
       
+      {/* Settings Modal */}
+      {showSettingsModal && (
+         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+           <div className="bg-white rounded-xl w-full max-w-sm p-5 shadow-2xl">
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Settings size={18}/> {t('inventorySettings')}</h3>
+              <div className="space-y-4">
+                 <div>
+                    <label className="block text-xs font-medium mb-1 text-slate-700">{t('factoryPercent')}</label>
+                    <div className="relative">
+                       <input 
+                         type="number" 
+                         min="0" 
+                         max="100"
+                         value={settings.factoryPercent} 
+                         onChange={e => setSettings({...settings, factoryPercent: parseFloat(e.target.value) || 0})} 
+                         className="w-full p-2 pr-8 border rounded-lg outline-none focus:ring-2 focus:ring-primary text-sm"
+                       />
+                       <span className="absolute right-3 top-2 text-xs text-slate-400">%</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">Calculates 'Total Capital' = Stock × BasePrice × Factory%</p>
+                 </div>
+                 <div>
+                    <label className="block text-xs font-medium mb-1 text-slate-700">{t('pharmacyPercent')}</label>
+                    <div className="relative">
+                       <input 
+                         type="number" 
+                         min="0"
+                         max="200"
+                         value={settings.customerPercent} 
+                         onChange={e => setSettings({...settings, customerPercent: parseFloat(e.target.value) || 0})} 
+                         className="w-full p-2 pr-8 border rounded-lg outline-none focus:ring-2 focus:ring-primary text-sm"
+                       />
+                       <span className="absolute right-3 top-2 text-xs text-slate-400">%</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">Calculates 'Pharmacy Value' = Stock × BasePrice × Pharmacy% (e.g. 100 for full price, 80 for 20% discount)</p>
+                 </div>
+                 <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-slate-100">
+                    <button onClick={() => setShowSettingsModal(false)} className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">{t('cancel')}</button>
+                    <button onClick={handleSaveSettings} className="px-3 py-1.5 bg-primary text-white rounded-lg hover:bg-teal-800 text-sm">{t('save')}</button>
+                 </div>
+              </div>
+           </div>
+         </div>
+      )}
+
       {/* Product Modal */}
       {showProductModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

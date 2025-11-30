@@ -336,8 +336,6 @@ export const deleteOrder = async (orderId: string) => {
   }
 };
 
-// ... existing transactions, providers, product management ...
-
 export const addTransaction = async (transaction: Transaction) => {
   if (isSupabaseEnabled && supabase) {
      const dbTxn = {
@@ -348,7 +346,7 @@ export const addTransaction = async (transaction: Transaction) => {
        reference_id: transaction.referenceId,
        description: transaction.description,
        payment_method: transaction.paymentMethod,
-       provider_id: transaction.providerId,
+       provider_id: transaction.providerId || null,
        provider_name: transaction.providerName
      };
      const { error } = await supabase.from('transactions').insert(dbTxn);
@@ -358,9 +356,6 @@ export const addTransaction = async (transaction: Transaction) => {
         if (order) {
            const newPaid = (Number(order.paid_amount) || 0) + transaction.amount;
            let newStatus = order.status;
-           // If return order (negative total), newPaid approaches total from 0 to negative.
-           // Standard logic: if paid >= total (abs values for returns maybe?)
-           // For simplicity, we just update paid amount. Status logic for Returns is usually immediate 'RETURNED'.
            if (!order.is_return) {
              if (newPaid >= Number(order.total_amount)) newStatus = OrderStatus.PAID;
              else if (newPaid > 0) newStatus = OrderStatus.PARTIAL;
@@ -418,9 +413,6 @@ export const deleteTransaction = async (transactionId: string) => {
     if (txn.type === TransactionType.PAYMENT_RECEIVED && txn.reference_id) {
       const { data: order } = await supabase.from('orders').select('*').eq('id', txn.reference_id).single();
       if (order) {
-        // Adjust logic for returns? If return, paid amount might be negative (refunded).
-        // Assuming transactions for returns are strictly informational or refund payments.
-        // Simplified: just reverse the add.
         const newPaid = (Number(order.paid_amount) || 0) - Number(txn.amount);
         let newStatus = order.status;
         if (!order.is_return) {
@@ -471,6 +463,36 @@ export const addProvider = async (provider: Provider) => {
   } else {
     const providers = await getProviders();
     providers.push(provider);
+    localStorage.setItem(STORAGE_KEYS.PROVIDERS, JSON.stringify(providers));
+  }
+};
+
+export const updateProvider = async (provider: Provider) => {
+  if (isSupabaseEnabled && supabase) {
+    const dbProv = {
+      name: provider.name,
+      contact_info: provider.contactInfo,
+      bank_details: provider.bankDetails
+    };
+    const { error } = await supabase.from('providers').update(dbProv).eq('id', provider.id);
+    if (error) throw error;
+  } else {
+    const providers = await getProviders();
+    const index = providers.findIndex(p => p.id === provider.id);
+    if (index !== -1) {
+      providers[index] = provider;
+      localStorage.setItem(STORAGE_KEYS.PROVIDERS, JSON.stringify(providers));
+    }
+  }
+};
+
+export const deleteProvider = async (providerId: string) => {
+  if (isSupabaseEnabled && supabase) {
+    const { error } = await supabase.from('providers').delete().eq('id', providerId);
+    if (error) throw error;
+  } else {
+    let providers = await getProviders();
+    providers = providers.filter(p => p.id !== providerId);
     localStorage.setItem(STORAGE_KEYS.PROVIDERS, JSON.stringify(providers));
   }
 };
@@ -619,8 +641,6 @@ export const getFinancialStats = async () => {
       repCashOnHand += t.amount;
       totalCollected += t.amount;
     } else if (t.type === TransactionType.DEPOSIT_TO_HQ) {
-      // Only deduct from Cash on Hand if it was a CASH deposit
-      // If paymentMethod is missing (legacy), assume CASH to be safe/consistent with old behavior
       if (!t.paymentMethod || t.paymentMethod === PaymentMethod.CASH) {
         repCashOnHand -= t.amount;
       }
@@ -634,9 +654,7 @@ export const getFinancialStats = async () => {
   });
 
   const orders = await getOrders();
-  // Filter out drafts from sales stats
   const activeOrders = orders.filter(o => !o.isDraft && o.status !== OrderStatus.DRAFT);
-  // Total sales includes returns (which are negative amounts), so this represents Net Sales
   const totalSales = activeOrders.reduce((sum, o) => sum + o.totalAmount, 0);
 
   return { repCashOnHand, transferredToHQ, totalCollected, totalSales, totalExpenses };

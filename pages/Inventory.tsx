@@ -1,8 +1,8 @@
 
 import React, { useEffect, useState } from 'react';
-import { getProducts, getProviders, addProduct, updateProduct, restockProduct, addProvider, getTransactions } from '../utils/storage';
+import { getProducts, getProviders, addProduct, updateProduct, restockProduct, addProvider, updateProvider, deleteProvider, getTransactions } from '../utils/storage';
 import { Product, Provider, PaymentMethod, Transaction, TransactionType } from '../types';
-import { Package, AlertTriangle, Loader2, Plus, Edit2, ShoppingBag, Truck, Building2, Calendar, DollarSign, History, Settings, Coins, Layers } from 'lucide-react';
+import { Package, AlertTriangle, Loader2, Plus, Edit2, ShoppingBag, Truck, Building2, Calendar, DollarSign, History, Settings, Coins, Layers, Trash2 } from 'lucide-react';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import LoadingOverlay from '../components/LoadingOverlay';
 import ProviderModal from '../components/ProviderModal';
@@ -28,6 +28,8 @@ const Inventory = () => {
 
   // Form States
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
+
   const [prodName, setProdName] = useState('');
   const [prodPrice, setProdPrice] = useState('');
   const [prodStock, setProdStock] = useState('');
@@ -87,6 +89,15 @@ const Inventory = () => {
     setShowProductModal(true);
   };
 
+  const handleOpenProviderModal = (provider?: Provider) => {
+    if (provider) {
+      setEditingProvider(provider);
+    } else {
+      setEditingProvider(null);
+    }
+    setShowProviderModal(true);
+  };
+
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     setProcessing(true);
@@ -110,13 +121,33 @@ const Inventory = () => {
   };
 
   const handleSaveProvider = async (provider: Provider) => {
-    await addProvider(provider);
+    if (editingProvider) {
+       await updateProvider(provider);
+    } else {
+       await addProvider(provider);
+    }
+    
     // If we are in restock modal (indirectly checking if restockProdId is set), auto-select
     if (showRestockModal) {
       setRestockProvider(provider.id);
     }
     await fetchData();
     setShowProviderModal(false);
+  };
+
+  const handleDeleteProvider = async (providerId: string) => {
+    if (window.confirm("Are you sure you want to delete this provider?")) {
+      setProcessing(true);
+      try {
+        await deleteProvider(providerId);
+        await fetchData();
+      } catch (err) {
+        console.error(err);
+        alert('Failed to delete provider.');
+      } finally {
+        setProcessing(false);
+      }
+    }
   };
 
   const handleOpenRestock = (product: Product) => {
@@ -133,11 +164,18 @@ const Inventory = () => {
     e.preventDefault();
     setProcessing(true);
     try {
+      const qty = parseInt(restockQty);
+      const cost = parseFloat(restockCost);
+      
+      if (isNaN(qty) || qty <= 0) throw new Error("Invalid quantity");
+      if (isNaN(cost) || cost < 0) throw new Error("Invalid cost");
+
       const provider = providers.find(p => p.id === restockProvider);
+      
       await restockProduct(
         restockProdId, 
-        parseInt(restockQty), 
-        parseFloat(restockCost), 
+        qty, 
+        cost, 
         restockProvider, 
         provider?.name || 'Unknown', 
         restockMethod, 
@@ -145,9 +183,9 @@ const Inventory = () => {
       );
       await fetchData();
       setShowRestockModal(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to process restock');
+      alert(`Failed to process restock: ${err.message}`);
     } finally {
       setProcessing(false);
     }
@@ -244,7 +282,7 @@ const Inventory = () => {
              )}
              {activeTab === 'providers' && (
                <button 
-                 onClick={() => setShowProviderModal(true)}
+                 onClick={() => handleOpenProviderModal()}
                  className="flex items-center gap-2 bg-slate-800 text-white px-3 py-1.5 rounded-lg hover:bg-slate-700 text-sm"
                >
                  <Plus size={16} /> {t('addProvider')}
@@ -311,7 +349,7 @@ const Inventory = () => {
       {activeTab === 'providers' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {providers.map(prov => (
-              <div key={prov.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+              <div key={prov.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 relative group">
                  <div className="flex items-center gap-3 mb-3">
                     <div className="bg-blue-50 p-2 rounded-lg text-blue-600"><Truck size={20}/></div>
                     <h3 className="font-bold text-base text-slate-800">{prov.name}</h3>
@@ -319,6 +357,21 @@ const Inventory = () => {
                  <div className="space-y-1.5 text-xs text-slate-600">
                    <p className="flex items-center gap-2"><Building2 size={12} className="text-slate-400"/> {prov.contactInfo || 'No contact info'}</p>
                    <p className="flex items-center gap-2"><DollarSign size={12} className="text-slate-400"/> {prov.bankDetails || 'No bank details'}</p>
+                 </div>
+                 
+                 <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={() => handleOpenProviderModal(prov)}
+                      className="p-1.5 bg-slate-100 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                    >
+                      <Edit2 size={14} />
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteProvider(prov.id)}
+                      className="p-1.5 bg-slate-100 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                  </div>
               </div>
             ))}
@@ -447,6 +500,7 @@ const Inventory = () => {
         isOpen={showProviderModal}
         onClose={() => setShowProviderModal(false)}
         onSave={handleSaveProvider}
+        initialData={editingProvider}
       />
 
       {/* Restock Modal */}
@@ -473,7 +527,7 @@ const Inventory = () => {
                       <label className="block text-xs font-medium">{t('providers')}</label>
                       <button 
                         type="button" 
-                        onClick={() => setShowProviderModal(true)}
+                        onClick={() => handleOpenProviderModal()}
                         className="text-[10px] text-primary hover:underline flex items-center gap-1"
                       >
                         <Plus size={10}/> {t('new')}

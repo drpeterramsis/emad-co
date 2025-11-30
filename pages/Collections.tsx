@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { getOrders, addTransaction, getFinancialStats, updateOrder, getTransactions, deleteTransaction, updateTransaction, getProviders, addProvider } from '../utils/storage';
 import { Order, TransactionType, OrderStatus, DashboardStats, Transaction, PaymentMethod, Provider } from '../types';
-import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search, Calendar, CheckSquare, X, History, FileText, Trash2, Edit2, TrendingDown, TrendingUp, Eye, Plus, Printer } from 'lucide-react';
+import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search, Calendar, CheckSquare, X, History, FileText, Trash2, Edit2, TrendingDown, TrendingUp, Eye, Plus, Printer, Building2 } from 'lucide-react';
 import { formatDate, formatCurrency } from '../utils/helpers';
 import ProviderModal from '../components/ProviderModal';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -1151,6 +1152,11 @@ const Collections = () => {
                  {expenseMethod === PaymentMethod.CASH && stats && (
                     <p className="text-[10px] text-amber-600 mt-1 flex items-center gap-1">
                        <Wallet size={10}/> {t('balance')}: {formatCurrency(stats.repCashOnHand)}
+                    </p>
+                 )}
+                 {expenseMethod === PaymentMethod.BANK_TRANSFER && stats && (
+                    <p className="text-[10px] text-blue-600 mt-1 flex items-center gap-1">
+                       <Building2 size={10}/> {t('transferredToHQ')}: {formatCurrency(stats.transferredToHQ)}
                     </p>
                  )}
               </div>

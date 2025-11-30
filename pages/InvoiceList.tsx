@@ -1,8 +1,7 @@
-
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { getOrders, deleteOrder, updateOrder, getCustomers, getTransactions } from '../utils/storage';
 import { Order, OrderStatus, CustomerType, Transaction, TransactionType } from '../types';
-import { Search, Loader2, Edit, Trash2, Filter, Eye, X, Printer, Save, FileText, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Search, Loader2, Edit, Trash2, Filter, Eye, X, Printer, Save, FileText, CheckCircle, AlertTriangle, ArrowUpDown, Layers } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { formatDate, formatCurrency } from '../utils/helpers';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -20,6 +19,10 @@ const InvoiceList = () => {
   const [searchMonth, setSearchMonth] = useState('');
   const [filterType, setFilterType] = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
+
+  // Grouping & Sorting
+  const [groupBy, setGroupBy] = useState<'none' | 'customer' | 'month' | 'product'>('none');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
 
   // Modal & Print State
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -154,7 +157,7 @@ const InvoiceList = () => {
   };
 
   // Filter Logic
-  const filteredOrders = orders.filter(o => {
+  const filteredOrders = useMemo<Order[]>(() => orders.filter(o => {
     const matchesCustomer = o.customerName.toLowerCase().includes(searchCustomer.toLowerCase()) || 
                             o.id.toLowerCase().includes(searchCustomer.toLowerCase());
     
@@ -171,7 +174,51 @@ const InvoiceList = () => {
     const matchesStatus = filterStatus === 'All' || o.status === filterStatus;
 
     return matchesCustomer && matchesProduct && matchesMonth && matchesType && matchesStatus;
-  }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }), [orders, searchCustomer, searchProduct, searchMonth, filterType, filterStatus, customerTypes]);
+
+  // Sort
+  const sortedOrders = useMemo<Order[]>(() => {
+    return [...filteredOrders].sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
+    });
+  }, [filteredOrders, sortOrder]);
+
+  // Group
+  const groupedOrders = useMemo<Record<string, Order[]>>(() => {
+    if (groupBy === 'none') return { 'All': sortedOrders };
+
+    const groups: Record<string, Order[]> = {};
+
+    if (groupBy === 'customer') {
+      sortedOrders.forEach(order => {
+        const key = order.customerName || 'Unknown';
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(order);
+      });
+    } else if (groupBy === 'month') {
+      sortedOrders.forEach(order => {
+        const key = order.date.substring(0, 7); // YYYY-MM
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(order);
+      });
+    } else if (groupBy === 'product') {
+       sortedOrders.forEach(order => {
+          order.items.forEach(item => {
+             // Basic product grouping - an order appears in multiple groups if it has multiple products
+             const key = item.productName;
+             if (!groups[key]) groups[key] = [];
+             // Avoid adding same order multiple times to same product group (if data error)
+             if (!groups[key].find(o => o.id === order.id)) {
+               groups[key].push(order);
+             }
+          });
+       });
+    }
+
+    return groups;
+  }, [sortedOrders, groupBy]);
 
   if (loading) {
      return (
@@ -192,79 +239,113 @@ const InvoiceList = () => {
         </div>
 
         {/* Filters Bar */}
-        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-3 items-center">
-          <div className="flex items-center gap-2 text-slate-500 mr-2">
-            <Filter size={18} />
-            <span className="font-medium text-xs">{t('filters')}:</span>
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col xl:flex-row gap-3">
+          <div className="flex flex-wrap gap-3 items-center flex-1">
+            <div className="flex items-center gap-2 text-slate-500 mr-1">
+              <Filter size={18} />
+              <span className="font-medium text-xs hidden sm:inline">{t('filters')}:</span>
+            </div>
+            
+            <div className="relative flex-1 min-w-[140px]">
+              <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
+              <input 
+                type="text" 
+                placeholder={t('searchCustomerInvoice')}
+                value={searchCustomer}
+                onChange={(e) => setSearchCustomer(e.target.value)}
+                className="pl-9 pr-4 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none w-full"
+              />
+            </div>
+
+            <div className="relative flex-1 min-w-[120px]">
+              <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
+              <input 
+                type="text" 
+                placeholder={t('filterByProduct')}
+                value={searchProduct}
+                onChange={(e) => setSearchProduct(e.target.value)}
+                className="pl-9 pr-4 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none w-full"
+              />
+            </div>
+
+            {/* Status Filter */}
+            <div className="relative">
+               <select 
+                 value={filterStatus}
+                 onChange={(e) => setFilterStatus(e.target.value)}
+                 className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-slate-600 bg-white"
+              >
+                 <option value="All">{t('allStatus')}</option>
+                 <option value={OrderStatus.PAID}>{t('paid')}</option>
+                 <option value={OrderStatus.PARTIAL}>Partial</option>
+                 <option value={OrderStatus.PENDING}>Pending</option>
+                 <option value={OrderStatus.RETURNED}>Returned</option>
+                 <option value={OrderStatus.CANCELLED}>Cancelled</option>
+              </select>
+            </div>
+
+            {/* Type Filter */}
+            <div className="relative">
+               <select 
+                 value={filterType}
+                 onChange={(e) => setFilterType(e.target.value)}
+                 className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-slate-600 bg-white"
+              >
+                 <option value="All">{t('allTypes')}</option>
+                 {Object.values(CustomerType).map(t => (
+                    <option key={t} value={t}>{t}</option>
+                 ))}
+              </select>
+            </div>
+
+            <div className="relative">
+               <input 
+                type="month"
+                value={searchMonth}
+                onChange={(e) => setSearchMonth(e.target.value)}
+                className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-slate-600"
+              />
+            </div>
           </div>
           
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
-            <input 
-              type="text" 
-              placeholder={t('searchCustomerInvoice')}
-              value={searchCustomer}
-              onChange={(e) => setSearchCustomer(e.target.value)}
-              className="pl-9 pr-4 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none w-full"
-            />
-          </div>
+          <div className="h-px xl:h-auto xl:w-px bg-slate-200"></div>
 
-          <div className="relative flex-1 min-w-[160px]">
-            <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
-            <input 
-              type="text" 
-              placeholder={t('filterByProduct')}
-              value={searchProduct}
-              onChange={(e) => setSearchProduct(e.target.value)}
-              className="pl-9 pr-4 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none w-full"
-            />
-          </div>
+          {/* View Options */}
+          <div className="flex gap-3 items-center">
+             <div className="flex items-center gap-2">
+                <Layers size={16} className="text-slate-500" />
+                <span className="text-xs font-medium text-slate-600">{t('groupBy')}:</span>
+                <select 
+                  value={groupBy}
+                  onChange={(e) => setGroupBy(e.target.value as any)}
+                  className="px-2 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none bg-white"
+                >
+                  <option value="none">{t('none')}</option>
+                  <option value="customer">{t('customer')}</option>
+                  <option value="month">{t('month')}</option>
+                  <option value="product">{t('product')}</option>
+                </select>
+             </div>
+             
+             <button 
+               onClick={() => setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
+               className="flex items-center gap-2 px-3 py-1.5 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 text-sm font-medium"
+               title={t('sort')}
+             >
+                <ArrowUpDown size={14} className="text-slate-500" />
+                <span>{sortOrder === 'desc' ? t('newestFirst') : t('oldestFirst')}</span>
+             </button>
 
-          {/* Status Filter */}
-          <div className="relative">
-             <select 
-               value={filterStatus}
-               onChange={(e) => setFilterStatus(e.target.value)}
-               className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-slate-600 bg-white"
-            >
-               <option value="All">{t('allStatus')}</option>
-               <option value={OrderStatus.PAID}>{t('paid')}</option>
-               <option value={OrderStatus.PARTIAL}>Partial</option>
-               <option value={OrderStatus.PENDING}>Pending</option>
-               <option value={OrderStatus.RETURNED}>Returned</option>
-               <option value={OrderStatus.CANCELLED}>Cancelled</option>
-            </select>
+             <button 
+               onClick={() => { 
+                 setSearchCustomer(''); setSearchProduct(''); setSearchMonth(''); setFilterType('All'); setFilterStatus('All'); 
+                 setGroupBy('none'); setSortOrder('desc');
+               }}
+               className="text-xs text-slate-500 hover:text-red-500 underline whitespace-nowrap"
+             >
+               {t('clear')}
+             </button>
           </div>
-
-          {/* Type Filter */}
-          <div className="relative">
-             <select 
-               value={filterType}
-               onChange={(e) => setFilterType(e.target.value)}
-               className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-slate-600 bg-white"
-            >
-               <option value="All">{t('allTypes')}</option>
-               {Object.values(CustomerType).map(t => (
-                  <option key={t} value={t}>{t}</option>
-               ))}
-            </select>
-          </div>
-
-          <div className="relative">
-             <input 
-              type="month"
-              value={searchMonth}
-              onChange={(e) => setSearchMonth(e.target.value)}
-              className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-slate-600"
-            />
-          </div>
-
-           <button 
-             onClick={() => { setSearchCustomer(''); setSearchProduct(''); setSearchMonth(''); setFilterType('All'); setFilterStatus('All'); }}
-             className="text-xs text-slate-500 hover:text-red-500 underline"
-           >
-             {t('clear')}
-           </button>
         </div>
       </div>
 
@@ -283,90 +364,104 @@ const InvoiceList = () => {
                 <th className="p-3 font-medium text-slate-600 text-right">{t('actions')}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredOrders.length === 0 ? (
-                <tr><td colSpan={8} className="p-6 text-center text-slate-400">{t('noInvoicesFound')}</td></tr>
-              ) : (
-                filteredOrders.map(order => {
-                  const totalDiscount = order.items.reduce((s, i) => s + (i.discount || 0), 0);
-                  const grossTotal = order.totalAmount + totalDiscount;
-                  const effectiveDiscountPercent = grossTotal > 0 ? (totalDiscount / grossTotal) * 100 : 0;
-                  const custType = customerTypes[order.customerId];
-                  
-                  return (
-                    <tr 
-                      key={order.id} 
-                      className="hover:bg-slate-50 transition-colors cursor-pointer group"
-                      onClick={() => openModal(order)}
-                    >
-                      <td className="p-3 text-slate-600 font-medium align-top whitespace-nowrap">{formatDate(order.date)}</td>
-                      <td className="p-3 font-mono text-[10px] align-top whitespace-nowrap">{order.id}</td>
-                      <td className="p-3 font-medium text-slate-800 align-top min-w-[150px]">
-                        <div>{order.customerName}</div>
-                        {custType && (
-                          <div className="inline-block mt-0.5">
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${getCustomerTypeColor(custType)}`}>
-                              {custType}
+            {filteredOrders.length === 0 ? (
+               <tbody><tr><td colSpan={8} className="p-6 text-center text-slate-400">{t('noInvoicesFound')}</td></tr></tbody>
+            ) : (
+              Object.entries(groupedOrders).map(([groupName, groupOrders]) => (
+                <React.Fragment key={groupName}>
+                  {groupBy !== 'none' && (
+                    <tbody>
+                       <tr className="bg-slate-100/80 border-b border-slate-200">
+                         <td colSpan={8} className="p-3 font-bold text-slate-700">
+                           {groupBy === 'month' ? formatDate(groupName + '-01').substring(3) : groupName} 
+                           <span className="text-slate-500 font-normal text-xs ml-2">({groupOrders.length})</span>
+                         </td>
+                       </tr>
+                    </tbody>
+                  )}
+                  <tbody className="divide-y divide-slate-100">
+                    {groupOrders.map(order => {
+                      const totalDiscount = order.items.reduce((s, i) => s + (i.discount || 0), 0);
+                      const grossTotal = order.totalAmount + totalDiscount;
+                      const effectiveDiscountPercent = grossTotal > 0 ? (totalDiscount / grossTotal) * 100 : 0;
+                      const custType = customerTypes[order.customerId];
+                      
+                      return (
+                        <tr 
+                          key={`${order.id}-${groupName}`} // Ensure unique key when grouping by product (duplicates allowed)
+                          className="hover:bg-slate-50 transition-colors cursor-pointer group"
+                          onClick={() => openModal(order)}
+                        >
+                          <td className="p-3 text-slate-600 font-medium align-top whitespace-nowrap">{formatDate(order.date)}</td>
+                          <td className="p-3 font-mono text-[10px] align-top whitespace-nowrap">{order.id}</td>
+                          <td className="p-3 font-medium text-slate-800 align-top min-w-[150px]">
+                            <div>{order.customerName}</div>
+                            {custType && (
+                              <div className="inline-block mt-0.5">
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${getCustomerTypeColor(custType)}`}>
+                                  {custType}
+                                </span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-3 align-top">
+                            <div className="flex flex-col gap-1 text-[10px] md:text-xs max-h-24 overflow-y-auto pr-1 custom-scrollbar">
+                               {order.items.map((item, i) => (
+                                 <div key={i} className="flex justify-between gap-2 border-b border-slate-100 last:border-0 pb-0.5 last:pb-0">
+                                   <span className="font-medium text-slate-700 truncate max-w-[120px]" title={item.productName}>{item.productName}</span>
+                                   <div className="flex gap-1 text-slate-500 whitespace-nowrap">
+                                      <span>{item.quantity}u</span>
+                                      {item.bonusQuantity > 0 && <span className="text-orange-600 font-bold">+{item.bonusQuantity}b</span>}
+                                   </div>
+                                 </div>
+                               ))}
+                               {totalDiscount > 0 && (
+                                 <div className="mt-1 pt-0.5 border-t border-slate-200 text-blue-600 font-medium flex justify-between bg-blue-50 px-1.5 py-0.5 rounded">
+                                    <span>Disc:</span>
+                                    <span>{formatCurrency(totalDiscount)} ({effectiveDiscountPercent.toFixed(1)}%)</span>
+                                 </div>
+                               )}
+                            </div>
+                          </td>
+                          <td className="p-3 font-bold text-slate-800 align-top whitespace-nowrap">{formatCurrency(order.totalAmount)}</td>
+                          <td className="p-3 text-slate-600 align-top whitespace-nowrap">{formatCurrency(order.paidAmount)}</td>
+                          <td className="p-3 align-top">
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium whitespace-nowrap ${getStatusColor(order.status)}`}>
+                              {order.status}
                             </span>
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-3 align-top">
-                        <div className="flex flex-col gap-1 text-[10px] md:text-xs max-h-24 overflow-y-auto pr-1 custom-scrollbar">
-                           {order.items.map((item, i) => (
-                             <div key={i} className="flex justify-between gap-2 border-b border-slate-100 last:border-0 pb-0.5 last:pb-0">
-                               <span className="font-medium text-slate-700 truncate max-w-[120px]" title={item.productName}>{item.productName}</span>
-                               <div className="flex gap-1 text-slate-500 whitespace-nowrap">
-                                  <span>{item.quantity}u</span>
-                                  {item.bonusQuantity > 0 && <span className="text-orange-600 font-bold">+{item.bonusQuantity}b</span>}
-                               </div>
-                             </div>
-                           ))}
-                           {totalDiscount > 0 && (
-                             <div className="mt-1 pt-0.5 border-t border-slate-200 text-blue-600 font-medium flex justify-between bg-blue-50 px-1.5 py-0.5 rounded">
-                                <span>Disc:</span>
-                                <span>{formatCurrency(totalDiscount)} ({effectiveDiscountPercent.toFixed(1)}%)</span>
-                             </div>
-                           )}
-                        </div>
-                      </td>
-                      <td className="p-3 font-bold text-slate-800 align-top whitespace-nowrap">{formatCurrency(order.totalAmount)}</td>
-                      <td className="p-3 text-slate-600 align-top whitespace-nowrap">{formatCurrency(order.paidAmount)}</td>
-                      <td className="p-3 align-top">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium whitespace-nowrap ${getStatusColor(order.status)}`}>
-                          {order.status}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right align-top">
-                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button 
-                             onClick={(e) => { e.stopPropagation(); openModal(order); }}
-                             className="p-1 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded transition-colors"
-                             title="View Details"
-                           >
-                             <Eye size={14} />
-                           </button>
-                           <button 
-                             onClick={(e) => handleEdit(e, order.id)}
-                             className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                             title="Edit Invoice"
-                           >
-                             <Edit size={14} />
-                           </button>
-                           <button 
-                             onClick={(e) => handleDelete(e, order.id)}
-                             className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                             title="Delete Invoice"
-                           >
-                             <Trash2 size={14} />
-                           </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
+                          </td>
+                          <td className="p-3 text-right align-top">
+                            <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button 
+                                 onClick={(e) => { e.stopPropagation(); openModal(order); }}
+                                 className="p-1 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded transition-colors"
+                                 title="View Details"
+                               >
+                                 <Eye size={14} />
+                               </button>
+                               <button 
+                                 onClick={(e) => handleEdit(e, order.id)}
+                                 className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                 title="Edit Invoice"
+                               >
+                                 <Edit size={14} />
+                               </button>
+                               <button 
+                                 onClick={(e) => handleDelete(e, order.id)}
+                                 className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                 title="Delete Invoice"
+                               >
+                                 <Trash2 size={14} />
+                               </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </React.Fragment>
+              ))
+            )}
           </table>
         </div>
       </div>

@@ -1,4 +1,5 @@
 
+
 export const translations = {
   en: {
     // Common
@@ -40,6 +41,12 @@ export const translations = {
     address: 'Address',
     saveChanges: 'Save Changes',
     confirm: 'Confirm',
+    groupBy: 'Group By',
+    none: 'None',
+    month: 'Month',
+    sort: 'Sort',
+    newestFirst: 'Newest First',
+    oldestFirst: 'Oldest First',
     
     // Dashboard
     dashboardOverview: 'Overview of your sales performance',
@@ -230,7 +237,6 @@ export const translations = {
     analysisSubtitle: 'Detailed breakdown of sales vs collections',
     performanceOverview: 'Performance Overview',
     dataTable: 'Data Table',
-    month: 'Month',
     sales: 'Sales',
     difference: 'Difference',
     
@@ -284,6 +290,12 @@ export const translations = {
     address: 'العنوان',
     saveChanges: 'حفظ التغييرات',
     confirm: 'تأكيد',
+    groupBy: 'تجميع حسب',
+    none: 'لا يوجد',
+    month: 'الشهر',
+    sort: 'ترتيب',
+    newestFirst: 'الأحدث أولاً',
+    oldestFirst: 'الأقدم أولاً',
     
     // Dashboard
     dashboardOverview: 'نظرة عامة على أداء المبيعات',
@@ -474,7 +486,6 @@ export const translations = {
     analysisSubtitle: 'تفصيل للمبيعات مقابل التحصيلات',
     performanceOverview: 'نظرة عامة على الأداء',
     dataTable: 'جدول البيانات',
-    month: 'الشهر',
     sales: 'المبيعات',
     difference: 'الفرق',
     

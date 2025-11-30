@@ -201,50 +201,56 @@ const Collections = () => {
     e.preventDefault();
     if (!stats) return;
 
-    const amount = parseFloat(transferAmount);
-    if (isNaN(amount) || amount <= 0) {
-      alert("Invalid amount.");
-      return;
-    }
-    
-    // Check constraints only if source is CASH
-    if (transferSource === 'CASH') {
-       let availableCash = stats.repCashOnHand;
-       // If we are editing an existing CASH deposit, add that amount back to available for validation
-       if (editingDeposit && (!editingDeposit.paymentMethod || editingDeposit.paymentMethod === PaymentMethod.CASH)) {
-           availableCash += editingDeposit.amount;
-       }
-       
-       if (amount > availableCash) {
-          alert("Invalid transfer amount. Cannot exceed Cash on Hand.");
-          return;
-       }
-    }
+    try {
+      const amount = parseFloat(transferAmount);
+      if (isNaN(amount) || amount <= 0) {
+        alert("Invalid amount.");
+        return;
+      }
+      
+      // Check constraints only if source is CASH
+      if (transferSource === 'CASH') {
+         let availableCash = stats.repCashOnHand;
+         // If we are editing an existing CASH deposit, add that amount back to available for validation
+         if (editingDeposit && (!editingDeposit.paymentMethod || editingDeposit.paymentMethod === PaymentMethod.CASH)) {
+             availableCash += editingDeposit.amount;
+         }
+         
+         if (amount > availableCash) {
+            alert("Invalid transfer amount. Cannot exceed Cash on Hand.");
+            return;
+         }
+      }
 
-    const method = transferSource === 'CASH' ? PaymentMethod.CASH : PaymentMethod.BANK_TRANSFER;
+      const method = transferSource === 'CASH' ? PaymentMethod.CASH : PaymentMethod.BANK_TRANSFER;
+      const txnDate = transferDate ? new Date(transferDate).toISOString() : new Date().toISOString();
 
-    if (editingDeposit) {
-       await updateTransaction({
-         ...editingDeposit,
-         amount,
-         date: new Date(transferDate).toISOString(),
-         description: transferDesc,
-         paymentMethod: method
-       });
-    } else {
-      await addTransaction({
-        id: `TXN-${Date.now()}`,
-        type: TransactionType.DEPOSIT_TO_HQ,
-        amount: amount,
-        date: new Date(transferDate).toISOString(),
-        description: transferDesc,
-        paymentMethod: method
-      });
+      if (editingDeposit) {
+         await updateTransaction({
+           ...editingDeposit,
+           amount,
+           date: txnDate,
+           description: transferDesc,
+           paymentMethod: method
+         });
+      } else {
+        await addTransaction({
+          id: `TXN-${Date.now()}`,
+          type: TransactionType.DEPOSIT_TO_HQ,
+          amount: amount,
+          date: txnDate,
+          description: transferDesc,
+          paymentMethod: method
+        });
+      }
+
+      setTransferAmount('');
+      setShowTransferModal(false);
+      await refreshData();
+    } catch (error) {
+      console.error("Deposit error:", error);
+      alert("Failed to save deposit. Please check your connection or input.");
     }
-
-    setTransferAmount('');
-    setShowTransferModal(false);
-    await refreshData();
   };
 
   const handleDeleteDeposit = async (id: string) => {

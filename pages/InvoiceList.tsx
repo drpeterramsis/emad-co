@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { getOrders, deleteOrder, updateOrder, getCustomers } from '../utils/storage';
-import { Order, OrderStatus, CustomerType } from '../types';
+import { getOrders, deleteOrder, updateOrder, getCustomers, getTransactions } from '../utils/storage';
+import { Order, OrderStatus, CustomerType, Transaction, TransactionType } from '../types';
 import { Search, Loader2, Edit, Trash2, Filter, Eye, X, Printer, Save, FileText, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { formatDate, formatCurrency } from '../utils/helpers';
@@ -20,6 +20,7 @@ const InvoiceList = () => {
 
   // Modal & Print State
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [selectedOrderTxns, setSelectedOrderTxns] = useState<Transaction[]>([]);
   const [printCustomerName, setPrintCustomerName] = useState('');
   const [orderNotes, setOrderNotes] = useState('');
 
@@ -47,10 +48,17 @@ const InvoiceList = () => {
     setLoading(false);
   };
 
-  const openModal = (order: Order) => {
+  const openModal = async (order: Order) => {
     setSelectedOrder(order);
     setPrintCustomerName(order.customerName);
     setOrderNotes(order.notes || '');
+    
+    // Fetch associated transactions
+    const allTxns = await getTransactions();
+    const related = allTxns
+      .filter(t => t.referenceId === order.id && t.type === TransactionType.PAYMENT_RECEIVED)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    setSelectedOrderTxns(related);
   }
 
   const saveNotes = async () => {
@@ -509,6 +517,31 @@ const InvoiceList = () => {
                    );
                 })()}
               </div>
+
+              {/* Payment History Section */}
+              {selectedOrderTxns.length > 0 && (
+                <div className="mt-8 pt-4 border-t border-slate-300 page-break-inside-avoid">
+                  <h4 className="text-sm font-bold text-slate-700 mb-2">Payment History</h4>
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="p-2 text-slate-600">Date</th>
+                        <th className="p-2 text-slate-600">Description</th>
+                        <th className="p-2 text-slate-600 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {selectedOrderTxns.map((txn, i) => (
+                        <tr key={i}>
+                          <td className="p-2 text-slate-700">{formatDate(txn.date)}</td>
+                          <td className="p-2 text-slate-500">{txn.description}</td>
+                          <td className="p-2 text-slate-800 font-medium text-right">{formatCurrency(txn.amount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               {/* Status Manager - Hidden on Print */}
               <div className="mt-6 pt-4 border-t border-slate-100 print:hidden">

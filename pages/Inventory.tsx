@@ -18,6 +18,10 @@ const Inventory = () => {
   const [showProviderModal, setShowProviderModal] = useState(false);
   const [showRestockModal, setShowRestockModal] = useState(false);
 
+  // Quick Add Provider State
+  const [showQuickProvider, setShowQuickProvider] = useState(false);
+  const [quickProvName, setQuickProvName] = useState('');
+
   // Form States
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [prodName, setProdName] = useState('');
@@ -103,6 +107,31 @@ const Inventory = () => {
     } catch (err) {
       console.error(err);
       alert('Failed to save provider');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleQuickAddProvider = async () => {
+    if (!quickProvName) return;
+    setProcessing(true);
+    try {
+      const newId = `PROV-${Date.now()}`;
+      await addProvider({
+        id: newId,
+        name: quickProvName,
+        contactInfo: '',
+        bankDetails: ''
+      });
+      // Refresh providers only
+      const prov = await getProviders();
+      setProviders(prov);
+      setRestockProvider(newId); // Select it
+      setShowQuickProvider(false);
+      setQuickProvName('');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to add provider');
     } finally {
       setProcessing(false);
     }
@@ -370,47 +399,76 @@ const Inventory = () => {
               <h3 className="text-xl font-bold mb-2">Restock Product</h3>
               <p className="text-sm text-slate-500 mb-4">Purchase inventory and record expense</p>
               
-              <form onSubmit={handleRestock} className="space-y-4">
-                 <div className="grid grid-cols-2 gap-4">
-                    <div>
-                       <label className="block text-sm font-medium mb-1">Quantity</label>
-                       <input type="number" required value={restockQty} onChange={e => setRestockQty(e.target.value)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"/>
-                    </div>
-                    <div>
-                       <label className="block text-sm font-medium mb-1">Total Cost (EGP)</label>
-                       <input type="number" required value={restockCost} onChange={e => setRestockCost(e.target.value)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"/>
-                    </div>
-                 </div>
+              {!showQuickProvider ? (
+                <form onSubmit={handleRestock} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Quantity</label>
+                        <input type="number" required value={restockQty} onChange={e => setRestockQty(e.target.value)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"/>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-1">Total Cost (EGP)</label>
+                        <input type="number" required value={restockCost} onChange={e => setRestockCost(e.target.value)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"/>
+                      </div>
+                  </div>
 
-                 <div>
-                    <label className="block text-sm font-medium mb-1">Provider</label>
-                    <select required value={restockProvider} onChange={e => setRestockProvider(e.target.value)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary bg-white">
-                       <option value="">Select Provider...</option>
-                       {providers.map(p => (
-                         <option key={p.id} value={p.id}>{p.name}</option>
-                       ))}
-                    </select>
-                    {providers.length === 0 && <p className="text-xs text-red-500 mt-1">Please add a provider in the Providers tab first.</p>}
-                 </div>
+                  <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-sm font-medium">Provider</label>
+                        <button 
+                          type="button" 
+                          onClick={() => setShowQuickProvider(true)}
+                          className="text-xs text-primary hover:underline flex items-center gap-1"
+                        >
+                          <Plus size={12}/> New
+                        </button>
+                      </div>
+                      <select required value={restockProvider} onChange={e => setRestockProvider(e.target.value)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary bg-white">
+                        <option value="">Select Provider...</option>
+                        {providers.map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                      {providers.length === 0 && <p className="text-xs text-red-500 mt-1">Please add a provider.</p>}
+                  </div>
 
-                 <div>
-                    <label className="block text-sm font-medium mb-1">Payment Method</label>
-                    <select required value={restockMethod} onChange={e => setRestockMethod(e.target.value as PaymentMethod)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary bg-white">
-                       <option value={PaymentMethod.BANK_TRANSFER}>HQ Bank Transfer</option>
-                       <option value={PaymentMethod.CASH}>Cash from Rep (Deduct from Cash on Hand)</option>
-                    </select>
-                 </div>
+                  <div>
+                      <label className="block text-sm font-medium mb-1">Payment Method</label>
+                      <select required value={restockMethod} onChange={e => setRestockMethod(e.target.value as PaymentMethod)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary bg-white">
+                        <option value={PaymentMethod.BANK_TRANSFER}>HQ Bank Transfer</option>
+                        <option value={PaymentMethod.CASH}>Cash from Rep (Deduct from Cash on Hand)</option>
+                      </select>
+                  </div>
 
-                 <div>
-                    <label className="block text-sm font-medium mb-1">Date</label>
-                    <input type="date" required value={restockDate} onChange={e => setRestockDate(e.target.value)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"/>
-                 </div>
+                  <div>
+                      <label className="block text-sm font-medium mb-1">Date</label>
+                      <input type="date" required value={restockDate} onChange={e => setRestockDate(e.target.value)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"/>
+                  </div>
 
-                 <div className="flex justify-end gap-3 mt-4">
-                    <button type="button" onClick={() => setShowRestockModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
-                    <button type="submit" disabled={providers.length === 0} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-teal-800 disabled:opacity-50">Confirm Purchase</button>
-                 </div>
-              </form>
+                  <div className="flex justify-end gap-3 mt-4">
+                      <button type="button" onClick={() => setShowRestockModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+                      <button type="submit" disabled={providers.length === 0} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-teal-800 disabled:opacity-50">Confirm Purchase</button>
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-4 border border-slate-200 p-4 rounded-lg bg-slate-50">
+                   <h4 className="font-bold text-slate-800">Quick Add Provider</h4>
+                   <div>
+                      <label className="block text-sm font-medium mb-1">Provider Name</label>
+                      <input 
+                        type="text" 
+                        autoFocus
+                        value={quickProvName}
+                        onChange={(e) => setQuickProvName(e.target.value)}
+                        className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"
+                      />
+                   </div>
+                   <div className="flex justify-end gap-3 pt-2">
+                      <button type="button" onClick={() => setShowQuickProvider(false)} className="px-3 py-1.5 text-slate-600 text-sm hover:bg-slate-200 rounded">Cancel</button>
+                      <button type="button" onClick={handleQuickAddProvider} className="px-3 py-1.5 bg-primary text-white text-sm rounded hover:bg-teal-800">Save & Select</button>
+                   </div>
+                </div>
+              )}
            </div>
         </div>
       )}

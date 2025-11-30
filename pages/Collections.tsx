@@ -466,6 +466,15 @@ const Collections = () => {
                 <p className="text-lg font-bold text-amber-900">{formatCurrency(stats.repCashOnHand)}</p>
               </div>
            </div>
+
+           {/* HQ Balance Card */}
+           <div className="bg-blue-50 border border-blue-200 px-4 py-2 rounded-xl flex items-center gap-3 shadow-sm">
+              <div className="bg-blue-100 p-2 rounded-full text-blue-600"><Building2 size={18}/></div>
+              <div>
+                <p className="text-[10px] text-blue-800 font-bold uppercase tracking-wider">{t('hqBalance')}</p>
+                <p className="text-lg font-bold text-blue-900">{formatCurrency(stats.transferredToHQ)}</p>
+              </div>
+           </div>
         </div>
       </div>
 

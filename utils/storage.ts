@@ -649,6 +649,8 @@ export const getFinancialStats = async () => {
        totalExpenses += t.amount;
        if (t.paymentMethod === PaymentMethod.CASH) {
           repCashOnHand -= t.amount;
+       } else if (t.paymentMethod === PaymentMethod.BANK_TRANSFER) {
+          transferredToHQ -= t.amount; // Use HQ funds for expense
        }
     }
   });

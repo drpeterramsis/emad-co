@@ -1,7 +1,5 @@
 
 
-
-
 export const translations = {
   en: {
     // Common
@@ -162,6 +160,7 @@ export const translations = {
     cashFromRep: 'Cash from Rep',
     hqBankTransfer: 'HQ Bank Transfer',
     recordExpense: 'Record Expense',
+    hqBalance: 'HQ Balance',
     
     // Inventory
     inventoryTitle: 'Inventory Management',
@@ -452,6 +451,7 @@ export const translations = {
     cashFromRep: 'نقدية من المندوب',
     hqBankTransfer: 'تحويل بنكي من المقر',
     recordExpense: 'تسجيل المصروف',
+    hqBalance: 'رصيد المقر',
     
     // Inventory
     inventoryTitle: 'إدارة المخزون',

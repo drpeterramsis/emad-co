@@ -1,6 +1,7 @@
+
 import React, { useEffect, useState, useMemo } from 'react';
 import { getOrders, deleteOrder, updateOrder, getCustomers, getTransactions } from '../utils/storage';
-import { Order, OrderStatus, CustomerType, Transaction, TransactionType } from '../types';
+import { Order, OrderStatus, CustomerType, Transaction, TransactionType, OrderItem } from '../types';
 import { Search, Loader2, Edit, Trash2, Filter, Eye, X, Printer, Save, FileText, CheckCircle, AlertTriangle, ArrowUpDown, Layers } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { formatDate, formatCurrency } from '../utils/helpers';
@@ -229,8 +230,8 @@ const InvoiceList = () => {
   }
 
   return (
-    <div className="p-4 md:p-6">
-      <div className="flex flex-col gap-4 mb-6 print:hidden">
+    <div className="p-4 md:p-6 h-[calc(100vh-4rem)] flex flex-col">
+      <div className="flex flex-col gap-4 mb-4 print:hidden shrink-0">
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-slate-800">
             {t('invoices')} <span className="text-sm font-normal text-slate-500">({filteredOrders.length})</span>
@@ -239,7 +240,7 @@ const InvoiceList = () => {
         </div>
 
         {/* Filters Bar */}
-        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col xl:flex-row gap-3">
+        <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col xl:flex-row gap-3 sticky top-0 z-30">
           <div className="flex flex-wrap gap-3 items-center flex-1">
             <div className="flex items-center gap-2 text-slate-500 mr-1">
               <Filter size={18} />
@@ -349,19 +350,19 @@ const InvoiceList = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden print:hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs md:text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col min-h-0 flex-1 print:hidden">
+        <div className="overflow-auto flex-1 rounded-xl">
+          <table className="w-full text-left text-xs md:text-sm relative">
+            <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-20 shadow-sm">
               <tr>
-                <th className="p-3 font-medium text-slate-600">{t('date')}</th>
-                <th className="p-3 font-medium text-slate-600">{t('invoiceId')}</th>
-                <th className="p-3 font-medium text-slate-600">{t('customer')}</th>
-                <th className="p-3 font-medium text-slate-600 text-center w-1/3 min-w-[200px]">{t('summary')}</th>
-                <th className="p-3 font-medium text-slate-600">{t('total')}</th>
-                <th className="p-3 font-medium text-slate-600">{t('paid')}</th>
-                <th className="p-3 font-medium text-slate-600">{t('status')}</th>
-                <th className="p-3 font-medium text-slate-600 text-right">{t('actions')}</th>
+                <th className="p-3 font-medium text-slate-600 bg-slate-50">{t('date')}</th>
+                <th className="p-3 font-medium text-slate-600 bg-slate-50">{t('invoiceId')}</th>
+                <th className="p-3 font-medium text-slate-600 bg-slate-50">{t('customer')}</th>
+                <th className="p-3 font-medium text-slate-600 text-center w-1/3 min-w-[200px] bg-slate-50">{t('summary')}</th>
+                <th className="p-3 font-medium text-slate-600 bg-slate-50">{t('total')}</th>
+                <th className="p-3 font-medium text-slate-600 bg-slate-50">{t('paid')}</th>
+                <th className="p-3 font-medium text-slate-600 bg-slate-50">{t('status')}</th>
+                <th className="p-3 font-medium text-slate-600 text-right bg-slate-50">{t('actions')}</th>
               </tr>
             </thead>
             {filteredOrders.length === 0 ? (
@@ -371,10 +372,10 @@ const InvoiceList = () => {
                 <React.Fragment key={groupName}>
                   {groupBy !== 'none' && (
                     <tbody>
-                       <tr className="bg-slate-100/80 border-b border-slate-200">
-                         <td colSpan={8} className="p-3 font-bold text-slate-700">
+                       <tr className="bg-yellow-100 border-b border-yellow-200 sticky top-10 z-10">
+                         <td colSpan={8} className="p-3 font-bold text-amber-900 bg-yellow-100">
                            {groupBy === 'month' ? formatDate(groupName + '-01').substring(3) : groupName} 
-                           <span className="text-slate-500 font-normal text-xs ml-2">({groupOrders.length})</span>
+                           <span className="text-amber-700 font-normal text-xs ml-2">({groupOrders.length})</span>
                          </td>
                        </tr>
                     </tbody>
@@ -406,7 +407,7 @@ const InvoiceList = () => {
                           </td>
                           <td className="p-3 align-top">
                             <div className="flex flex-col gap-1 text-[10px] md:text-xs max-h-24 overflow-y-auto pr-1 custom-scrollbar">
-                               {order.items.map((item, i) => (
+                               {(order.items as OrderItem[]).map((item, i) => (
                                  <div key={i} className="flex justify-between gap-2 border-b border-slate-100 last:border-0 pb-0.5 last:pb-0">
                                    <span className="font-medium text-slate-700 truncate max-w-[120px]" title={item.productName}>{item.productName}</span>
                                    <div className="flex gap-1 text-slate-500 whitespace-nowrap">
@@ -575,7 +576,7 @@ const InvoiceList = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {selectedOrder.items.map((item, idx) => {
+                    {(selectedOrder.items as OrderItem[]).map((item, idx) => {
                       const gross = item.unitPrice * item.quantity;
                       const percent = item.discountPercent || (gross > 0 ? (item.discount / gross) * 100 : 0);
                       
@@ -600,8 +601,8 @@ const InvoiceList = () => {
 
               <div className="flex flex-col items-end pt-4 border-t border-slate-300 gap-1">
                 {(() => {
-                   const subTotal = selectedOrder.items.reduce((s, i) => s + (i.unitPrice * i.quantity), 0);
-                   const totalDiscount = selectedOrder.items.reduce((s, i) => s + (i.discount || 0), 0);
+                   const subTotal = (selectedOrder.items as OrderItem[]).reduce((s, i) => s + (i.unitPrice * i.quantity), 0);
+                   const totalDiscount = (selectedOrder.items as OrderItem[]).reduce((s, i) => s + (i.discount || 0), 0);
                    const totalPercent = subTotal > 0 ? (totalDiscount / subTotal) * 100 : 0;
                    
                    return (

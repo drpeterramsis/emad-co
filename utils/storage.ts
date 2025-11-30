@@ -1,4 +1,5 @@
 
+
 import { Product, Customer, Order, Transaction, OrderStatus, TransactionType, Provider, PaymentMethod } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_CUSTOMERS } from '../constants';
 import { supabase, isSupabaseEnabled } from '../services/supabaseClient';
@@ -102,6 +103,7 @@ export const getOrders = async (): Promise<Order[]> => {
       customerId: o.customer_id,
       // Robust check for draft status: use column if exists, otherwise fallback to status string
       isDraft: !!(o.is_draft || o.status === OrderStatus.DRAFT),
+      isReturn: !!o.is_return,
       draftMetadata: o.draft_metadata
     })) || [];
   }
@@ -110,7 +112,8 @@ export const getOrders = async (): Promise<Order[]> => {
   // Ensure consistency for LocalStorage
   return localOrders.map((o: any) => ({
     ...o,
-    isDraft: !!(o.isDraft || o.status === OrderStatus.DRAFT)
+    isDraft: !!(o.isDraft || o.status === OrderStatus.DRAFT),
+    isReturn: !!o.isReturn
   }));
 };
 
@@ -125,6 +128,7 @@ export const getOrder = async (orderId: string): Promise<Order | null> => {
       customerName: data.customer_name,
       customerId: data.customer_id,
       isDraft: !!(data.is_draft || data.status === OrderStatus.DRAFT),
+      isReturn: !!data.is_return,
       draftMetadata: data.draft_metadata
     };
   } else {
@@ -166,21 +170,36 @@ export const saveOrder = async (order: Order) => {
       paid_amount: order.paidAmount,
       status: order.status,
       notes: order.notes,
-      // Ensure we attempt to write draft fields. 
       is_draft: order.isDraft || false,
+      is_return: order.isReturn || false,
       draft_metadata: order.draftMetadata
     };
     
     const { error } = await supabase.from('orders').upsert(dbOrder);
     if (error) throw error;
 
-    // Only update stock if NOT a draft
+    // Handle Stock Updates
     if (!order.isDraft) {
       for (const item of order.items) {
-         const totalQty = item.quantity + (item.bonusQuantity || 0);
-         const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
-         if (prod) {
-           await supabase.from('products').update({ stock: prod.stock - totalQty }).eq('id', item.productId);
+         const qty = item.quantity + (item.bonusQuantity || 0);
+         let stockChange = 0;
+
+         if (order.isReturn) {
+            // If returning GOOD stock, we add it back.
+            // If returning EXPIRED stock, we do not add it back (it is discarded).
+            if (item.condition !== 'EXPIRED') {
+              stockChange = qty; // Add back
+            }
+         } else {
+            // Normal Sale: Reduce Stock
+            stockChange = -qty;
+         }
+
+         if (stockChange !== 0) {
+           const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
+           if (prod) {
+             await supabase.from('products').update({ stock: prod.stock + stockChange }).eq('id', item.productId);
+           }
          }
       }
     }
@@ -196,13 +215,21 @@ export const saveOrder = async (order: Order) => {
     }
     localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     
-    // Only update stock if NOT a draft and it's a new order
+    // Handle Stock Updates
     if (!order.isDraft && existingIndex === -1) {
       const products = await getProducts();
       order.items.forEach(item => {
         const pIndex = products.findIndex(p => p.id === item.productId);
         if (pIndex >= 0) {
-          products[pIndex].stock -= (item.quantity + (item.bonusQuantity || 0));
+          const qty = item.quantity + (item.bonusQuantity || 0);
+          
+          if (order.isReturn) {
+             if (item.condition !== 'EXPIRED') {
+                products[pIndex].stock += qty;
+             }
+          } else {
+             products[pIndex].stock -= qty;
+          }
         }
       });
       localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
@@ -222,6 +249,7 @@ export const updateOrder = async (order: Order) => {
       paid_amount: order.paidAmount,
       status: order.status,
       is_draft: order.isDraft,
+      is_return: order.isReturn,
       draft_metadata: order.draftMetadata
     };
     const { error } = await supabase.from('orders').update(dbOrder).eq('id', order.id);
@@ -241,15 +269,33 @@ export const deleteOrder = async (orderId: string) => {
   if (isSupabaseEnabled && supabase) {
     const { data: order } = await supabase.from('orders').select('*').eq('id', orderId).single();
     if (order) {
-      // Only restore stock if it wasn't a draft
+      // Restore/Adjust stock logic
       const isDraft = order.is_draft || order.status === OrderStatus.DRAFT;
+      const isReturn = order.is_return;
+
       if (!isDraft && order.items) {
         const items = order.items as any[];
         for (const item of items) {
-           const qtyToRestore = item.quantity + (item.bonusQuantity || 0);
-           const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
-           if (prod) {
-             await supabase.from('products').update({ stock: prod.stock + qtyToRestore }).eq('id', item.productId);
+           const qty = item.quantity + (item.bonusQuantity || 0);
+           let stockChange = 0;
+
+           if (isReturn) {
+              // If we are deleting a return, we must REVERSE the action.
+              // If it was GOOD, we added stock. So now we subtract it.
+              // If it was EXPIRED, we did nothing. So now we do nothing.
+              if (item.condition !== 'EXPIRED') {
+                 stockChange = -qty;
+              }
+           } else {
+              // If deleting a sale, we put stock back.
+              stockChange = qty;
+           }
+
+           if (stockChange !== 0) {
+              const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
+              if (prod) {
+                await supabase.from('products').update({ stock: prod.stock + stockChange }).eq('id', item.productId);
+              }
            }
         }
       }
@@ -262,12 +308,23 @@ export const deleteOrder = async (orderId: string) => {
     const orderToDelete = orders.find(o => o.id === orderId);
     
     if (orderToDelete) {
-      // Only restore stock if it wasn't a draft
+      // Stock Adjustment
       if (!orderToDelete.isDraft) {
         let products = await getProducts();
         orderToDelete.items.forEach(item => {
           const pIndex = products.findIndex(p => p.id === item.productId);
-          if (pIndex >= 0) products[pIndex].stock += (item.quantity + (item.bonusQuantity || 0));
+          if (pIndex >= 0) {
+             const qty = item.quantity + (item.bonusQuantity || 0);
+             if (orderToDelete.isReturn) {
+               // Reverse return: Take back stock if it was good
+               if (item.condition !== 'EXPIRED') {
+                  products[pIndex].stock -= qty;
+               }
+             } else {
+               // Reverse sale: Add back stock
+               products[pIndex].stock += qty;
+             }
+          }
         });
         localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
       }
@@ -302,8 +359,13 @@ export const addTransaction = async (transaction: Transaction) => {
         if (order) {
            const newPaid = (Number(order.paid_amount) || 0) + transaction.amount;
            let newStatus = order.status;
-           if (newPaid >= Number(order.total_amount)) newStatus = OrderStatus.PAID;
-           else if (newPaid > 0) newStatus = OrderStatus.PARTIAL;
+           // If return order (negative total), newPaid approaches total from 0 to negative.
+           // Standard logic: if paid >= total (abs values for returns maybe?)
+           // For simplicity, we just update paid amount. Status logic for Returns is usually immediate 'RETURNED'.
+           if (!order.is_return) {
+             if (newPaid >= Number(order.total_amount)) newStatus = OrderStatus.PAID;
+             else if (newPaid > 0) newStatus = OrderStatus.PARTIAL;
+           }
            await supabase.from('orders').update({ paid_amount: newPaid, status: newStatus }).eq('id', transaction.referenceId);
         }
      }
@@ -317,10 +379,12 @@ export const addTransaction = async (transaction: Transaction) => {
       if (orderIndex >= 0) {
         const order = orders[orderIndex];
         order.paidAmount += transaction.amount;
-        if (order.paidAmount >= order.totalAmount) {
-          order.status = OrderStatus.PAID;
-        } else if (order.paidAmount > 0) {
-          order.status = OrderStatus.PARTIAL;
+        if (!order.isReturn) {
+          if (order.paidAmount >= order.totalAmount) {
+            order.status = OrderStatus.PAID;
+          } else if (order.paidAmount > 0) {
+            order.status = OrderStatus.PARTIAL;
+          }
         }
         localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
       }
@@ -354,10 +418,16 @@ export const deleteTransaction = async (transactionId: string) => {
     if (txn.type === TransactionType.PAYMENT_RECEIVED && txn.reference_id) {
       const { data: order } = await supabase.from('orders').select('*').eq('id', txn.reference_id).single();
       if (order) {
-        const newPaid = Math.max(0, (Number(order.paid_amount) || 0) - Number(txn.amount));
-        let newStatus = OrderStatus.PENDING;
-        if (newPaid >= Number(order.total_amount)) newStatus = OrderStatus.PAID;
-        else if (newPaid > 0) newStatus = OrderStatus.PARTIAL;
+        // Adjust logic for returns? If return, paid amount might be negative (refunded).
+        // Assuming transactions for returns are strictly informational or refund payments.
+        // Simplified: just reverse the add.
+        const newPaid = (Number(order.paid_amount) || 0) - Number(txn.amount);
+        let newStatus = order.status;
+        if (!order.is_return) {
+           newStatus = OrderStatus.PENDING;
+           if (newPaid >= Number(order.total_amount)) newStatus = OrderStatus.PAID;
+           else if (newPaid > 0) newStatus = OrderStatus.PARTIAL;
+        }
         await supabase.from('orders').update({ paid_amount: newPaid, status: newStatus }).eq('id', txn.reference_id);
       }
     }
@@ -370,13 +440,15 @@ export const deleteTransaction = async (transactionId: string) => {
       const orders = await getOrders();
       const orderIndex = orders.findIndex(o => o.id === txn.referenceId);
       if (orderIndex >= 0) {
-        orders[orderIndex].paidAmount = Math.max(0, orders[orderIndex].paidAmount - txn.amount);
-        if (orders[orderIndex].paidAmount >= orders[orderIndex].totalAmount) {
-          orders[orderIndex].status = OrderStatus.PAID;
-        } else if (orders[orderIndex].paidAmount > 0) {
-          orders[orderIndex].status = OrderStatus.PARTIAL;
-        } else {
-          orders[orderIndex].status = OrderStatus.PENDING;
+        orders[orderIndex].paidAmount = orders[orderIndex].paidAmount - txn.amount;
+        if (!orders[orderIndex].isReturn) {
+          if (orders[orderIndex].paidAmount >= orders[orderIndex].totalAmount) {
+            orders[orderIndex].status = OrderStatus.PAID;
+          } else if (orders[orderIndex].paidAmount > 0) {
+            orders[orderIndex].status = OrderStatus.PARTIAL;
+          } else {
+            orders[orderIndex].status = OrderStatus.PENDING;
+          }
         }
         localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
       }
@@ -560,6 +632,7 @@ export const getFinancialStats = async () => {
   const orders = await getOrders();
   // Filter out drafts from sales stats
   const activeOrders = orders.filter(o => !o.isDraft && o.status !== OrderStatus.DRAFT);
+  // Total sales includes returns (which are negative amounts), so this represents Net Sales
   const totalSales = activeOrders.reduce((sum, o) => sum + o.totalAmount, 0);
 
   return { repCashOnHand, transferredToHQ, totalCollected, totalSales, totalExpenses };

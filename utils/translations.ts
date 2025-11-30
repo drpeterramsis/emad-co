@@ -88,6 +88,20 @@ export const translations = {
     defaultDiscount: 'Default Discount (%)',
     brickArea: 'Brick / Area',
     
+    // Returns
+    customerReturn: 'Customer Return',
+    returnSubtitle: 'Process expired or damaged product returns',
+    returnDate: 'Return Date',
+    returnItems: 'Returned Items',
+    condition: 'Condition',
+    expiredDamaged: 'Expired / Damaged',
+    goodStock: 'Valid / Restockable',
+    discardInventory: 'Discarded (No Stock Add)',
+    returnToStock: 'Added to Inventory',
+    totalCredit: 'Total Refund Credit',
+    creditAmt: 'Credit',
+    processReturn: 'Process Return',
+    
     // Collections
     collectionsTitle: 'Collections & Deposits',
     collectionsSubtitle: 'Manage payments, history, and HQ transfers',
@@ -336,6 +350,20 @@ export const translations = {
     saving: 'جاري الحفظ...',
     defaultDiscount: 'الخصم الافتراضي (%)',
     brickArea: 'المنطقة / المربع',
+    
+    // Returns
+    customerReturn: 'مرتجع عميل',
+    returnSubtitle: 'تسجيل مرتجعات المنتجات المنتهية الصلاحية أو التالفة',
+    returnDate: 'تاريخ الإرجاع',
+    returnItems: 'الأصناف المرجعة',
+    condition: 'الحالة',
+    expiredDamaged: 'منتهي الصلاحية / تالف',
+    goodStock: 'صالح / قابل للبيع',
+    discardInventory: 'إتلاف (لا يضاف للمخزون)',
+    returnToStock: 'إضافة للمخزون',
+    totalCredit: 'إجمالي الاسترداد',
+    creditAmt: 'رصيد',
+    processReturn: 'تسجيل المرتجع',
     
     // Collections
     collectionsTitle: 'التحصيلات والإيداعات',

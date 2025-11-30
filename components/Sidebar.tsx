@@ -12,7 +12,8 @@ import {
   ChevronRight,
   FileSpreadsheet,
   Globe,
-  Pill
+  Pill,
+  RotateCcw
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -31,6 +32,7 @@ const Sidebar = ({ user, onLogout, isCollapsed, toggleSidebar, isMobile }: Sideb
   const navItems = [
     { to: '/', icon: LayoutDashboard, label: t('dashboard') },
     { to: '/new-order', icon: ShoppingCart, label: t('newSale') },
+    { to: '/returns', icon: RotateCcw, label: t('customerReturn') },
     { to: '/invoices', icon: FileText, label: t('invoices') },
     { to: '/collections', icon: Briefcase, label: t('collections') },
     { to: '/inventory', icon: Package, label: t('inventory') },

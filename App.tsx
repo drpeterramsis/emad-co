@@ -10,6 +10,7 @@ import Customers from './pages/Customers';
 import BillGenerator from './pages/BillGenerator';
 import Analysis from './pages/Analysis';
 import Login from './pages/Login';
+import Returns from './pages/Returns';
 import { initStorage } from './utils/storage';
 import { UserProfile } from './types';
 import { Menu, Pill } from 'lucide-react';
@@ -120,6 +121,7 @@ const AppContent = () => {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/new-order" element={<NewOrder />} />
+              <Route path="/returns" element={<Returns />} />
               <Route path="/invoices" element={<InvoiceList />} />
               <Route path="/collections" element={<Collections />} />
               <Route path="/inventory" element={<Inventory />} />
@@ -140,7 +142,7 @@ const AppContent = () => {
               <span className="text-slate-500 hidden sm:inline">|</span>
               <span className="text-[10px] text-slate-500 opacity-75 hover:opacity-100 transition-opacity cursor-default" title="Developer">Dev by Dr. Peter Ramsis</span>
             </div>
-            <span className="font-mono font-medium">v2.0.043</span>
+            <span className="font-mono font-medium">v2.0.044</span>
           </footer>
         </main>
       </div>

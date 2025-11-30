@@ -231,11 +231,11 @@ const NewOrder = () => {
     setShowCustomerList(false);
   };
 
-  // Filter Logic
+  // Filter Logic - Updated to sort by stock DESC
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
     p.basePrice.toString().includes(productSearch)
-  );
+  ).sort((a, b) => b.stock - a.stock);
 
   const filteredCustomers = customers.filter(c => 
     c.name.toLowerCase().includes(customerSearch.toLowerCase())

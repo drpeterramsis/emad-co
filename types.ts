@@ -68,6 +68,7 @@ export interface OrderItem {
   subtotal: number;
   paidQuantity?: number; // How many units have been paid for
   batchNumber?: string; // For Draft Bills
+  condition?: 'GOOD' | 'EXPIRED'; // For Returns
 }
 
 export interface Order {
@@ -81,6 +82,7 @@ export interface Order {
   status: OrderStatus;
   notes?: string;
   isDraft?: boolean; // If true, excluded from financials/stock
+  isReturn?: boolean; // If true, represents a credit note/return
   draftMetadata?: {
     heading?: string;
     subheading?: string;

@@ -4,6 +4,7 @@ import { Product, Provider, PaymentMethod, Transaction, TransactionType } from '
 import { Package, AlertTriangle, Loader2, Plus, Edit2, ShoppingBag, Truck, Building2, Calendar, DollarSign, History } from 'lucide-react';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import LoadingOverlay from '../components/LoadingOverlay';
+import ProviderModal from '../components/ProviderModal';
 
 const Inventory = () => {
   const [activeTab, setActiveTab] = useState<'products' | 'purchases' | 'providers'>('products');
@@ -18,19 +19,11 @@ const Inventory = () => {
   const [showProviderModal, setShowProviderModal] = useState(false);
   const [showRestockModal, setShowRestockModal] = useState(false);
 
-  // Quick Add Provider State
-  const [showQuickProvider, setShowQuickProvider] = useState(false);
-  const [quickProvName, setQuickProvName] = useState('');
-
   // Form States
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [prodName, setProdName] = useState('');
   const [prodPrice, setProdPrice] = useState('');
   const [prodStock, setProdStock] = useState('');
-
-  const [providerName, setProviderName] = useState('');
-  const [providerContact, setProviderContact] = useState('');
-  const [providerBank, setProviderBank] = useState('');
 
   const [restockProdId, setRestockProdId] = useState('');
   const [restockQty, setRestockQty] = useState('');
@@ -89,52 +82,14 @@ const Inventory = () => {
     }
   };
 
-  const handleSaveProvider = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setProcessing(true);
-    try {
-      await addProvider({
-        id: `PROV-${Date.now()}`,
-        name: providerName,
-        contactInfo: providerContact,
-        bankDetails: providerBank
-      });
-      await fetchData();
-      setShowProviderModal(false);
-      setProviderName('');
-      setProviderContact('');
-      setProviderBank('');
-    } catch (err) {
-      console.error(err);
-      alert('Failed to save provider');
-    } finally {
-      setProcessing(false);
+  const handleSaveProvider = async (provider: Provider) => {
+    await addProvider(provider);
+    // If we are in restock modal (indirectly checking if restockProdId is set), auto-select
+    if (showRestockModal) {
+      setRestockProvider(provider.id);
     }
-  };
-
-  const handleQuickAddProvider = async () => {
-    if (!quickProvName) return;
-    setProcessing(true);
-    try {
-      const newId = `PROV-${Date.now()}`;
-      await addProvider({
-        id: newId,
-        name: quickProvName,
-        contactInfo: '',
-        bankDetails: ''
-      });
-      // Refresh providers only
-      const prov = await getProviders();
-      setProviders(prov);
-      setRestockProvider(newId); // Select it
-      setShowQuickProvider(false);
-      setQuickProvName('');
-    } catch (err) {
-      console.error(err);
-      alert('Failed to add provider');
-    } finally {
-      setProcessing(false);
-    }
+    await fetchData();
+    setShowProviderModal(false);
   };
 
   const handleOpenRestock = (product: Product) => {
@@ -176,30 +131,30 @@ const Inventory = () => {
   }
 
   return (
-    <div className="p-8 pb-24">
+    <div className="p-4 md:p-8 pb-24">
       {processing && <LoadingOverlay />}
       
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-slate-800">Inventory Management</h2>
+          <h2 className="text-2xl md:text-3xl font-bold text-slate-800">Inventory Management</h2>
           <p className="text-slate-500">Stock, Purchasing & Providers</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 w-full md:w-auto">
             <button 
               onClick={() => setActiveTab('products')} 
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'products' ? 'bg-primary text-white' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'}`}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'products' ? 'bg-primary text-white' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'}`}
             >
               Products
             </button>
             <button 
               onClick={() => setActiveTab('purchases')} 
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'purchases' ? 'bg-primary text-white' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'}`}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'purchases' ? 'bg-primary text-white' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'}`}
             >
               Purchases History
             </button>
             <button 
               onClick={() => setActiveTab('providers')} 
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'providers' ? 'bg-primary text-white' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'}`}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'providers' ? 'bg-primary text-white' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'}`}
             >
               Providers
             </button>
@@ -247,7 +202,7 @@ const Inventory = () => {
                   </div>
                   
                   {/* Hover Actions */}
-                  <div className="absolute inset-x-0 bottom-0 bg-white/95 border-t border-slate-100 p-3 flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity rounded-b-xl">
+                  <div className="absolute inset-x-0 bottom-0 bg-white/95 border-t border-slate-100 p-3 flex justify-between items-center md:opacity-0 md:group-hover:opacity-100 transition-opacity rounded-b-xl">
                       <button 
                         onClick={() => handleOpenProductModal(product)}
                         className="text-slate-500 hover:text-blue-600 text-xs font-medium flex items-center gap-1 px-2 py-1"
@@ -302,35 +257,37 @@ const Inventory = () => {
 
       {activeTab === 'purchases' && (
          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <table className="w-full text-left">
-               <thead className="bg-slate-50 border-b border-slate-200">
-                 <tr>
-                   <th className="p-4 font-medium text-slate-600">Date</th>
-                   <th className="p-4 font-medium text-slate-600">Description</th>
-                   <th className="p-4 font-medium text-slate-600">Provider</th>
-                   <th className="p-4 font-medium text-slate-600">Method</th>
-                   <th className="p-4 font-medium text-slate-600 text-right">Cost</th>
-                 </tr>
-               </thead>
-               <tbody className="divide-y divide-slate-100">
-                  {purchases.map(txn => (
-                    <tr key={txn.id} className="hover:bg-slate-50">
-                       <td className="p-4 text-slate-600">{formatDate(txn.date)}</td>
-                       <td className="p-4 font-medium text-slate-800">{txn.description}</td>
-                       <td className="p-4 text-slate-600">{txn.providerName || '-'}</td>
-                       <td className="p-4 text-xs">
-                          <span className={`px-2 py-1 rounded border ${txn.paymentMethod === PaymentMethod.CASH ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
-                             {txn.paymentMethod === PaymentMethod.CASH ? 'Cash from Rep' : 'HQ Bank Transfer'}
-                          </span>
-                       </td>
-                       <td className="p-4 text-right font-bold text-red-600">{formatCurrency(txn.amount)}</td>
-                    </tr>
-                  ))}
-                  {purchases.length === 0 && (
-                    <tr><td colSpan={5} className="p-8 text-center text-slate-400">No purchase history found.</td></tr>
-                  )}
-               </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                 <thead className="bg-slate-50 border-b border-slate-200">
+                   <tr>
+                     <th className="p-4 font-medium text-slate-600">Date</th>
+                     <th className="p-4 font-medium text-slate-600">Description</th>
+                     <th className="p-4 font-medium text-slate-600">Provider</th>
+                     <th className="p-4 font-medium text-slate-600">Method</th>
+                     <th className="p-4 font-medium text-slate-600 text-right">Cost</th>
+                   </tr>
+                 </thead>
+                 <tbody className="divide-y divide-slate-100">
+                    {purchases.map(txn => (
+                      <tr key={txn.id} className="hover:bg-slate-50">
+                         <td className="p-4 text-slate-600">{formatDate(txn.date)}</td>
+                         <td className="p-4 font-medium text-slate-800">{txn.description}</td>
+                         <td className="p-4 text-slate-600">{txn.providerName || '-'}</td>
+                         <td className="p-4 text-xs">
+                            <span className={`px-2 py-1 rounded border ${txn.paymentMethod === PaymentMethod.CASH ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                               {txn.paymentMethod === PaymentMethod.CASH ? 'Cash from Rep' : 'HQ Bank Transfer'}
+                            </span>
+                         </td>
+                         <td className="p-4 text-right font-bold text-red-600">{formatCurrency(txn.amount)}</td>
+                      </tr>
+                    ))}
+                    {purchases.length === 0 && (
+                      <tr><td colSpan={5} className="p-8 text-center text-slate-400">No purchase history found.</td></tr>
+                    )}
+                 </tbody>
+              </table>
+            </div>
          </div>
       )}
 
@@ -365,32 +322,12 @@ const Inventory = () => {
         </div>
       )}
 
-      {/* Provider Modal */}
-      {showProviderModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-           <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl">
-              <h3 className="text-xl font-bold mb-4">Add Provider</h3>
-              <form onSubmit={handleSaveProvider} className="space-y-4">
-                 <div>
-                    <label className="block text-sm font-medium mb-1">Provider Name</label>
-                    <input type="text" required value={providerName} onChange={e => setProviderName(e.target.value)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"/>
-                 </div>
-                 <div>
-                    <label className="block text-sm font-medium mb-1">Contact Info</label>
-                    <input type="text" value={providerContact} onChange={e => setProviderContact(e.target.value)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary" placeholder="Phone, Email, Address"/>
-                 </div>
-                 <div>
-                    <label className="block text-sm font-medium mb-1">Bank Details</label>
-                    <input type="text" value={providerBank} onChange={e => setProviderBank(e.target.value)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary" placeholder="IBAN, Acct #"/>
-                 </div>
-                 <div className="flex justify-end gap-3 mt-4">
-                    <button type="button" onClick={() => setShowProviderModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
-                    <button type="submit" className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-teal-800">Save Provider</button>
-                 </div>
-              </form>
-           </div>
-        </div>
-      )}
+      {/* Provider Modal (Shared Component) */}
+      <ProviderModal 
+        isOpen={showProviderModal}
+        onClose={() => setShowProviderModal(false)}
+        onSave={handleSaveProvider}
+      />
 
       {/* Restock Modal */}
       {showRestockModal && (
@@ -399,76 +336,56 @@ const Inventory = () => {
               <h3 className="text-xl font-bold mb-2">Restock Product</h3>
               <p className="text-sm text-slate-500 mb-4">Purchase inventory and record expense</p>
               
-              {!showQuickProvider ? (
-                <form onSubmit={handleRestock} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Quantity</label>
-                        <input type="number" required value={restockQty} onChange={e => setRestockQty(e.target.value)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"/>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-1">Total Cost (EGP)</label>
-                        <input type="number" required value={restockCost} onChange={e => setRestockCost(e.target.value)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"/>
-                      </div>
-                  </div>
-
-                  <div>
-                      <div className="flex justify-between items-center mb-1">
-                        <label className="block text-sm font-medium">Provider</label>
-                        <button 
-                          type="button" 
-                          onClick={() => setShowQuickProvider(true)}
-                          className="text-xs text-primary hover:underline flex items-center gap-1"
-                        >
-                          <Plus size={12}/> New
-                        </button>
-                      </div>
-                      <select required value={restockProvider} onChange={e => setRestockProvider(e.target.value)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary bg-white">
-                        <option value="">Select Provider...</option>
-                        {providers.map(p => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
-                      </select>
-                      {providers.length === 0 && <p className="text-xs text-red-500 mt-1">Please add a provider.</p>}
-                  </div>
-
-                  <div>
-                      <label className="block text-sm font-medium mb-1">Payment Method</label>
-                      <select required value={restockMethod} onChange={e => setRestockMethod(e.target.value as PaymentMethod)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary bg-white">
-                        <option value={PaymentMethod.BANK_TRANSFER}>HQ Bank Transfer</option>
-                        <option value={PaymentMethod.CASH}>Cash from Rep (Deduct from Cash on Hand)</option>
-                      </select>
-                  </div>
-
-                  <div>
-                      <label className="block text-sm font-medium mb-1">Date</label>
-                      <input type="date" required value={restockDate} onChange={e => setRestockDate(e.target.value)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"/>
-                  </div>
-
-                  <div className="flex justify-end gap-3 mt-4">
-                      <button type="button" onClick={() => setShowRestockModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
-                      <button type="submit" disabled={providers.length === 0} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-teal-800 disabled:opacity-50">Confirm Purchase</button>
-                  </div>
-                </form>
-              ) : (
-                <div className="space-y-4 border border-slate-200 p-4 rounded-lg bg-slate-50">
-                   <h4 className="font-bold text-slate-800">Quick Add Provider</h4>
-                   <div>
-                      <label className="block text-sm font-medium mb-1">Provider Name</label>
-                      <input 
-                        type="text" 
-                        autoFocus
-                        value={quickProvName}
-                        onChange={(e) => setQuickProvName(e.target.value)}
-                        className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"
-                      />
-                   </div>
-                   <div className="flex justify-end gap-3 pt-2">
-                      <button type="button" onClick={() => setShowQuickProvider(false)} className="px-3 py-1.5 text-slate-600 text-sm hover:bg-slate-200 rounded">Cancel</button>
-                      <button type="button" onClick={handleQuickAddProvider} className="px-3 py-1.5 bg-primary text-white text-sm rounded hover:bg-teal-800">Save & Select</button>
-                   </div>
+              <form onSubmit={handleRestock} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Quantity</label>
+                      <input type="number" required value={restockQty} onChange={e => setRestockQty(e.target.value)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"/>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Total Cost (EGP)</label>
+                      <input type="number" required value={restockCost} onChange={e => setRestockCost(e.target.value)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"/>
+                    </div>
                 </div>
-              )}
+
+                <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-sm font-medium">Provider</label>
+                      <button 
+                        type="button" 
+                        onClick={() => setShowProviderModal(true)}
+                        className="text-xs text-primary hover:underline flex items-center gap-1"
+                      >
+                        <Plus size={12}/> New
+                      </button>
+                    </div>
+                    <select required value={restockProvider} onChange={e => setRestockProvider(e.target.value)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary bg-white">
+                      <option value="">Select Provider...</option>
+                      {providers.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                    {providers.length === 0 && <p className="text-xs text-red-500 mt-1">Please add a provider.</p>}
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium mb-1">Payment Method</label>
+                    <select required value={restockMethod} onChange={e => setRestockMethod(e.target.value as PaymentMethod)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary bg-white">
+                      <option value={PaymentMethod.BANK_TRANSFER}>HQ Bank Transfer</option>
+                      <option value={PaymentMethod.CASH}>Cash from Rep (Deduct from Cash on Hand)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium mb-1">Date</label>
+                    <input type="date" required value={restockDate} onChange={e => setRestockDate(e.target.value)} className="w-full p-2 border rounded-lg outline-none focus:ring-2 focus:ring-primary"/>
+                </div>
+
+                <div className="flex justify-end gap-3 mt-4">
+                    <button type="button" onClick={() => setShowRestockModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+                    <button type="submit" disabled={providers.length === 0} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-teal-800 disabled:opacity-50">Confirm Purchase</button>
+                </div>
+              </form>
            </div>
         </div>
       )}

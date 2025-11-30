@@ -224,15 +224,15 @@ const NewOrder = () => {
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto pb-24">
+    <div className="p-4 md:p-8 max-w-7xl mx-auto pb-24">
       {isSubmitting && <LoadingOverlay />}
       
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h2 className="text-3xl font-bold text-slate-800">
+          <h2 className="text-2xl md:text-3xl font-bold text-slate-800">
             {editOrderId ? 'Edit Sales Order' : 'New Sales Order'}
           </h2>
-          <p className="text-slate-500">
+          <p className="text-slate-500 text-sm">
             {editOrderId ? 'Modify transaction details' : 'Record a transaction for a customer'}
           </p>
         </div>
@@ -346,7 +346,7 @@ const NewOrder = () => {
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="p-3 font-medium text-slate-600">Product</th>
+                  <th className="p-3 font-medium text-slate-600 min-w-[150px]">Product</th>
                   <th className="p-3 font-medium text-slate-600 w-24">Price</th>
                   <th className="p-3 font-medium text-slate-600 w-20">Qty</th>
                   <th className="p-3 font-medium text-slate-600 w-20 text-orange-600">Bounce</th>

@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { getOrders, addTransaction, getFinancialStats, updateOrder, getTransactions, deleteTransaction, updateTransaction } from '../utils/storage';
-import { Order, TransactionType, OrderStatus, DashboardStats, Transaction, PaymentMethod } from '../types';
+import { getOrders, addTransaction, getFinancialStats, updateOrder, getTransactions, deleteTransaction, updateTransaction, getProviders, addProvider } from '../utils/storage';
+import { Order, TransactionType, OrderStatus, DashboardStats, Transaction, PaymentMethod, Provider } from '../types';
 import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search, Calendar, CheckSquare, X, History, FileText, Trash2, Edit2, TrendingDown, TrendingUp, Eye, Plus, Printer } from 'lucide-react';
 import { formatDate, formatCurrency } from '../utils/helpers';
+import ProviderModal from '../components/ProviderModal';
 
 const Collections = () => {
   const [activeTab, setActiveTab] = useState<'pending' | 'history' | 'deposits' | 'statement'>('pending');
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -35,9 +37,14 @@ const Collections = () => {
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split('T')[0]);
   const [expenseMethod, setExpenseMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
+  const [expenseProvider, setExpenseProvider] = useState('');
+
+  // Provider Modal State for Expenses
+  const [showProviderModal, setShowProviderModal] = useState(false);
   
   // Itemized Payment State
   const [selectedOrderForPayment, setSelectedOrderForPayment] = useState<Order | null>(null);
+  const [selectedOrderHistory, setSelectedOrderHistory] = useState<Transaction[]>([]);
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentItems, setPaymentItems] = useState<{index: number, payQty: number, selected: boolean}[]>([]);
   const [actualCollectedAmount, setActualCollectedAmount] = useState<string>('');
@@ -53,14 +60,16 @@ const Collections = () => {
 
   const refreshData = async () => {
     setLoading(true);
-    const [fetchedOrders, fetchedStats, fetchedTxns] = await Promise.all([
+    const [fetchedOrders, fetchedStats, fetchedTxns, fetchedProviders] = await Promise.all([
       getOrders(),
       getFinancialStats(),
-      getTransactions()
+      getTransactions(),
+      getProviders()
     ]);
     setOrders(fetchedOrders);
     setStats(fetchedStats);
     setTransactions(fetchedTxns.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    setProviders(fetchedProviders);
     setLoading(false);
   };
 
@@ -77,6 +86,13 @@ const Collections = () => {
   const openPaymentModal = (order: Order) => {
     setSelectedOrderForPayment(order);
     setPaymentDate(new Date().toISOString().split('T')[0]);
+    
+    // Fetch History
+    const history = transactions
+      .filter(t => t.referenceId === order.id && t.type === TransactionType.PAYMENT_RECEIVED)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    setSelectedOrderHistory(history);
+
     const initItems = order.items.map((item, idx) => ({
       index: idx,
       payQty: item.quantity - (item.paidQuantity || 0),
@@ -230,20 +246,35 @@ const Collections = () => {
       return;
     }
 
+    const provider = providers.find(p => p.id === expenseProvider);
+
     await addTransaction({
       id: `TXN-${Date.now()}`,
       type: TransactionType.EXPENSE,
       amount: amount,
       date: expenseDate,
       description: expenseDesc || 'General Expense',
-      paymentMethod: expenseMethod
+      paymentMethod: expenseMethod,
+      providerId: expenseProvider || undefined,
+      providerName: provider?.name || undefined
     });
 
     setShowExpenseModal(false);
     setExpenseAmount('');
     setExpenseDesc('');
+    setExpenseProvider('');
     await refreshData();
   };
+
+  const handleSaveNewProvider = async (newProvider: Provider) => {
+    await addProvider(newProvider);
+    // Refresh providers list locally
+    const updated = await getProviders();
+    setProviders(updated);
+    // Auto select
+    setExpenseProvider(newProvider.id);
+    setShowProviderModal(false);
+  }
 
   /* --- DATA FILTERS & CALCULATIONS --- */
   const unpaidOrders = orders
@@ -278,10 +309,6 @@ const Collections = () => {
   const depositHistory = transactions.filter(t => t.type === TransactionType.DEPOSIT_TO_HQ);
   
   // Statement Data Preparation
-  // 1. Get raw chronological transactions for statement
-  // Include ALL types that affect cash or are relevant: Payments, Deposits, Expenses (Cash).
-  // Note: Non-cash expenses (Bank Transfer) don't affect Rep Cash Hand, but user might want to see them in a general report?
-  // The "Cash Statement" usually refers to the Rep's Cash Hand ledger. So filtering by Method=CASH for expenses.
   const rawStatementTxns = transactions
     .filter(t => 
       t.type === TransactionType.PAYMENT_RECEIVED || 
@@ -296,26 +323,23 @@ const Collections = () => {
 
   if (statementStart) {
     const start = new Date(statementStart).getTime();
-    // Calculate opening balance from transactions BEFORE start date
     const preTxns = rawStatementTxns.filter(t => new Date(t.date).getTime() < start);
     preTxns.forEach(t => {
       if (t.type === TransactionType.PAYMENT_RECEIVED) openingBalance += t.amount;
       else openingBalance -= t.amount;
     });
 
-    // Filter current view
     statementTxns = rawStatementTxns.filter(t => {
        const d = new Date(t.date).getTime();
        let matchEnd = true;
-       if (statementEnd) matchEnd = d <= new Date(statementEnd).getTime() + 86400000; // End of day roughly
+       if (statementEnd) matchEnd = d <= new Date(statementEnd).getTime() + 86400000;
        return d >= start && matchEnd;
     });
   } else if (statementEnd) {
-     // Only end date?
      statementTxns = rawStatementTxns.filter(t => new Date(t.date).getTime() <= new Date(statementEnd).getTime());
   }
 
-  // 2. Calculate Balance & Enrich Data
+  // Calculate Balance & Enrich Data
   let runningBalance = openingBalance;
   const enrichedStatementData = statementTxns.map(txn => {
     const isCredit = txn.type === TransactionType.PAYMENT_RECEIVED;
@@ -341,7 +365,7 @@ const Collections = () => {
     };
   });
 
-  // 3. Apply Filters
+  // Apply Filters
   const filteredStatementData = enrichedStatementData.filter(txn => {
     const search = searchStatement.toLowerCase();
     return (
@@ -354,7 +378,7 @@ const Collections = () => {
 
   // Calculate Monthly Report Stats
   const getMonthlyReport = () => {
-     const monthFilter = historyMonth || new Date().toISOString().slice(0, 7); // Default to current or selected
+     const monthFilter = historyMonth || new Date().toISOString().slice(0, 7); 
      
      const collected = transactions
         .filter(t => t.type === TransactionType.PAYMENT_RECEIVED && t.date.startsWith(monthFilter))
@@ -379,20 +403,20 @@ const Collections = () => {
   }
 
   return (
-    <div className="p-8 pb-24">
+    <div className="p-4 md:p-8 pb-24">
       {/* Top Header & Report */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 print:hidden">
         <div>
-          <h2 className="text-3xl font-bold text-slate-800">Collections & Deposits</h2>
-          <p className="text-slate-500">Manage payments, history, and HQ transfers</p>
+          <h2 className="text-2xl md:text-3xl font-bold text-slate-800">Collections & Deposits</h2>
+          <p className="text-slate-500 text-sm md:text-base">Manage payments, history, and HQ transfers</p>
         </div>
         
-        <div className="flex gap-4">
+        <div className="flex flex-wrap gap-4">
            <button 
              onClick={() => setShowExpenseModal(true)}
-             className="bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded-lg hover:bg-red-100 flex items-center gap-2"
+             className="bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded-lg hover:bg-red-100 flex items-center gap-2 text-sm md:text-base"
            >
-              <Plus size={18}/> Add General Expense
+              <Plus size={18}/> Add Expense
            </button>
            
            {/* Cash on Hand Card */}
@@ -415,17 +439,17 @@ const Collections = () => {
                <p className="text-slate-300 text-sm">Summary for {report.month}</p>
             </div>
          </div>
-         <div className="flex gap-8">
+         <div className="flex gap-8 w-full md:w-auto justify-between md:justify-end">
             <div className="text-right">
                <p className="text-xs text-slate-400 uppercase font-bold">Total Collected</p>
                <p className="text-xl font-bold text-teal-400">{formatCurrency(report.collected)}</p>
             </div>
             <div className="text-right border-l border-white/10 pl-8">
-               <p className="text-xs text-slate-400 uppercase font-bold">Deposited to HQ</p>
+               <p className="text-xs text-slate-400 uppercase font-bold">Deposited</p>
                <p className="text-xl font-bold text-blue-400">{formatCurrency(report.deposited)}</p>
             </div>
             <div className="text-right border-l border-white/10 pl-8">
-               <p className="text-xs text-slate-400 uppercase font-bold">Net Difference</p>
+               <p className="text-xs text-slate-400 uppercase font-bold">Net</p>
                <p className="text-xl font-bold text-white">{formatCurrency(report.collected - report.deposited)}</p>
             </div>
          </div>
@@ -479,43 +503,45 @@ const Collections = () => {
            </div>
 
            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <table className="w-full text-left">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  <th className="p-4 font-medium text-slate-600">Invoice ID</th>
-                  <th className="p-4 font-medium text-slate-600">Customer</th>
-                  <th className="p-4 font-medium text-slate-600">Date</th>
-                  <th className="p-4 font-medium text-slate-600">Total</th>
-                  <th className="p-4 font-medium text-slate-600">Paid</th>
-                  <th className="p-4 font-medium text-slate-600">Balance</th>
-                  <th className="p-4 font-medium text-slate-600 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {unpaidOrders.length === 0 ? (
-                   <tr><td colSpan={7} className="p-8 text-center text-slate-400">All invoices paid or no matches!</td></tr>
-                ) : (
-                  unpaidOrders.map(order => {
-                    const balance = order.totalAmount - order.paidAmount;
-                    return (
-                      <tr key={order.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-4 font-mono text-xs">{order.id}</td>
-                        <td className="p-4 font-medium text-slate-800">{order.customerName}</td>
-                        <td className="p-4 text-slate-600">{formatDate(order.date)}</td>
-                        <td className="p-4">{formatCurrency(order.totalAmount)}</td>
-                        <td className="p-4 text-green-600 font-medium">{formatCurrency(order.paidAmount)}</td>
-                        <td className="p-4 font-bold text-red-500">{formatCurrency(balance)}</td>
-                        <td className="p-4 text-right">
-                          <button onClick={() => openPaymentModal(order)} className="text-xs bg-primary text-white px-3 py-1.5 rounded hover:bg-teal-800 shadow-sm">
-                            Record Payment
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="p-4 font-medium text-slate-600">Invoice ID</th>
+                    <th className="p-4 font-medium text-slate-600">Customer</th>
+                    <th className="p-4 font-medium text-slate-600">Date</th>
+                    <th className="p-4 font-medium text-slate-600">Total</th>
+                    <th className="p-4 font-medium text-slate-600">Paid</th>
+                    <th className="p-4 font-medium text-slate-600">Balance</th>
+                    <th className="p-4 font-medium text-slate-600 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {unpaidOrders.length === 0 ? (
+                     <tr><td colSpan={7} className="p-8 text-center text-slate-400">All invoices paid or no matches!</td></tr>
+                  ) : (
+                    unpaidOrders.map(order => {
+                      const balance = order.totalAmount - order.paidAmount;
+                      return (
+                        <tr key={order.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="p-4 font-mono text-xs">{order.id}</td>
+                          <td className="p-4 font-medium text-slate-800">{order.customerName}</td>
+                          <td className="p-4 text-slate-600">{formatDate(order.date)}</td>
+                          <td className="p-4">{formatCurrency(order.totalAmount)}</td>
+                          <td className="p-4 text-green-600 font-medium">{formatCurrency(order.paidAmount)}</td>
+                          <td className="p-4 font-bold text-red-500">{formatCurrency(balance)}</td>
+                          <td className="p-4 text-right">
+                            <button onClick={() => openPaymentModal(order)} className="text-xs bg-primary text-white px-3 py-1.5 rounded hover:bg-teal-800 shadow-sm">
+                              Record Payment
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -540,38 +566,40 @@ const Collections = () => {
            </div>
 
            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-             <table className="w-full text-left">
-               <thead className="bg-slate-50 border-b border-slate-200">
-                 <tr>
-                   <th className="p-4 font-medium text-slate-600">Date</th>
-                   <th className="p-4 font-medium text-slate-600">Ref ID</th>
-                   <th className="p-4 font-medium text-slate-600">Customer / Description</th>
-                   <th className="p-4 font-medium text-slate-600 text-right">Amount</th>
-                 </tr>
-               </thead>
-               <tbody className="divide-y divide-slate-100">
-                 {collectionHistory.length === 0 ? (
-                    <tr><td colSpan={4} className="p-8 text-center text-slate-400">No history found.</td></tr>
-                 ) : (
-                   collectionHistory.map(txn => {
-                     const order = orders.find(o => o.id === txn.referenceId);
-                     return (
-                       <tr key={txn.id} className="hover:bg-slate-50">
-                         <td className="p-4 text-slate-600">{formatDate(txn.date)}</td>
-                         <td className="p-4 font-mono text-xs text-slate-500">{txn.referenceId || '-'}</td>
-                         <td className="p-4">
-                            <p className="font-medium text-slate-800">{order?.customerName || 'Unknown'}</p>
-                            <p className="text-xs text-slate-500">{txn.description}</p>
-                         </td>
-                         <td className="p-4 text-right font-bold text-teal-600">
-                           {formatCurrency(txn.amount)}
-                         </td>
-                       </tr>
-                     )
-                   })
-                 )}
-               </tbody>
-             </table>
+             <div className="overflow-x-auto">
+               <table className="w-full text-left">
+                 <thead className="bg-slate-50 border-b border-slate-200">
+                   <tr>
+                     <th className="p-4 font-medium text-slate-600">Date</th>
+                     <th className="p-4 font-medium text-slate-600">Ref ID</th>
+                     <th className="p-4 font-medium text-slate-600">Customer / Description</th>
+                     <th className="p-4 font-medium text-slate-600 text-right">Amount</th>
+                   </tr>
+                 </thead>
+                 <tbody className="divide-y divide-slate-100">
+                   {collectionHistory.length === 0 ? (
+                      <tr><td colSpan={4} className="p-8 text-center text-slate-400">No history found.</td></tr>
+                   ) : (
+                     collectionHistory.map(txn => {
+                       const order = orders.find(o => o.id === txn.referenceId);
+                       return (
+                         <tr key={txn.id} className="hover:bg-slate-50">
+                           <td className="p-4 text-slate-600">{formatDate(txn.date)}</td>
+                           <td className="p-4 font-mono text-xs text-slate-500">{txn.referenceId || '-'}</td>
+                           <td className="p-4">
+                              <p className="font-medium text-slate-800">{order?.customerName || 'Unknown'}</p>
+                              <p className="text-xs text-slate-500">{txn.description}</p>
+                           </td>
+                           <td className="p-4 text-right font-bold text-teal-600">
+                             {formatCurrency(txn.amount)}
+                           </td>
+                         </tr>
+                       )
+                     })
+                   )}
+                 </tbody>
+               </table>
+             </div>
            </div>
         </div>
       )}
@@ -589,45 +617,47 @@ const Collections = () => {
            </div>
 
            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-             <table className="w-full text-left">
-               <thead className="bg-slate-50 border-b border-slate-200">
-                 <tr>
-                   <th className="p-4 font-medium text-slate-600">Deposit Date</th>
-                   <th className="p-4 font-medium text-slate-600">Description</th>
-                   <th className="p-4 font-medium text-slate-600">Amount</th>
-                   <th className="p-4 font-medium text-slate-600 text-right">Actions</th>
-                 </tr>
-               </thead>
-               <tbody className="divide-y divide-slate-100">
-                 {depositHistory.length === 0 ? (
-                    <tr><td colSpan={4} className="p-8 text-center text-slate-400">No deposits found.</td></tr>
-                 ) : (
-                   depositHistory.map(txn => (
-                     <tr key={txn.id} className="hover:bg-slate-50">
-                       <td className="p-4 text-slate-600">{formatDate(txn.date)}</td>
-                       <td className="p-4 text-slate-800">{txn.description}</td>
-                       <td className="p-4 font-bold text-slate-800">{formatCurrency(txn.amount)}</td>
-                       <td className="p-4 text-right flex justify-end gap-2">
-                          <button 
-                            onClick={() => openDepositModal(txn)}
-                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-                            title="Edit Deposit"
-                          >
-                             <Edit2 size={16} />
-                          </button>
-                          <button 
-                            onClick={() => handleDeleteDeposit(txn.id)}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
-                            title="Return/Delete Deposit"
-                          >
-                             <Trash2 size={16} />
-                          </button>
-                       </td>
-                     </tr>
-                   ))
-                 )}
-               </tbody>
-             </table>
+             <div className="overflow-x-auto">
+               <table className="w-full text-left">
+                 <thead className="bg-slate-50 border-b border-slate-200">
+                   <tr>
+                     <th className="p-4 font-medium text-slate-600">Deposit Date</th>
+                     <th className="p-4 font-medium text-slate-600">Description</th>
+                     <th className="p-4 font-medium text-slate-600">Amount</th>
+                     <th className="p-4 font-medium text-slate-600 text-right">Actions</th>
+                   </tr>
+                 </thead>
+                 <tbody className="divide-y divide-slate-100">
+                   {depositHistory.length === 0 ? (
+                      <tr><td colSpan={4} className="p-8 text-center text-slate-400">No deposits found.</td></tr>
+                   ) : (
+                     depositHistory.map(txn => (
+                       <tr key={txn.id} className="hover:bg-slate-50">
+                         <td className="p-4 text-slate-600">{formatDate(txn.date)}</td>
+                         <td className="p-4 text-slate-800">{txn.description}</td>
+                         <td className="p-4 font-bold text-slate-800">{formatCurrency(txn.amount)}</td>
+                         <td className="p-4 text-right flex justify-end gap-2">
+                            <button 
+                              onClick={() => openDepositModal(txn)}
+                              className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                              title="Edit Deposit"
+                            >
+                               <Edit2 size={16} />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteDeposit(txn.id)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+                              title="Return/Delete Deposit"
+                            >
+                               <Trash2 size={16} />
+                            </button>
+                         </td>
+                       </tr>
+                     ))
+                   )}
+                 </tbody>
+               </table>
+             </div>
            </div>
         </div>
       )}
@@ -674,67 +704,71 @@ const Collections = () => {
             {/* Print Header */}
             <div className="hidden print:block text-center border-b pb-4 mb-4">
                <h1 className="text-2xl font-bold">Cash Statement Report</h1>
-               <p className="text-slate-600">{statementStart ? formatDate(statementStart) : 'Start'} to {statementEnd ? formatDate(statementEnd) : 'Present'}</p>
+               <p className="text-slate-600 mt-2">
+                 Duration: <span className="font-bold">{statementStart ? formatDate(statementStart) : 'Start'}</span> to <span className="font-bold">{statementEnd ? formatDate(statementEnd) : 'Present'}</span>
+               </p>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden print:shadow-none print:border">
-               <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50 border-b border-slate-200 print:bg-slate-100">
-                     <tr>
-                        <th className="p-3 font-medium text-slate-600 w-28">Date</th>
-                        <th className="p-3 font-medium text-slate-600">Description</th>
-                        <th className="p-3 font-medium text-slate-600 text-center w-24">Type</th>
-                        <th className="p-3 font-medium text-slate-600 text-right w-28">Debit (Out)</th>
-                        <th className="p-3 font-medium text-slate-600 text-right w-28">Credit (In)</th>
-                        <th className="p-3 font-medium text-slate-600 text-right w-28">Balance</th>
-                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                     {/* Opening Balance Row if date filter active */}
-                     {statementStart && (
-                        <tr className="bg-yellow-50 font-medium">
-                           <td className="p-3 text-slate-800">{formatDate(statementStart)}</td>
-                           <td className="p-3 text-slate-800" colSpan={4}>Opening Balance</td>
-                           <td className="p-3 text-right font-bold text-slate-800">{formatCurrency(openingBalance)}</td>
-                        </tr>
-                     )}
-                     
-                     {filteredStatementData.length === 0 ? (
-                        <tr><td colSpan={6} className="p-8 text-center text-slate-400">No transactions found for this period.</td></tr>
-                     ) : (
-                        filteredStatementData.map(txn => {
-                           const isCredit = txn.type === TransactionType.PAYMENT_RECEIVED;
-                           return (
-                              <tr key={txn.id} className="hover:bg-slate-50">
-                                 <td className="p-3 text-slate-600 align-top pt-4">{formatDate(txn.date)}</td>
-                                 <td className="p-3 align-top">
-                                    <div className="flex flex-col">
-                                       <span className="font-bold text-slate-800 text-sm">
-                                          {txn.mainLabel}
-                                       </span>
-                                       <span className="text-xs text-slate-500 mt-0.5 line-clamp-1">
-                                          {txn.description}
-                                       </span>
-                                    </div>
-                                 </td>
-                                 <td className="p-3 text-center align-top pt-4">
-                                    {txn.type === TransactionType.PAYMENT_RECEIVED && <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">Coll.</span>}
-                                    {txn.type === TransactionType.DEPOSIT_TO_HQ && <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">Dep.</span>}
-                                    {txn.type === TransactionType.EXPENSE && <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">Exp.</span>}
-                                 </td>
-                                 <td className="p-3 text-right text-slate-500 align-top pt-4">
-                                    {!isCredit ? formatCurrency(txn.amount) : '-'}
-                                 </td>
-                                 <td className="p-3 text-right text-slate-500 align-top pt-4">
-                                    {isCredit ? formatCurrency(txn.amount) : '-'}
-                                 </td>
-                                 <td className="p-3 text-right font-bold text-slate-800 align-top pt-4">{formatCurrency(txn.balanceSnapshot)}</td>
-                              </tr>
-                           );
-                        })
-                     )}
-                  </tbody>
-               </table>
+               <div className="overflow-x-auto">
+                 <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50 border-b border-slate-200 print:bg-slate-100">
+                       <tr>
+                          <th className="p-3 font-medium text-slate-600 w-28">Date</th>
+                          <th className="p-3 font-medium text-slate-600">Description</th>
+                          <th className="p-3 font-medium text-slate-600 text-center w-24">Type</th>
+                          <th className="p-3 font-medium text-slate-600 text-right w-28">Debit (Out)</th>
+                          <th className="p-3 font-medium text-slate-600 text-right w-28">Credit (In)</th>
+                          <th className="p-3 font-medium text-slate-600 text-right w-28">Balance</th>
+                       </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                       {/* Opening Balance Row if date filter active */}
+                       {statementStart && (
+                          <tr className="bg-yellow-50 font-medium">
+                             <td className="p-3 text-slate-800">{formatDate(statementStart)}</td>
+                             <td className="p-3 text-slate-800" colSpan={4}>Opening Balance</td>
+                             <td className="p-3 text-right font-bold text-slate-800">{formatCurrency(openingBalance)}</td>
+                          </tr>
+                       )}
+                       
+                       {filteredStatementData.length === 0 ? (
+                          <tr><td colSpan={6} className="p-8 text-center text-slate-400">No transactions found for this period.</td></tr>
+                       ) : (
+                          filteredStatementData.map(txn => {
+                             const isCredit = txn.type === TransactionType.PAYMENT_RECEIVED;
+                             return (
+                                <tr key={txn.id} className="hover:bg-slate-50">
+                                   <td className="p-3 text-slate-600 align-top pt-4">{formatDate(txn.date)}</td>
+                                   <td className="p-3 align-top">
+                                      <div className="flex flex-col">
+                                         <span className="font-bold text-slate-800 text-sm">
+                                            {txn.mainLabel}
+                                         </span>
+                                         <span className="text-xs text-slate-500 mt-0.5 line-clamp-1">
+                                            {txn.description}
+                                         </span>
+                                      </div>
+                                   </td>
+                                   <td className="p-3 text-center align-top pt-4">
+                                      {txn.type === TransactionType.PAYMENT_RECEIVED && <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">Coll.</span>}
+                                      {txn.type === TransactionType.DEPOSIT_TO_HQ && <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">Dep.</span>}
+                                      {txn.type === TransactionType.EXPENSE && <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">Exp.</span>}
+                                   </td>
+                                   <td className="p-3 text-right text-slate-500 align-top pt-4">
+                                      {!isCredit ? formatCurrency(txn.amount) : '-'}
+                                   </td>
+                                   <td className="p-3 text-right text-slate-500 align-top pt-4">
+                                      {isCredit ? formatCurrency(txn.amount) : '-'}
+                                   </td>
+                                   <td className="p-3 text-right font-bold text-slate-800 align-top pt-4">{formatCurrency(txn.balanceSnapshot)}</td>
+                                </tr>
+                             );
+                          })
+                       )}
+                    </tbody>
+                 </table>
+               </div>
             </div>
          </div>
       )}
@@ -753,8 +787,6 @@ const Collections = () => {
                <h3 className="text-xl font-bold text-slate-800 mb-1">Transaction Details</h3>
                <p className="text-sm text-slate-500 mb-6 font-mono">{viewTxn.id}</p>
 
-               {/* ... (Existing Modal Content) ... */}
-               {/* Simplified for brevity in this update, same as before */}
                <div className="mt-6 text-right">
                   <button onClick={() => setViewTxn(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium">
                      Close
@@ -781,6 +813,28 @@ const Collections = () => {
             </div>
 
             <div className="flex-1 overflow-y-auto p-6">
+              
+              {/* Previous Payments Summary */}
+              {selectedOrderHistory.length > 0 && (
+                <div className="mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
+                  <h4 className="font-bold text-slate-700 text-sm mb-2 flex items-center gap-2">
+                    <History size={16}/> Previous Payments
+                  </h4>
+                  <ul className="space-y-1 text-sm">
+                    {selectedOrderHistory.map(tx => (
+                      <li key={tx.id} className="flex justify-between text-slate-600">
+                        <span>{formatDate(tx.date)} - {tx.description}</span>
+                        <span className="font-medium text-green-600">{formatCurrency(tx.amount)}</span>
+                      </li>
+                    ))}
+                    <li className="flex justify-between font-bold text-slate-800 border-t border-slate-200 pt-1 mt-1">
+                      <span>Total Paid</span>
+                      <span>{formatCurrency(selectedOrderHistory.reduce((s,t) => s + t.amount, 0))}</span>
+                    </li>
+                  </ul>
+                </div>
+              )}
+
               <div className="mb-6">
                  <h4 className="font-medium text-slate-800 mb-3 flex items-center gap-2">
                    <CheckSquare size={18} className="text-primary"/> Select Items Paid
@@ -941,6 +995,30 @@ const Collections = () => {
                    placeholder="e.g. Office Electricity"
                  />
               </div>
+
+              {/* Provider Selection */}
+              <div className="mb-4">
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-medium text-slate-700">Provider (Optional)</label>
+                    <button 
+                      type="button" 
+                      onClick={() => setShowProviderModal(true)}
+                      className="text-xs text-primary hover:underline flex items-center gap-1"
+                    >
+                      <Plus size={12}/> New
+                    </button>
+                  </div>
+                  <select 
+                    value={expenseProvider} 
+                    onChange={e => setExpenseProvider(e.target.value)} 
+                    className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-primary bg-white"
+                  >
+                    <option value="">None / General</option>
+                    {providers.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+              </div>
               
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
@@ -971,7 +1049,7 @@ const Collections = () => {
 
               <div className="mb-6">
                  <label className="block text-sm font-medium text-slate-700 mb-2">Payment Method</label>
-                 <div className="flex gap-4">
+                 <div className="flex gap-4 flex-col sm:flex-row">
                     <label className="flex items-center gap-2 cursor-pointer">
                        <input 
                          type="radio" 
@@ -1008,6 +1086,13 @@ const Collections = () => {
           </div>
         </div>
       )}
+
+      {/* Provider Modal for Expense Creation */}
+      <ProviderModal 
+        isOpen={showProviderModal}
+        onClose={() => setShowProviderModal(false)}
+        onSave={handleSaveNewProvider}
+      />
     </div>
   );
 };

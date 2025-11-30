@@ -127,7 +127,7 @@ const App = () => {
               ${isMobile ? 'left-0' : (isSidebarCollapsed ? 'left-20' : 'left-64')}`}
           >
             <span>&copy; {new Date().getFullYear()} Emad Co. Pharmaceutical - Sales Portal</span>
-            <span className="font-mono font-medium">v2.0.023</span>
+            <span className="font-mono font-medium">v2.0.024</span>
           </footer>
         </main>
       </div>

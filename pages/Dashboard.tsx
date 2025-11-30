@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { getFinancialStats, getOrders } from '../utils/storage';
 import { Order, DashboardStats } from '../types';
@@ -53,16 +52,16 @@ const Dashboard = () => {
   const outstanding = stats.totalSales - stats.totalCollected;
 
   return (
-    <div className="p-8 space-y-8">
+    <div className="p-4 md:p-8 space-y-8">
       <header className="flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-bold text-slate-800">Dashboard</h2>
-          <p className="text-slate-500">Overview of your sales performance</p>
+          <h2 className="text-2xl md:text-3xl font-bold text-slate-800">Dashboard</h2>
+          <p className="text-slate-500 text-sm md:text-base">Overview of your sales performance</p>
         </div>
       </header>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6">
         <StatCard 
           title="Total Sales" 
           value={formatCurrency(stats.totalSales)}

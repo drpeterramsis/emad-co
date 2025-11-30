@@ -181,7 +181,12 @@ const Collections = () => {
       setTransferAmount(deposit.amount.toString());
       setTransferDate(new Date(deposit.date).toISOString().split('T')[0]);
       setTransferDesc(deposit.description);
-      setTransferSource('CASH'); // Default to cash for edits unless we track it
+      // Map paymentMethod to transferSource. If not BANK_TRANSFER, assume CASH.
+      if (deposit.paymentMethod === PaymentMethod.BANK_TRANSFER) {
+        setTransferSource('EXTERNAL');
+      } else {
+        setTransferSource('CASH');
+      }
     } else {
       setEditingDeposit(null);
       setTransferAmount('');
@@ -202,18 +207,29 @@ const Collections = () => {
       return;
     }
     
-    // Check constraints only for new deposits if source is CASH
-    if (!editingDeposit && transferSource === 'CASH' && amount > stats.repCashOnHand) {
-       alert("Invalid transfer amount. Cannot exceed Cash on Hand.");
-       return;
+    // Check constraints only if source is CASH
+    if (transferSource === 'CASH') {
+       let availableCash = stats.repCashOnHand;
+       // If we are editing an existing CASH deposit, add that amount back to available for validation
+       if (editingDeposit && (!editingDeposit.paymentMethod || editingDeposit.paymentMethod === PaymentMethod.CASH)) {
+           availableCash += editingDeposit.amount;
+       }
+       
+       if (amount > availableCash) {
+          alert("Invalid transfer amount. Cannot exceed Cash on Hand.");
+          return;
+       }
     }
+
+    const method = transferSource === 'CASH' ? PaymentMethod.CASH : PaymentMethod.BANK_TRANSFER;
 
     if (editingDeposit) {
        await updateTransaction({
          ...editingDeposit,
          amount,
          date: new Date(transferDate).toISOString(),
-         description: transferDesc
+         description: transferDesc,
+         paymentMethod: method
        });
     } else {
       await addTransaction({
@@ -221,7 +237,8 @@ const Collections = () => {
         type: TransactionType.DEPOSIT_TO_HQ,
         amount: amount,
         date: new Date(transferDate).toISOString(),
-        description: transferDesc
+        description: transferDesc,
+        paymentMethod: method
       });
     }
 
@@ -231,7 +248,7 @@ const Collections = () => {
   };
 
   const handleDeleteDeposit = async (id: string) => {
-    if(window.confirm("Are you sure you want to delete this deposit? This will return the amount to 'Cash on Hand'.")){
+    if(window.confirm("Are you sure you want to delete this deposit?")){
       await deleteTransaction(id);
       await refreshData();
     }
@@ -333,7 +350,11 @@ const Collections = () => {
     const preTxns = rawStatementTxns.filter(t => new Date(t.date).getTime() < start);
     preTxns.forEach(t => {
       if (t.type === TransactionType.PAYMENT_RECEIVED) openingBalance += t.amount;
-      else openingBalance -= t.amount;
+      else if (t.type === TransactionType.DEPOSIT_TO_HQ) {
+         if (!t.paymentMethod || t.paymentMethod === PaymentMethod.CASH) openingBalance -= t.amount;
+         // External deposits don't affect balance
+      }
+      else if (t.type === TransactionType.EXPENSE && t.paymentMethod === PaymentMethod.CASH) openingBalance -= t.amount;
     });
 
     statementTxns = rawStatementTxns.filter(t => {
@@ -350,10 +371,12 @@ const Collections = () => {
   let runningBalance = openingBalance;
   const enrichedStatementData = statementTxns.map(txn => {
     const isCredit = txn.type === TransactionType.PAYMENT_RECEIVED;
-    const amount = txn.amount;
+    const isDebit = (txn.type === TransactionType.DEPOSIT_TO_HQ && (!txn.paymentMethod || txn.paymentMethod === PaymentMethod.CASH)) || 
+                    (txn.type === TransactionType.EXPENSE && txn.paymentMethod === PaymentMethod.CASH);
     
-    if (isCredit) runningBalance += amount;
-    else runningBalance -= amount;
+    // Only adjust balance if it affects cash on hand
+    if (isCredit) runningBalance += txn.amount;
+    else if (isDebit) runningBalance -= txn.amount;
 
     // Determine Display Name
     let mainLabel = '';
@@ -368,9 +391,10 @@ const Collections = () => {
     return {
       ...txn,
       balanceSnapshot: runningBalance,
-      mainLabel
+      mainLabel,
+      affectsCash: isCredit || isDebit
     };
-  });
+  }).filter(t => t.affectsCash); // Only show cash-affecting transactions in Cash Statement
 
   // Apply Filters
   const filteredStatementData = enrichedStatementData.filter(txn => {
@@ -641,10 +665,21 @@ const Collections = () => {
                    {depositHistory.length === 0 ? (
                       <tr><td colSpan={4} className="p-6 text-center text-slate-400">{t('noDepositsFound')}</td></tr>
                    ) : (
-                     depositHistory.map(txn => (
+                     depositHistory.map(txn => {
+                       const isExternal = txn.paymentMethod === PaymentMethod.BANK_TRANSFER;
+                       return (
                        <tr key={txn.id} className="hover:bg-slate-50">
                          <td className="p-3 text-slate-600">{formatDate(txn.date)}</td>
-                         <td className="p-3 text-slate-800">{txn.description}</td>
+                         <td className="p-3 text-slate-800">
+                            <div>{txn.description}</div>
+                            <div className="mt-1">
+                               {isExternal ? (
+                                   <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200">External Investment</span>
+                               ) : (
+                                   <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200">From Collections</span>
+                               )}
+                            </div>
+                         </td>
                          <td className="p-3 font-bold text-slate-800">{formatCurrency(txn.amount)}</td>
                          <td className="p-3 text-right flex justify-end gap-2">
                             <button 
@@ -663,7 +698,7 @@ const Collections = () => {
                             </button>
                          </td>
                        </tr>
-                     ))
+                     )})
                    )}
                  </tbody>
                </table>
@@ -994,7 +1029,6 @@ const Collections = () => {
                   <span className="absolute left-3 top-2 text-slate-400 text-xs">EGP</span>
                   <input 
                     type="number" 
-                    max={(editingDeposit || transferSource === 'EXTERNAL') ? undefined : stats.repCashOnHand} // Limit only on new cash
                     required
                     value={transferAmount}
                     onChange={(e) => setTransferAmount(e.target.value)}
@@ -1002,7 +1036,7 @@ const Collections = () => {
                     placeholder="0.00"
                   />
                 </div>
-                {!editingDeposit && transferSource === 'CASH' && <p className="text-[10px] text-slate-500 mt-1">{t('available')}: {formatCurrency(stats.repCashOnHand)}</p>}
+                {transferSource === 'CASH' && <p className="text-[10px] text-slate-500 mt-1">{t('available')}: {formatCurrency(stats.repCashOnHand)}</p>}
               </div>
               <div className="flex justify-end gap-2">
                 <button type="button" onClick={() => setShowTransferModal(false)} className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">{t('cancel')}</button>
@@ -1094,8 +1128,8 @@ const Collections = () => {
                          onChange={() => setExpenseMethod(PaymentMethod.CASH)}
                          className="text-primary focus:ring-primary"
                        />
-                       <span className="text-xs text-slate-700">{t('cashFromRep')}</span>
-                    </label>
+                       <span className="text-xs text-slate-700">{t('cashFromRep')}</span
+                    ></label>
                     <label className="flex items-center gap-2 cursor-pointer">
                        <input 
                          type="radio" 

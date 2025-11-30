@@ -1,5 +1,4 @@
 
-
 import { Product, Customer, Order, Transaction, OrderStatus, TransactionType, Provider, PaymentMethod } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_CUSTOMERS } from '../constants';
 import { supabase, isSupabaseEnabled } from '../services/supabaseClient';
@@ -397,7 +396,8 @@ export const updateTransaction = async (transaction: Transaction) => {
     const dbTxn = {
       amount: transaction.amount,
       date: transaction.date,
-      description: transaction.description
+      description: transaction.description,
+      payment_method: transaction.paymentMethod
     };
     const { error } = await supabase.from('transactions').update(dbTxn).eq('id', transaction.id);
     if(error) throw error;
@@ -619,7 +619,11 @@ export const getFinancialStats = async () => {
       repCashOnHand += t.amount;
       totalCollected += t.amount;
     } else if (t.type === TransactionType.DEPOSIT_TO_HQ) {
-      repCashOnHand -= t.amount;
+      // Only deduct from Cash on Hand if it was a CASH deposit
+      // If paymentMethod is missing (legacy), assume CASH to be safe/consistent with old behavior
+      if (!t.paymentMethod || t.paymentMethod === PaymentMethod.CASH) {
+        repCashOnHand -= t.amount;
+      }
       transferredToHQ += t.amount;
     } else if (t.type === TransactionType.EXPENSE) {
        totalExpenses += t.amount;

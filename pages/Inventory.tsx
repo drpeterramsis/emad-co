@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
-import { getProducts, getProviders, addProduct, updateProduct, restockProduct, addProvider, updateProvider, deleteProvider, getTransactions } from '../utils/storage';
-import { Product, Provider, PaymentMethod, Transaction, TransactionType } from '../types';
+import { getProducts, getProviders, addProduct, updateProduct, restockProduct, addProvider, updateProvider, deleteProvider, getTransactions, getFinancialStats } from '../utils/storage';
+import { Product, Provider, PaymentMethod, Transaction, TransactionType, DashboardStats } from '../types';
 import { Package, AlertTriangle, Loader2, Plus, Edit2, ShoppingBag, Truck, Building2, Calendar, DollarSign, History, Settings, Coins, Layers, Trash2 } from 'lucide-react';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -14,6 +14,7 @@ const Inventory = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [purchases, setPurchases] = useState<Transaction[]>([]);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
 
@@ -53,7 +54,12 @@ const Inventory = () => {
 
   const fetchData = async () => {
     setLoading(true);
-    const [p, prov, txns] = await Promise.all([getProducts(), getProviders(), getTransactions()]);
+    const [p, prov, txns, finStats] = await Promise.all([
+      getProducts(), 
+      getProviders(), 
+      getTransactions(),
+      getFinancialStats()
+    ]);
     
     // Sort products by stock descending (ZA)
     const sortedProducts = p.sort((a, b) => b.stock - a.stock);
@@ -61,6 +67,7 @@ const Inventory = () => {
     
     setProviders(prov);
     setPurchases(txns.filter(t => t.type === TransactionType.EXPENSE).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    setStats(finStats);
     setLoading(false);
   };
 
@@ -169,6 +176,11 @@ const Inventory = () => {
       
       if (isNaN(qty) || qty <= 0) throw new Error("Invalid quantity");
       if (isNaN(cost) || cost < 0) throw new Error("Invalid cost");
+
+      // Check balance if Cash
+      if (restockMethod === PaymentMethod.CASH && stats && cost > stats.repCashOnHand) {
+         throw new Error("Insufficient Cash on Hand.");
+      }
 
       const provider = providers.find(p => p.id === restockProvider);
       
@@ -548,6 +560,16 @@ const Inventory = () => {
                       <option value={PaymentMethod.BANK_TRANSFER}>{t('hqBankTransfer')}</option>
                       <option value={PaymentMethod.CASH}>{t('cashFromRepDeduct')}</option>
                     </select>
+                    {stats && restockMethod === PaymentMethod.CASH && (
+                      <div className="flex items-center gap-1 mt-1 text-[10px] text-amber-600 font-medium">
+                        <Coins size={10} /> <span>{t('available')}: {formatCurrency(stats.repCashOnHand)}</span>
+                      </div>
+                    )}
+                    {stats && restockMethod === PaymentMethod.BANK_TRANSFER && (
+                      <div className="flex items-center gap-1 mt-1 text-[10px] text-blue-600 font-medium">
+                        <Building2 size={10} /> <span>{t('transferredToHQ')}: {formatCurrency(stats.transferredToHQ)}</span>
+                      </div>
+                    )}
                 </div>
 
                 <div>

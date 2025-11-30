@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
@@ -145,7 +144,7 @@ const AppContent = () => {
               <span className="text-slate-500 hidden sm:inline">|</span>
               <span className="text-[10px] text-slate-500 opacity-75 hover:opacity-100 transition-opacity cursor-default" title="Developer">Dev by Dr. Peter Ramsis</span>
             </div>
-            <span className="font-mono font-medium">v2.0.050</span>
+            <span className="font-mono font-medium">v2.0.051</span>
           </footer>
         </main>
       </div>

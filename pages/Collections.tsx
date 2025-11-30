@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { getOrders, addTransaction, getFinancialStats, updateOrder, getTransactions, deleteTransaction, updateTransaction, getProviders, addProvider } from '../utils/storage';
 import { Order, TransactionType, OrderStatus, DashboardStats, Transaction, PaymentMethod, Provider } from '../types';
@@ -223,6 +222,8 @@ const Collections = () => {
       }
 
       const method = transferSource === 'CASH' ? PaymentMethod.CASH : PaymentMethod.BANK_TRANSFER;
+      // Ensure description is not empty, which might be rejected by some DBs
+      const finalDesc = transferDesc.trim() || (transferSource === 'CASH' ? 'Cash Deposit to HQ' : 'External Deposit to HQ');
       const txnDate = transferDate ? new Date(transferDate).toISOString() : new Date().toISOString();
 
       if (editingDeposit) {
@@ -230,7 +231,7 @@ const Collections = () => {
            ...editingDeposit,
            amount,
            date: txnDate,
-           description: transferDesc,
+           description: finalDesc,
            paymentMethod: method
          });
       } else {
@@ -239,7 +240,7 @@ const Collections = () => {
           type: TransactionType.DEPOSIT_TO_HQ,
           amount: amount,
           date: txnDate,
-          description: transferDesc,
+          description: finalDesc,
           paymentMethod: method
         });
       }
@@ -247,9 +248,9 @@ const Collections = () => {
       setTransferAmount('');
       setShowTransferModal(false);
       await refreshData();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Deposit error:", error);
-      alert("Failed to save deposit. Please check your connection or input.");
+      alert(`Failed to save deposit: ${error.message || "Please check your connection or input."}`);
     }
   };
 

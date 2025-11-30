@@ -39,7 +39,11 @@ const Inventory = () => {
   const fetchData = async () => {
     setLoading(true);
     const [p, prov, txns] = await Promise.all([getProducts(), getProviders(), getTransactions()]);
-    setProducts(p);
+    
+    // Sort products by stock descending (ZA)
+    const sortedProducts = p.sort((a, b) => b.stock - a.stock);
+    setProducts(sortedProducts);
+    
     setProviders(prov);
     setPurchases(txns.filter(t => t.type === TransactionType.EXPENSE).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     setLoading(false);

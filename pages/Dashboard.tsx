@@ -8,9 +8,11 @@ import {
 import { DollarSign, TrendingUp, Briefcase, AlertCircle, Loader2, Wallet, Users } from 'lucide-react';
 import { formatCurrency } from '../utils/helpers';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useNavigate } from 'react-router-dom';
 
 const Dashboard = () => {
   const { t } = useLanguage();
+  const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [customerCount, setCustomerCount] = useState(0);
@@ -65,6 +67,12 @@ const Dashboard = () => {
           <h2 className="text-xl md:text-2xl font-bold text-slate-800">{t('dashboard')}</h2>
           <p className="text-slate-500 text-xs md:text-sm">Overview of your sales performance</p>
         </div>
+        <button 
+          onClick={() => navigate('/analysis')}
+          className="text-primary hover:bg-teal-50 px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors border border-transparent hover:border-teal-100"
+        >
+           <TrendingUp size={16} /> Monthly Analysis
+        </button>
       </header>
 
       {/* Stats Cards */}

@@ -132,7 +132,7 @@ const AppContent = () => {
               ${isMobile ? 'w-full' : (isSidebarCollapsed ? `w-[calc(100%-5rem)]` : `w-[calc(100%-16rem)]`)}`}
           >
             <span>&copy; {new Date().getFullYear()} Emad Co. Pharmaceutical</span>
-            <span className="font-mono font-medium">v2.0.026</span>
+            <span className="font-mono font-medium">v2.0.028</span>
           </footer>
         </main>
       </div>

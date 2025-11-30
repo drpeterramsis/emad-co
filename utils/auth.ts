@@ -13,6 +13,10 @@ export const loginUser = async (email: string, password: string): Promise<LoginR
   // Simulate API delay for UX
   await new Promise(resolve => setTimeout(resolve, 800));
   
+  if (!email || !password) {
+    return { success: false, error: "Please enter both email and password." };
+  }
+
   const normalizedEmail = email.toLowerCase().trim();
 
   // 1. Check Hardcoded List first (Fallback/Admin)
@@ -23,7 +27,7 @@ export const loginUser = async (email: string, password: string): Promise<LoginR
       const { password: _, ...userProfile } = localUser;
       return { success: true, user: userProfile };
     } else {
-      return { success: false, error: "Invalid password." };
+      return { success: false, error: "Invalid credentials." };
     }
   }
 
@@ -34,33 +38,30 @@ export const loginUser = async (email: string, password: string): Promise<LoginR
         .from('allowed_users')
         .select('email, name, title, password')
         .ilike('email', normalizedEmail)
-        .single();
+        .maybeSingle(); // Use maybeSingle to avoid 406 error on multiple or zero
 
       if (error) {
         console.error("Supabase Auth Error:", error);
         
         // Specific error message for missing table
         if (error.code === '42P01') {
-           return { success: false, error: "Database setup incomplete. Table 'allowed_users' is missing." };
+           return { success: false, error: "Setup Incomplete: Table 'allowed_users' is missing in DB." };
         }
-        
-        if (error.code === 'PGRST116') {
-           // No rows found
-           return { success: false, error: "Email not found." };
-        }
-        
-        // If 'password' column is missing, it might throw an error code like 42703 (undefined_column)
+        // If 'password' column is missing (Code 42703 - Undefined Column)
         if (error.code === '42703') {
-           return { success: false, error: "Security update: Database schema outdated (missing password column)." };
+           return { success: false, error: "Schema Outdated: Missing 'password' column. Run SQL migration." };
         }
-
-        return { success: false, error: "Database connection error." };
+        // Fallback for connection issues
+        return { success: false, error: "Unable to verify credentials. Please check connection." };
       }
 
       if (data) {
         // Verify password
-        // Note: In production, passwords should be hashed (bcrypt/argon2). 
-        // For this template, we assume direct comparison or handle basic text.
+        // Check if password exists in DB record (handling cases where migration ran but data is null)
+        if (!data.password) {
+           return { success: false, error: "Account has no password set. Contact admin." };
+        }
+
         if (data.password === password) {
           return {
             success: true,
@@ -71,7 +72,7 @@ export const loginUser = async (email: string, password: string): Promise<LoginR
             }
           };
         } else {
-          return { success: false, error: "Invalid password." };
+          return { success: false, error: "Invalid credentials." };
         }
       }
     } catch (err) {
@@ -80,5 +81,6 @@ export const loginUser = async (email: string, password: string): Promise<LoginR
     }
   }
   
+  // If no user found in local list or DB
   return { success: false, error: "Account not found." };
 };

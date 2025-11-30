@@ -100,7 +100,8 @@ export const getOrders = async (): Promise<Order[]> => {
       paidAmount: Number(o.paid_amount),
       customerName: o.customer_name,
       customerId: o.customer_id,
-      isDraft: o.is_draft,
+      // Robust check for draft status: use column if exists, otherwise fallback to status string
+      isDraft: o.is_draft || o.status === OrderStatus.DRAFT,
       draftMetadata: o.draft_metadata
     })) || [];
   }
@@ -117,7 +118,7 @@ export const getOrder = async (orderId: string): Promise<Order | null> => {
       paidAmount: Number(data.paid_amount),
       customerName: data.customer_name,
       customerId: data.customer_id,
-      isDraft: data.is_draft,
+      isDraft: data.is_draft || data.status === OrderStatus.DRAFT,
       draftMetadata: data.draft_metadata
     };
   } else {
@@ -149,7 +150,7 @@ export const getTransactions = async (): Promise<Transaction[]> => {
 
 export const saveOrder = async (order: Order) => {
   if (isSupabaseEnabled && supabase) {
-    const dbOrder = {
+    const dbOrder: any = {
       id: order.id,
       customer_id: order.customerId,
       customer_name: order.customerName,
@@ -159,6 +160,8 @@ export const saveOrder = async (order: Order) => {
       paid_amount: order.paidAmount,
       status: order.status,
       notes: order.notes,
+      // Ensure we attempt to write draft fields. 
+      // NOTE: User must run SQL migration to add 'is_draft' and 'draft_metadata' columns for this to work.
       is_draft: order.isDraft || false,
       draft_metadata: order.draftMetadata
     };
@@ -213,8 +216,6 @@ export const updateOrder = async (order: Order) => {
       notes: order.notes,
       paid_amount: order.paidAmount,
       status: order.status,
-      // Draft fields typically don't change from draft to non-draft via this simple update usually, 
-      // but if so, we'd need complex stock logic. Assuming updateOrder keeps draft status or is simple edits.
       is_draft: order.isDraft,
       draft_metadata: order.draftMetadata
     };
@@ -234,9 +235,11 @@ export const updateOrder = async (order: Order) => {
 export const deleteOrder = async (orderId: string) => {
   if (isSupabaseEnabled && supabase) {
     const { data: order } = await supabase.from('orders').select('*').eq('id', orderId).single();
-    if (order && order.items) {
+    if (order) {
       // Only restore stock if it wasn't a draft
-      if (!order.is_draft) {
+      // We check both column and status to be safe if column missing
+      const isDraft = order.is_draft || order.status === OrderStatus.DRAFT;
+      if (!isDraft && order.items) {
         const items = order.items as any[];
         for (const item of items) {
            const qtyToRestore = item.quantity + (item.bonusQuantity || 0);
@@ -274,7 +277,6 @@ export const deleteOrder = async (orderId: string) => {
 };
 
 // ... existing transactions, providers, product management ...
-// (We just need to make sure existing methods are exported)
 
 export const addTransaction = async (transaction: Transaction) => {
   if (isSupabaseEnabled && supabase) {
@@ -553,7 +555,8 @@ export const getFinancialStats = async () => {
 
   const orders = await getOrders();
   // Filter out drafts from sales stats
-  const activeOrders = orders.filter(o => !o.isDraft);
+  // Check using status as well, in case isDraft is undefined due to missing schema
+  const activeOrders = orders.filter(o => !o.isDraft && o.status !== OrderStatus.DRAFT);
   const totalSales = activeOrders.reduce((sum, o) => sum + o.totalAmount, 0);
 
   return { repCashOnHand, transferredToHQ, totalCollected, totalSales, totalExpenses };

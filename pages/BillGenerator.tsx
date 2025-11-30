@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { getOrders, saveOrder, deleteOrder, getProducts } from '../utils/storage';
 import { Order, OrderStatus, Product, OrderItem } from '../types';
@@ -31,6 +32,13 @@ const BillGenerator = () => {
     fetchDrafts();
     fetchProducts();
   }, []);
+
+  // Ensure list is fresh when switching to list mode
+  useEffect(() => {
+    if (mode === 'list') {
+      fetchDrafts();
+    }
+  }, [mode]);
 
   const fetchDrafts = async () => {
     setLoading(true);
@@ -114,10 +122,15 @@ const BillGenerator = () => {
       draftMetadata: { heading, subheading }
     };
 
-    await saveOrder(draftOrder);
-    alert(t('draftSaved'));
-    fetchDrafts();
-    if(mode === 'create') setMode('list');
+    try {
+      await saveOrder(draftOrder);
+      alert(t('draftSaved'));
+      await fetchDrafts();
+      if(mode === 'create') setMode('list');
+    } catch (e) {
+      console.error(e);
+      alert("Failed to save draft. If using Supabase, ensure 'is_draft' column exists.");
+    }
   };
 
   const handleEditDraft = (draft: Order) => {

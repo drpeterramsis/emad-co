@@ -105,7 +105,13 @@ export const getOrders = async (): Promise<Order[]> => {
       draftMetadata: o.draft_metadata
     })) || [];
   }
-  return JSON.parse(localStorage.getItem(STORAGE_KEYS.ORDERS) || '[]');
+  
+  const localOrders = JSON.parse(localStorage.getItem(STORAGE_KEYS.ORDERS) || '[]');
+  // Ensure consistency for LocalStorage
+  return localOrders.map((o: any) => ({
+    ...o,
+    isDraft: o.isDraft || o.status === OrderStatus.DRAFT
+  }));
 };
 
 export const getOrder = async (orderId: string): Promise<Order | null> => {
@@ -165,6 +171,9 @@ export const saveOrder = async (order: Order) => {
       is_draft: order.isDraft || false,
       draft_metadata: order.draftMetadata
     };
+    
+    // For Drafts, if customerId is a placeholder, try to avoid FK constraint issues if possible
+    // This assumes the DB might have strict constraints. If so, user should ensure a valid customer ID or nullable column.
     
     const { error } = await supabase.from('orders').upsert(dbOrder);
     if (error) throw error;

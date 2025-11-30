@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { getProducts, getProviders, addProduct, updateProduct, restockProduct, addProvider, getTransactions } from '../utils/storage';
 import { Product, Provider, PaymentMethod, Transaction, TransactionType } from '../types';
@@ -208,8 +207,8 @@ const Inventory = () => {
                     </div>
                   </div>
                   
-                  {/* Hover Actions */}
-                  <div className="absolute inset-x-0 bottom-0 bg-white/95 border-t border-slate-100 p-2 flex justify-between items-center md:opacity-0 md:group-hover:opacity-100 transition-opacity rounded-b-xl">
+                  {/* Actions Bar - Static on mobile (below content), Overlay on desktop (hover) */}
+                  <div className="mt-3 md:mt-0 pt-2 md:pt-2 border-t md:border-t border-slate-100 flex justify-between items-center md:absolute md:inset-x-0 md:bottom-0 md:bg-white/95 md:p-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity rounded-b-xl">
                       <button 
                         onClick={() => handleOpenProductModal(product)}
                         className="text-slate-500 hover:text-blue-600 text-xs font-medium flex items-center gap-1 px-2 py-1"

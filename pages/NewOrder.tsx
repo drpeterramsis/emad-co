@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { getCustomers, getProducts, saveOrder, getOrder, updateOrder, addCustomer } from '../utils/storage';
 import { Customer, Product, OrderItem, OrderStatus, CustomerType } from '../types';
@@ -477,8 +476,9 @@ const NewOrder = () => {
                             min="0"
                             step="any"
                             value={item.unitPrice}
+                            onFocus={(e) => e.target.select()}
                             onChange={(e) => updateCartItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                            className="w-16 rounded border border-slate-300 p-1 text-center text-xs"
+                            className="w-16 rounded border border-slate-300 p-1 text-center text-xs focus:ring-1 focus:ring-primary outline-none"
                           />
                         </td>
                         <td className="p-2 relative">
@@ -486,8 +486,9 @@ const NewOrder = () => {
                             type="number"
                             min="1"
                             value={item.quantity}
+                            onFocus={(e) => e.target.select()}
                             onChange={(e) => updateCartItem(index, 'quantity', parseInt(e.target.value) || 1)}
-                            className={`w-14 rounded border p-1 text-center font-bold text-xs ${isOverselling ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-300'}`}
+                            className={`w-14 rounded border p-1 text-center font-bold text-xs focus:ring-1 focus:ring-primary outline-none ${isOverselling ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-300'}`}
                           />
                         </td>
                         <td className="p-2">
@@ -495,8 +496,9 @@ const NewOrder = () => {
                             type="number"
                             min="0"
                             value={item.bonusQuantity}
+                            onFocus={(e) => e.target.select()}
                             onChange={(e) => updateCartItem(index, 'bonusQuantity', parseInt(e.target.value) || 0)}
-                            className={`w-14 rounded border p-1 text-center text-xs ${isOverselling ? 'border-red-300 bg-red-50 text-red-700' : 'border-orange-200 bg-orange-50 text-orange-800'}`}
+                            className={`w-14 rounded border p-1 text-center text-xs focus:ring-1 focus:ring-primary outline-none ${isOverselling ? 'border-red-300 bg-red-50 text-red-700' : 'border-orange-200 bg-orange-50 text-orange-800'}`}
                           />
                         </td>
                         <td className="p-2">
@@ -507,8 +509,9 @@ const NewOrder = () => {
                               max="100"
                               step="any"
                               value={item.discountPercent || 0}
+                              onFocus={(e) => e.target.select()}
                               onChange={(e) => updateCartItem(index, 'discountPercent', parseFloat(e.target.value) || 0)}
-                              className="w-20 rounded border border-slate-300 p-1 pr-5 text-center text-xs"
+                              className="w-20 rounded border border-slate-300 p-1 pr-5 text-center text-xs focus:ring-1 focus:ring-primary outline-none"
                             />
                             <span className="absolute right-2 top-1.5 text-slate-400 text-[10px]">%</span>
                           </div>
@@ -519,8 +522,9 @@ const NewOrder = () => {
                             min="0"
                             step="any"
                             value={item.discount}
+                            onFocus={(e) => e.target.select()}
                             onChange={(e) => updateCartItem(index, 'discount', parseFloat(e.target.value) || 0)}
-                            className="w-20 rounded border border-slate-300 p-1 text-center text-xs"
+                            className="w-20 rounded border border-slate-300 p-1 text-center text-xs focus:ring-1 focus:ring-primary outline-none"
                           />
                         </td>
                         <td className="p-2 font-bold text-slate-800 text-right text-xs">
@@ -585,7 +589,7 @@ const NewOrder = () => {
             
             <div className="p-5 space-y-3">
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">{t('customerNameLabel')} <span className="text-red-500">*</span></label>
+                <label className="block text-xs font-medium text-slate-700 mb-1">{t('customerNameLabel')}</label>
                 <input 
                   type="text"
                   value={newCustomerName}
@@ -617,6 +621,7 @@ const NewOrder = () => {
                     max="100"
                     step="any"
                     value={newCustomerDiscount}
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => setNewCustomerDiscount(e.target.value)}
                     className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-primary outline-none"
                     placeholder="0"

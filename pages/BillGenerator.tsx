@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { getOrders, saveOrder, deleteOrder, getProducts } from '../utils/storage';
 import { Order, OrderStatus, Product, OrderItem } from '../types';
@@ -327,6 +326,7 @@ const BillGenerator = () => {
                         <input 
                           type="number" 
                           value={item.quantity} 
+                          onFocus={(e) => e.target.select()}
                           onChange={e => updateItem(index, 'quantity', e.target.value)}
                           className="w-full text-center outline-none bg-transparent"
                         />
@@ -335,6 +335,7 @@ const BillGenerator = () => {
                         <input 
                           type="number" 
                           value={item.unitPrice} 
+                          onFocus={(e) => e.target.select()}
                           onChange={e => updateItem(index, 'unitPrice', e.target.value)}
                           className="w-full text-right outline-none bg-transparent"
                         />
@@ -343,6 +344,7 @@ const BillGenerator = () => {
                         <input 
                           type="number" 
                           value={item.discountPercent} 
+                          onFocus={(e) => e.target.select()}
                           onChange={e => updateItem(index, 'discountPercent', e.target.value)}
                           className="w-full text-center outline-none bg-transparent"
                           placeholder="%"

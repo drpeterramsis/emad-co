@@ -83,6 +83,17 @@ const NewOrder = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [editOrderId]);
 
+  // UUID Generator for compat with strict DB schemas
+  const generateUUID = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  };
+
   const getCustomerDefaultDiscount = () => {
     const c = customers.find(x => x.id === selectedCustomer);
     return c?.defaultDiscount || 0;
@@ -183,12 +194,16 @@ const NewOrder = () => {
         // Use existing paidAmount to prevent reset
         await updateOrder({ ...orderData, id: editOrderId, paidAmount: existingPaidAmount } as any);
       } else {
-        await saveOrder({ ...orderData, id: `ORD-${Date.now()}`, paidAmount: 0 } as any);
+        // Generate a proper UUID for new orders to satisfy potential DB constraints
+        const newId = generateUUID();
+        await saveOrder({ ...orderData, id: newId, paidAmount: 0 } as any);
       }
       navigate('/invoices');
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to save order", error);
-      alert("Failed to save order. Please try again.");
+      // Show specific error message for debugging
+      const errorDetails = error.message || JSON.stringify(error);
+      alert(`Failed to save order: ${errorDetails}`);
     } finally {
       setIsSubmitting(false);
     }

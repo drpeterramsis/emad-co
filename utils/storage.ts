@@ -1,5 +1,3 @@
-
-
 import { Product, Customer, Order, Transaction, OrderStatus, TransactionType, Provider, PaymentMethod } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_CUSTOMERS } from '../constants';
 import { supabase, isSupabaseEnabled } from '../services/supabaseClient';
@@ -495,7 +493,11 @@ export const addTransaction = async (transaction: Transaction) => {
      };
      const { error } = await supabase.from('transactions').insert(dbTxn);
      if (error) throw error;
-     if (transaction.type === TransactionType.PAYMENT_RECEIVED && transaction.referenceId) {
+
+     // Check if we should skip updating order status (handled externally)
+     const shouldUpdateOrder = !transaction.metadata?.skipOrderUpdate;
+
+     if (shouldUpdateOrder && transaction.type === TransactionType.PAYMENT_RECEIVED && transaction.referenceId) {
         const { data: order } = await supabase.from('orders').select('*').eq('id', transaction.referenceId).single();
         if (order) {
            const newPaid = (Number(order.paid_amount) || 0) + transaction.amount;
@@ -514,7 +516,11 @@ export const addTransaction = async (transaction: Transaction) => {
     const transactions = await getTransactions();
     transactions.push(transaction);
     localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
-    if (transaction.type === TransactionType.PAYMENT_RECEIVED && transaction.referenceId) {
+    
+    // Check if we should skip updating order status
+    const shouldUpdateOrder = !transaction.metadata?.skipOrderUpdate;
+
+    if (shouldUpdateOrder && transaction.type === TransactionType.PAYMENT_RECEIVED && transaction.referenceId) {
       const orders = await getOrders();
       const orderIndex = orders.findIndex(o => o.id === transaction.referenceId);
       if (orderIndex >= 0) {

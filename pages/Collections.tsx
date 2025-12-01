@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { getOrders, addTransaction, getFinancialStats, updateOrder, getTransactions, deleteTransaction, updateTransaction, getProviders, addProvider, updateOrderPaidStatus } from '../utils/storage';
 import { Order, TransactionType, OrderStatus, DashboardStats, Transaction, PaymentMethod, Provider, OrderItem } from '../types';
@@ -162,25 +160,43 @@ const Collections = () => {
     setIsPaymentSubmitting(true);
 
     try {
+        // Calculate new totals locally first
+        const newPaidAmount = (selectedOrderForPayment.paidAmount || 0) + amount;
+        
+        let newStatus = selectedOrderForPayment.status;
+        if (newPaidAmount >= selectedOrderForPayment.totalAmount) {
+            newStatus = OrderStatus.PAID;
+        } else if (newPaidAmount > 0) {
+            newStatus = OrderStatus.PARTIAL;
+        }
+
+        // Apply updates to items (Paid Quantity)
         const updatedItems = [...selectedOrderForPayment.items];
-        const paidDetails: string[] = [];
         const paidItemsMetadata: { productId: string, quantity: number }[] = [];
+        const paidDetails: string[] = [];
 
         paymentItems.forEach(state => {
-        if (state.selected && state.payQty > 0) {
-            const item = updatedItems[state.index];
-            const newPaidQty = (item.paidQuantity || 0) + state.payQty;
-            updatedItems[state.index] = { ...item, paidQuantity: newPaidQty };
-            paidDetails.push(`${state.payQty}x ${item.productName}`);
-            paidItemsMetadata.push({ productId: item.productId, quantity: state.payQty });
-        }
+            if (state.selected && state.payQty > 0) {
+                const item = updatedItems[state.index];
+                const newPaidQty = (item.paidQuantity || 0) + state.payQty;
+                updatedItems[state.index] = { ...item, paidQuantity: newPaidQty };
+                paidDetails.push(`${state.payQty}x ${item.productName}`);
+                paidItemsMetadata.push({ productId: item.productId, quantity: state.payQty });
+            }
         });
 
-        // Use updateOrderPaidStatus instead of updateOrder to avoid stock logic overhead
-        await updateOrderPaidStatus({ ...selectedOrderForPayment, items: updatedItems });
+        // 1. Update Order in DB directly (Status, PaidAmount, Items)
+        // Use updateOrderPaidStatus to avoid stock logic overhead, but pass ALL updated fields
+        await updateOrderPaidStatus({
+            ...selectedOrderForPayment,
+            paidAmount: newPaidAmount,
+            status: newStatus,
+            items: updatedItems
+        });
 
         const description = paidDetails.length > 0 ? `Payment for: ${paidDetails.join(', ')}` : `Lump sum payment`;
 
+        // 2. Add Transaction (Skip Order Update since we handled it above to prevent race conditions)
         await addTransaction({
           id: `TXN-${Date.now()}`,
           type: TransactionType.PAYMENT_RECEIVED,
@@ -188,14 +204,17 @@ const Collections = () => {
           date: paymentDate,
           referenceId: selectedOrderForPayment.id,
           description: description,
-          metadata: { paidItems: paidItemsMetadata }
+          metadata: { 
+             paidItems: paidItemsMetadata,
+             skipOrderUpdate: true // Prevent double update
+          }
         });
 
         setSelectedOrderForPayment(null);
         await refreshData();
     } catch (error) {
         console.error(error);
-        alert("Failed to record payment.");
+        alert("Failed to record payment. Please check your connection.");
     } finally {
         setIsPaymentSubmitting(false);
     }

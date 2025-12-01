@@ -240,6 +240,41 @@ export const saveOrder = async (order: Order) => {
 
 export const updateOrder = async (order: Order) => {
   if (isSupabaseEnabled && supabase) {
+    // 1. Fetch current (old) order to handle stock reversal
+    const { data: oldData } = await supabase.from('orders').select('*').eq('id', order.id).single();
+    
+    // Revert Stock for Old Data if it wasn't a draft
+    if (oldData) {
+      const oldIsDraft = oldData.is_draft || oldData.status === OrderStatus.DRAFT;
+      const oldIsReturn = oldData.is_return;
+      
+      if (!oldIsDraft && oldData.items) {
+        const oldItems = oldData.items as any[];
+        for (const item of oldItems) {
+           const qty = item.quantity + (item.bonusQuantity || 0);
+           let stockChange = 0;
+
+           if (oldIsReturn) {
+              // Revert Return: If it was GOOD, we added stock. Now we subtract it.
+              if (item.condition !== 'EXPIRED') {
+                 stockChange = -qty;
+              }
+           } else {
+              // Revert Sale: We subtracted stock. Now we add it back.
+              stockChange = qty;
+           }
+
+           if (stockChange !== 0) {
+             const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
+             if (prod) {
+               await supabase.from('products').update({ stock: prod.stock + stockChange }).eq('id', item.productId);
+             }
+           }
+        }
+      }
+    }
+
+    // 2. Update Order Record
     const dbOrder = {
       customer_id: order.customerId,
       customer_name: order.customerName,
@@ -255,12 +290,81 @@ export const updateOrder = async (order: Order) => {
     };
     const { error } = await supabase.from('orders').update(dbOrder).eq('id', order.id);
     if (error) throw error;
+
+    // 3. Apply New Stock if not draft
+    if (!order.isDraft) {
+      for (const item of order.items) {
+         const qty = item.quantity + (item.bonusQuantity || 0);
+         let stockChange = 0;
+
+         if (order.isReturn) {
+            // Apply Return: Add stock if GOOD
+            if (item.condition !== 'EXPIRED') {
+              stockChange = qty; 
+            }
+         } else {
+            // Apply Sale: Deduct stock
+            stockChange = -qty;
+         }
+
+         if (stockChange !== 0) {
+           const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
+           if (prod) {
+             await supabase.from('products').update({ stock: prod.stock + stockChange }).eq('id', item.productId);
+           }
+         }
+      }
+    }
+
   } else {
+    // Local Storage Logic
     const orders = await getOrders();
     const index = orders.findIndex(o => o.id === order.id);
-    
     if (index === -1) throw new Error("Order not found");
+    const oldOrder = orders[index];
     
+    let products = await getProducts();
+
+    // Revert Old Stock
+    if (!oldOrder.isDraft) {
+      oldOrder.items.forEach(item => {
+        const pIndex = products.findIndex(p => p.id === item.productId);
+        if (pIndex >= 0) {
+           const qty = item.quantity + (item.bonusQuantity || 0);
+           if (oldOrder.isReturn) {
+             // Revert Return
+             if (item.condition !== 'EXPIRED') {
+                products[pIndex].stock -= qty;
+             }
+           } else {
+             // Revert Sale
+             products[pIndex].stock += qty;
+           }
+        }
+      });
+    }
+
+    // Apply New Stock
+    if (!order.isDraft) {
+      order.items.forEach(item => {
+        const pIndex = products.findIndex(p => p.id === item.productId);
+        if (pIndex >= 0) {
+           const qty = item.quantity + (item.bonusQuantity || 0);
+           if (order.isReturn) {
+             // Apply Return
+             if (item.condition !== 'EXPIRED') {
+                products[pIndex].stock += qty;
+             }
+           } else {
+             // Apply Sale
+             products[pIndex].stock -= qty;
+           }
+        }
+      });
+    }
+
+    localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+
     orders[index] = { ...orders[index], ...order };
     localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
   }

@@ -569,17 +569,17 @@ const Inventory = () => {
                      {filteredPurchases.length === 0 ? (
                         <tbody><tr><td colSpan={6} className="p-6 text-center text-slate-400">{t('noPurchases')}</td></tr></tbody>
                      ) : (
-                        Object.entries(groupedPurchases).map(([groupKey, txns]: [string, Transaction[]]) => (
+                        Object.entries(groupedPurchases).map(([groupKey, txns]) => (
                            <React.Fragment key={groupKey}>
                               {purchaseGroup !== 'none' && (
                                 <tbody>
                                   <tr className="bg-slate-100 border-b border-slate-200">
-                                    <td colSpan={6} className="p-2 font-bold text-slate-700">{groupKey} ({txns.length})</td>
+                                    <td colSpan={6} className="p-2 font-bold text-slate-700">{groupKey} ({(txns as Transaction[]).length})</td>
                                   </tr>
                                 </tbody>
                               )}
                               <tbody className="divide-y divide-slate-100">
-                                {txns.map(txn => (
+                                {(txns as Transaction[]).map(txn => (
                                   <tr key={txn.id} className="hover:bg-slate-50 group">
                                      <td className="p-3 text-slate-600">{formatDate(txn.date)}</td>
                                      <td className="p-3 font-medium text-slate-800">{txn.description}</td>

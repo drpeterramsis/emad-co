@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { getCustomers, getProducts, saveOrder, getOrder, updateOrder, addCustomer } from '../utils/storage';
 import { Customer, Product, OrderItem, OrderStatus, CustomerType } from '../types';
@@ -22,6 +23,7 @@ const NewOrder = () => {
   const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingOrder, setLoadingOrder] = useState(false);
+  const [existingPaidAmount, setExistingPaidAmount] = useState(0);
 
   // Customer Search State
   const [customerSearch, setCustomerSearch] = useState('');
@@ -59,6 +61,7 @@ const NewOrder = () => {
           setCustomerSearch(order.customerName);
           setOrderDate(new Date(order.date).toISOString().split('T')[0]);
           setCart(order.items);
+          setExistingPaidAmount(order.paidAmount);
         }
         setLoadingOrder(false);
       }
@@ -177,7 +180,8 @@ const NewOrder = () => {
       };
 
       if (editOrderId) {
-        await updateOrder({ ...orderData, id: editOrderId, paidAmount: 0 } as any);
+        // Use existing paidAmount to prevent reset
+        await updateOrder({ ...orderData, id: editOrderId, paidAmount: existingPaidAmount } as any);
       } else {
         await saveOrder({ ...orderData, id: `ORD-${Date.now()}`, paidAmount: 0 } as any);
       }

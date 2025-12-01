@@ -1,3 +1,4 @@
+
 import { Product, Customer, Order, Transaction, OrderStatus, TransactionType, Provider, PaymentMethod } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_CUSTOMERS } from '../constants';
 import { supabase, isSupabaseEnabled } from '../services/supabaseClient';
@@ -515,7 +516,7 @@ export const updateTransaction = async (transaction: Transaction) => {
   const oldTxn = oldTransactions.find(t => t.id === transaction.id);
   
   // If editing an Expense that has metadata (Stock purchase), check if quantity changed
-  if (oldTxn && oldTxn.type === TransactionType.EXPENSE && oldTxn.metadata?.quantity && transaction.metadata?.quantity && oldTxn.referenceId === transaction.referenceId) {
+  if (oldTxn && oldTxn.type === TransactionType.EXPENSE && oldTxn.metadata?.quantity !== undefined && transaction.metadata?.quantity !== undefined && oldTxn.referenceId === transaction.referenceId) {
      const oldQty = Number(oldTxn.metadata.quantity);
      const newQty = Number(transaction.metadata.quantity);
      const diff = newQty - oldQty;
@@ -733,7 +734,16 @@ export const updateProduct = async (product: Product) => {
   }
 };
 
-export const restockProduct = async (productId: string, quantity: number, cost: number, providerId: string, providerName: string, method: PaymentMethod, date: string) => {
+export const restockProduct = async (
+  productId: string, 
+  quantity: number, 
+  cost: number, 
+  providerId: string, 
+  providerName: string, 
+  method: PaymentMethod, 
+  date: string,
+  description?: string
+) => {
   const products = await getProducts();
   const product = products.find(p => p.id === productId);
   if (!product) throw new Error("Product not found");
@@ -747,7 +757,7 @@ export const restockProduct = async (productId: string, quantity: number, cost: 
     amount: cost,
     date: date,
     referenceId: productId,
-    description: `Stock Purchase: ${quantity}x ${product.name}`,
+    description: description || `Stock Purchase: ${quantity}x ${product.name}`,
     paymentMethod: method,
     providerId: providerId,
     providerName: providerName,

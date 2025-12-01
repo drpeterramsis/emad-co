@@ -43,6 +43,7 @@ const Inventory = () => {
   const [restockProvider, setRestockProvider] = useState('');
   const [restockMethod, setRestockMethod] = useState<PaymentMethod>(PaymentMethod.BANK_TRANSFER);
   const [restockDate, setRestockDate] = useState(new Date().toISOString().split('T')[0]);
+  const [restockDesc, setRestockDesc] = useState('');
 
   // Purchase Edit Form
   const [editPurchaseTxn, setEditPurchaseTxn] = useState<Transaction | null>(null);
@@ -179,6 +180,7 @@ const Inventory = () => {
     setRestockProvider('');
     setRestockMethod(PaymentMethod.BANK_TRANSFER);
     setRestockDate(new Date().toISOString().split('T')[0]);
+    setRestockDesc('');
     setShowRestockModal(true);
   };
 
@@ -189,7 +191,7 @@ const Inventory = () => {
       const qty = parseInt(restockQty);
       const cost = parseFloat(restockCost);
       
-      if (isNaN(qty) || qty <= 0) throw new Error("Invalid quantity");
+      if (isNaN(qty) || qty < 0) throw new Error("Invalid quantity");
       if (isNaN(cost) || cost < 0) throw new Error("Invalid cost");
 
       // Check balance if Cash
@@ -206,7 +208,8 @@ const Inventory = () => {
         restockProvider, 
         provider?.name || 'Unknown', 
         restockMethod, 
-        restockDate
+        restockDate,
+        restockDesc
       );
       await fetchData();
       setShowRestockModal(false);
@@ -242,13 +245,13 @@ const Inventory = () => {
     
     // Try to get quantity from metadata or description
     let qty = 0;
-    if (txn.metadata?.quantity) {
+    if (txn.metadata && txn.metadata.quantity !== undefined) {
        qty = txn.metadata.quantity;
     } else {
        const match = txn.description.match(/Stock Purchase: (\d+)x/);
        if (match) qty = parseInt(match[1]);
     }
-    setEditPurchaseQty(qty > 0 ? qty.toString() : '');
+    setEditPurchaseQty(qty.toString());
     setShowEditPurchaseModal(true);
   };
 
@@ -261,11 +264,15 @@ const Inventory = () => {
       const newCost = parseFloat(editPurchaseCost);
       const newQty = parseInt(editPurchaseQty);
       
-      if (isNaN(newCost) || isNaN(newQty) || newQty <= 0) throw new Error("Invalid values");
+      if (isNaN(newCost) || isNaN(newQty) || newQty < 0) throw new Error("Invalid values");
       
       // We need to construct a new description if quantity changed, mainly for display legacy
       const productName = products.find(p => p.id === editPurchaseTxn.referenceId)?.name || 'Product';
-      const newDesc = `Stock Purchase: ${newQty}x ${productName}`;
+      // Only update description if it looks like the default auto-generated one
+      let newDesc = editPurchaseTxn.description;
+      if (newDesc.includes('Stock Purchase:')) {
+         newDesc = `Stock Purchase: ${newQty}x ${productName}`;
+      }
       
       const provider = providers.find(p => p.id === editPurchaseProvider);
 
@@ -741,6 +748,18 @@ const Inventory = () => {
                       ))}
                     </select>
                     {providers.length === 0 && <p className="text-[10px] text-red-500 mt-1">{t('pleaseAddProvider')}</p>}
+                </div>
+                
+                {/* Description Input */}
+                <div>
+                   <label className="block text-xs font-medium mb-1">{t('description')} <span className="text-slate-400 font-normal">({t('optional')})</span></label>
+                   <input 
+                     type="text" 
+                     value={restockDesc} 
+                     onChange={e => setRestockDesc(e.target.value)} 
+                     className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-primary text-sm"
+                     placeholder={t('restockDescPlaceholder')}
+                   />
                 </div>
 
                 <div>

@@ -1,5 +1,6 @@
 
 
+
 export const translations = {
   en: {
     // Common
@@ -48,6 +49,7 @@ export const translations = {
     sort: 'Sort',
     newestFirst: 'Newest First',
     oldestFirst: 'Oldest First',
+    optional: 'Optional',
     
     // Dashboard
     dashboardOverview: 'Overview of your sales performance',
@@ -201,6 +203,7 @@ export const translations = {
     pharmacyValue: 'Pharmacy Value',
     totalItems: 'Total Items',
     totalStock: 'Total Stock',
+    restockDescPlaceholder: 'Description (e.g. Installment)',
     
     // Invoice List
     invoiceHistory: 'History of all sales orders',
@@ -344,6 +347,7 @@ export const translations = {
     sort: 'ترتيب',
     newestFirst: 'الأحدث أولاً',
     oldestFirst: 'الأقدم أولاً',
+    optional: '(اختياري)',
     
     // Dashboard
     dashboardOverview: 'نظرة عامة على أداء المبيعات',
@@ -497,6 +501,7 @@ export const translations = {
     pharmacyValue: 'قيمة الصيدلية',
     totalItems: 'إجمالي الأصناف',
     totalStock: 'إجمالي المخزون',
+    restockDescPlaceholder: 'الوصف (مثلاً دفعة أقساط)',
     
     // Invoice List
     invoiceHistory: 'سجل جميع أوامر البيع',

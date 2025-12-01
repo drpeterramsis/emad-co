@@ -1,4 +1,5 @@
 
+
 import { Product, Customer, Order, Transaction, OrderStatus, TransactionType, Provider, PaymentMethod } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_CUSTOMERS } from '../constants';
 import { supabase, isSupabaseEnabled } from '../services/supabaseClient';
@@ -242,6 +243,28 @@ export const saveOrder = async (order: Order) => {
         }
       });
       localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+    }
+  }
+};
+
+// Specialized function to update only payment status and items paidQuantity WITHOUT triggering stock changes
+export const updateOrderPaidStatus = async (order: Order) => {
+  if (isSupabaseEnabled && supabase) {
+    const dbOrder = {
+      paid_amount: order.paidAmount,
+      status: order.status,
+      items: order.items // Contains updated paidQuantity
+    };
+    const { error } = await supabase.from('orders').update(dbOrder).eq('id', order.id);
+    if (error) throw error;
+  } else {
+    const orders = await getOrders();
+    const index = orders.findIndex(o => o.id === order.id);
+    if (index !== -1) {
+      orders[index].paidAmount = order.paidAmount;
+      orders[index].status = order.status;
+      orders[index].items = order.items;
+      localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
     }
   }
 };
@@ -666,19 +689,15 @@ export const deleteTransaction = async (transactionId: string) => {
             }
         }
         
-        if (isSupabaseEnabled && supabase) {
-           const updatePayload: any = { paid_amount: newPaid, status: newStatus };
-           if (itemsChanged) updatePayload.items = order.items;
-           await supabase.from('orders').update(updatePayload).eq('id', txn.referenceId);
-        } else {
-           const idx = orders.findIndex(o => o.id === txn.referenceId);
-           if (idx >= 0) {
-              orders[idx].paidAmount = newPaid;
-              orders[idx].status = newStatus;
-              // orders[idx].items is already updated by reference if found above
-              localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
-           }
-        }
+        // Use updateOrderPaidStatus equivalent logic to update DB
+        // We modify the order object locally above (order.items changed in place)
+        const updatedOrder = {
+          ...order,
+          paidAmount: newPaid,
+          status: newStatus
+          // items are already modified
+        };
+        await updateOrderPaidStatus(updatedOrder);
      }
   }
 

@@ -1,6 +1,7 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
-import { getOrders, addTransaction, getFinancialStats, updateOrder, getTransactions, deleteTransaction, updateTransaction, getProviders, addProvider } from '../utils/storage';
+import { getOrders, addTransaction, getFinancialStats, updateOrder, getTransactions, deleteTransaction, updateTransaction, getProviders, addProvider, updateOrderPaidStatus } from '../utils/storage';
 import { Order, TransactionType, OrderStatus, DashboardStats, Transaction, PaymentMethod, Provider, OrderItem } from '../types';
 import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search, Calendar, CheckSquare, X, History, FileText, Trash2, Edit2, TrendingDown, TrendingUp, Eye, Plus, Printer, Building2, Landmark, ListFilter, Layers } from 'lucide-react';
 import { formatDate, formatCurrency } from '../utils/helpers';
@@ -175,7 +176,8 @@ const Collections = () => {
         }
         });
 
-        await updateOrder({ ...selectedOrderForPayment, items: updatedItems });
+        // Use updateOrderPaidStatus instead of updateOrder to avoid stock logic overhead
+        await updateOrderPaidStatus({ ...selectedOrderForPayment, items: updatedItems });
 
         const description = paidDetails.length > 0 ? `Payment for: ${paidDetails.join(', ')}` : `Lump sum payment`;
 
@@ -439,18 +441,24 @@ const Collections = () => {
       return matchesSearch && matchesMonth;
     })
     .sort((a, b) => {
+        // Sort Date Descending (Z-A)
         const timeA = new Date(a.date).getTime();
         const timeB = new Date(b.date).getTime();
-        // Sort by Date Descending
         if (timeB !== timeA) return timeB - timeA;
-        // Secondary Sort by ID Descending (Newest created first)
-        return b.id.localeCompare(a.id);
+        return b.id.localeCompare(a.id); // Tie-break with ID descending
     });
 
   // Deposits History
-  const depositHistory = transactions.filter(t => t.type === TransactionType.DEPOSIT_TO_HQ);
+  const depositHistory = transactions.filter(t => t.type === TransactionType.DEPOSIT_TO_HQ)
+    .sort((a, b) => {
+        const timeA = new Date(a.date).getTime();
+        const timeB = new Date(b.date).getTime();
+        if (timeB !== timeA) return timeB - timeA;
+        return b.id.localeCompare(a.id);
+    });
   
   // Statement Data Preparation
+  // Sort ALL transactions Ascending to calculate running balance correctly first
   const allTxnsForStatement = transactions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   // Filter by date range first for opening balance calculation
@@ -492,7 +500,7 @@ const Collections = () => {
   let summaryTotalDebit = 0;
 
   // Filter Transactions based on Account Selection
-  const filteredStatementData = statementTxns.filter(t => {
+  let filteredStatementData = statementTxns.filter(t => {
      if (statementAccount === 'CASH') {
         // Show: Collections, Cash Expenses (including Purchases), Cash Deposits
         const isCollection = t.type === TransactionType.PAYMENT_RECEIVED;
@@ -574,6 +582,9 @@ const Collections = () => {
         formatDate(txn.date).includes(search)
       );
   });
+  
+  // Sort Statement Descending (Z-A) for Display
+  filteredStatementData = filteredStatementData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   
   const closingBalance = openingBalance + summaryTotalCredit - summaryTotalDebit;
 

@@ -1,12 +1,7 @@
-
-
 import React, { useEffect, useState } from 'react';
 import { getFinancialStats, getOrders, getCustomers, getProducts } from '../utils/storage';
 import { Order, DashboardStats, Product } from '../types';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend 
-} from 'recharts';
-import { DollarSign, TrendingUp, Briefcase, AlertCircle, Loader2, Wallet, Users, Package, Coins, Landmark, Layers } from 'lucide-react';
+import { DollarSign, TrendingUp, AlertCircle, Loader2, Wallet, Users, Package, Coins, Landmark, Layers } from 'lucide-react';
 import { formatCurrency } from '../utils/helpers';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNavigate } from 'react-router-dom';
@@ -21,10 +16,10 @@ const Dashboard = () => {
   const [inventoryCapital, setInventoryCapital] = useState(0);
   const [pharmacyValue, setPharmacyValue] = useState(0);
   const [sumAllCapitals, setSumAllCapitals] = useState(0);
-  const [customerCount, setCustomerCount] = useState(0);
-
-  // Chart Data
+  
+  // Table Data
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
+  const [productStats, setProductStats] = useState<any[]>([]);
 
   useEffect(() => {
     loadDashboardData();
@@ -40,7 +35,6 @@ const Dashboard = () => {
     ]);
     
     setStats(fetchedStats);
-    setCustomerCount(fetchedCustomers.length);
 
     // Calculate Inventory Stats
     const savedSettings = localStorage.getItem('emad_inventory_settings');
@@ -59,9 +53,15 @@ const Dashboard = () => {
     const outstanding = fetchedStats.totalSales - fetchedStats.totalCollected;
     setSumAllCapitals(outstanding + fetchedStats.transferredToHQ + totalPharm);
 
-    // Prepare Chart Data (Group by Month of Order)
+    // Prepare Table Data (Group by Month of Order)
     const activeOrders = fetchedOrders.filter(o => !o.isDraft);
     const monthMap: Record<string, { month: string, cashCollected: number, cashOutstanding: number, unitsCollected: number, unitsOutstanding: number }> = {};
+
+    // Product Stats Map
+    const prodStatsMap: Record<string, { id: string, name: string, sold: number, revenue: number, stock: number }> = {};
+    fetchedProducts.forEach(p => {
+        prodStatsMap[p.id] = { id: p.id, name: p.name, sold: 0, revenue: 0, stock: p.stock };
+    });
 
     activeOrders.forEach(order => {
        const month = order.date.substring(0, 7); // YYYY-MM
@@ -79,20 +79,28 @@ const Dashboard = () => {
        monthMap[month].cashCollected += order.paidAmount;
        monthMap[month].cashOutstanding += (order.totalAmount - order.paidAmount);
 
-       // Units
+       // Items Logic
        order.items.forEach(item => {
            const paid = item.paidQuantity || 0;
-           // Handle case where paid > qty (overshot, shouldn't happen but safe to clamp)
            const totalQty = item.quantity;
            const remaining = Math.max(0, totalQty - paid);
            
            monthMap[month].unitsCollected += paid;
            monthMap[month].unitsOutstanding += remaining;
+
+           // Product Stats Aggregation
+           if (prodStatsMap[item.productId]) {
+               prodStatsMap[item.productId].sold += item.quantity;
+               prodStatsMap[item.productId].revenue += item.subtotal;
+           }
        });
     });
 
-    const sortedMonths = Object.values(monthMap).sort((a, b) => a.month.localeCompare(b.month));
+    const sortedMonths = Object.values(monthMap).sort((a, b) => b.month.localeCompare(a.month)); // Newest first
     setMonthlyData(sortedMonths);
+
+    const sortedProductStats = Object.values(prodStatsMap).sort((a, b) => b.revenue - a.revenue);
+    setProductStats(sortedProductStats);
 
     setLoadingData(false);
   };
@@ -181,47 +189,94 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Charts Section */}
+      {/* Data Tables Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         
-        {/* Chart 1: Cash Analysis */}
-        <div className="bg-white p-4 md:p-5 rounded-xl shadow-sm border border-slate-200">
-          <h3 className="text-base font-semibold mb-1 text-slate-800">Monthly Cash: Outstanding vs Collected</h3>
-          <p className="text-xs text-slate-500 mb-4">Breakdown of order values by collection status (Net Flow)</p>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyData} margin={{top: 5, right: 0, left: -10, bottom: 0}}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 10}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10}} />
-                <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={{fontSize: '12px', padding: '8px'}} />
-                <Legend iconSize={8} wrapperStyle={{fontSize: '12px'}} />
-                <Bar dataKey="cashCollected" name="Collected Cash" stackId="a" fill="#0f766e" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="cashOutstanding" name="Outstanding Cash" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+        {/* Table 1: Cash Analysis */}
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+          <h3 className="text-base font-semibold mb-3 text-slate-800 border-b pb-2">Monthly Cash Analysis</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+                <tr>
+                  <th className="p-2">Month</th>
+                  <th className="p-2 text-right">Collected</th>
+                  <th className="p-2 text-right">Outstanding</th>
+                  <th className="p-2 text-right">Total Flow</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {monthlyData.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50">
+                    <td className="p-2 font-medium text-slate-700">{row.month}</td>
+                    <td className="p-2 text-right text-green-600 font-medium">{formatCurrency(row.cashCollected)}</td>
+                    <td className="p-2 text-right text-red-500 font-medium">{formatCurrency(row.cashOutstanding)}</td>
+                    <td className="p-2 text-right text-slate-800 font-bold">{formatCurrency(row.cashCollected + row.cashOutstanding)}</td>
+                  </tr>
+                ))}
+                {monthlyData.length === 0 && <tr><td colSpan={4} className="p-4 text-center text-slate-400">No data available</td></tr>}
+              </tbody>
+            </table>
           </div>
         </div>
 
-        {/* Chart 2: Unit Analysis */}
-        <div className="bg-white p-4 md:p-5 rounded-xl shadow-sm border border-slate-200">
-          <h3 className="text-base font-semibold mb-1 text-slate-800">Monthly Units: Outstanding vs Collected</h3>
-          <p className="text-xs text-slate-500 mb-4">Product units sold vs units paid for</p>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyData} margin={{top: 5, right: 0, left: -10, bottom: 0}}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 10}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10}} />
-                <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={{fontSize: '12px', padding: '8px'}} />
-                <Legend iconSize={8} wrapperStyle={{fontSize: '12px'}} />
-                <Bar dataKey="unitsCollected" name="Collected Units" stackId="a" fill="#10b981" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="unitsOutstanding" name="Outstanding Units" stackId="a" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+        {/* Table 2: Unit Analysis */}
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+          <h3 className="text-base font-semibold mb-3 text-slate-800 border-b pb-2">Monthly Units Analysis</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+                <tr>
+                  <th className="p-2">Month</th>
+                  <th className="p-2 text-center">Paid Units</th>
+                  <th className="p-2 text-center">Unpaid Units</th>
+                  <th className="p-2 text-center">Total Units</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {monthlyData.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50">
+                    <td className="p-2 font-medium text-slate-700">{row.month}</td>
+                    <td className="p-2 text-center text-green-600 font-medium">{row.unitsCollected}</td>
+                    <td className="p-2 text-center text-amber-500 font-medium">{row.unitsOutstanding}</td>
+                    <td className="p-2 text-center text-slate-800 font-bold">{row.unitsCollected + row.unitsOutstanding}</td>
+                  </tr>
+                ))}
+                {monthlyData.length === 0 && <tr><td colSpan={4} className="p-4 text-center text-slate-400">No data available</td></tr>}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
+
+      {/* Product Statistics Table */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+         <h3 className="text-base font-semibold mb-3 text-slate-800 border-b pb-2">Product Performance Statistics</h3>
+         <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs md:text-sm">
+               <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+                  <tr>
+                     <th className="p-3">Product Name</th>
+                     <th className="p-3 text-center">Units Sold</th>
+                     <th className="p-3 text-center">Current Stock</th>
+                     <th className="p-3 text-right">Total Revenue</th>
+                  </tr>
+               </thead>
+               <tbody className="divide-y divide-slate-100">
+                  {productStats.map((prod, idx) => (
+                     <tr key={idx} className="hover:bg-slate-50">
+                        <td className="p-3 font-medium text-slate-800">{prod.name}</td>
+                        <td className="p-3 text-center text-blue-600 font-medium">{prod.sold}</td>
+                        <td className="p-3 text-center text-slate-600">{prod.stock}</td>
+                        <td className="p-3 text-right text-emerald-600 font-bold">{formatCurrency(prod.revenue)}</td>
+                     </tr>
+                  ))}
+                  {productStats.length === 0 && <tr><td colSpan={4} className="p-6 text-center text-slate-400">No product sales data found</td></tr>}
+               </tbody>
+            </table>
+         </div>
+      </div>
+
     </div>
   );
 };

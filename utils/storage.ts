@@ -489,7 +489,8 @@ export const addTransaction = async (transaction: Transaction) => {
        payment_method: transaction.paymentMethod,
        provider_id: transaction.providerId || null,
        provider_name: transaction.providerName,
-       metadata: transaction.metadata // Store metadata including paid items
+       // REMOVED metadata to fix error if column missing in DB schema.
+       // The 'skipOrderUpdate' logic below uses the function argument 'transaction', not dbTxn, so it still works.
      };
      const { error } = await supabase.from('transactions').insert(dbTxn);
      if (error) throw error;
@@ -597,7 +598,7 @@ export const updateTransaction = async (transaction: Transaction) => {
       payment_method: transaction.paymentMethod,
       provider_id: transaction.providerId,
       provider_name: transaction.providerName,
-      metadata: transaction.metadata
+      // REMOVED metadata to prevent error
     };
     const { error } = await supabase.from('transactions').update(dbTxn).eq('id', transaction.id);
     if(error) throw error;

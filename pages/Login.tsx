@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { loginUser } from '../utils/auth';
 import { Loader2, Lock, ArrowRight, ShieldCheck, AlertCircle, Mail, Pill } from 'lucide-react';
@@ -119,7 +118,7 @@ const Login = ({ onLogin }: LoginProps) => {
 
           <div className="mt-8 text-center border-t border-slate-100 pt-6">
             <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">
-              {t('restrictedAccess')} v2.0.038
+              {t('restrictedAccess')} v2.0.079
             </p>
             <p className="text-[10px] text-slate-400 mt-1">
               Developer Dr. Peter Ramsis all rights reserved

@@ -1,5 +1,3 @@
-
-
 import { Product, Customer, Order, Transaction, OrderStatus, TransactionType, Provider, PaymentMethod } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_CUSTOMERS } from '../constants';
 import { supabase, isSupabaseEnabled } from '../services/supabaseClient';
@@ -528,6 +526,35 @@ export const updateTransaction = async (transaction: Transaction) => {
         if (product) {
            product.stock += diff; // Add diff (e.g. 5 to 7 = +2)
            await updateProduct(product);
+        }
+     }
+  }
+
+  // Handle Payment RECEIVED Updates (Affects Order Balance)
+  if (oldTxn && oldTxn.type === TransactionType.PAYMENT_RECEIVED && oldTxn.referenceId && oldTxn.amount !== transaction.amount) {
+     const orders = await getOrders();
+     const order = orders.find(o => o.id === oldTxn.referenceId);
+     if (order) {
+        const diff = transaction.amount - oldTxn.amount;
+        const newPaid = (order.paidAmount || 0) + diff;
+        
+        // Recalculate status
+        let newStatus = order.status;
+        if (!order.isReturn) {
+             if (newPaid >= order.totalAmount) newStatus = OrderStatus.PAID;
+             else if (newPaid > 0) newStatus = OrderStatus.PARTIAL;
+             else newStatus = OrderStatus.PENDING;
+        }
+
+        if (isSupabaseEnabled && supabase) {
+            await supabase.from('orders').update({ paid_amount: newPaid, status: newStatus }).eq('id', order.id);
+        } else {
+             const idx = orders.findIndex(o => o.id === order.id);
+             if (idx >= 0) {
+                 orders[idx].paidAmount = newPaid;
+                 orders[idx].status = newStatus;
+                 localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+             }
         }
      }
   }

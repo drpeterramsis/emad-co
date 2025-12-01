@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { getOrders, addTransaction, getFinancialStats, updateOrder, getTransactions, deleteTransaction, updateTransaction, getProviders, addProvider } from '../utils/storage';
 import { Order, TransactionType, OrderStatus, DashboardStats, Transaction, PaymentMethod, Provider } from '../types';
@@ -55,6 +53,13 @@ const Collections = () => {
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentItems, setPaymentItems] = useState<{index: number, payQty: number, selected: boolean}[]>([]);
   const [actualCollectedAmount, setActualCollectedAmount] = useState<string>('');
+  const [isPaymentSubmitting, setIsPaymentSubmitting] = useState(false); // To prevent double click
+  
+  // Edit Payment State
+  const [editPaymentTxn, setEditPaymentTxn] = useState<Transaction | null>(null);
+  const [editPaymentAmount, setEditPaymentAmount] = useState('');
+  const [editPaymentDate, setEditPaymentDate] = useState('');
+  const [editPaymentDesc, setEditPaymentDesc] = useState('');
   
   // Filters for Pending
   const [searchCustomer, setSearchCustomer] = useState('');
@@ -93,6 +98,7 @@ const Collections = () => {
   const openPaymentModal = (order: Order) => {
     setSelectedOrderForPayment(order);
     setPaymentDate(new Date().toISOString().split('T')[0]);
+    setIsPaymentSubmitting(false);
     
     // Fetch History
     const history = transactions
@@ -142,39 +148,50 @@ const Collections = () => {
 
   const handleSavePayment = async () => {
     if (!selectedOrderForPayment) return;
+    if (isPaymentSubmitting) return; // Prevent double click
+
     const amount = parseFloat(actualCollectedAmount);
     if (isNaN(amount) || amount <= 0) {
       alert("Please enter a valid amount.");
       return;
     }
 
-    const updatedItems = [...selectedOrderForPayment.items];
-    const paidDetails: string[] = [];
+    setIsPaymentSubmitting(true);
 
-    paymentItems.forEach(state => {
-      if (state.selected && state.payQty > 0) {
-        const item = updatedItems[state.index];
-        const newPaidQty = (item.paidQuantity || 0) + state.payQty;
-        updatedItems[state.index] = { ...item, paidQuantity: newPaidQty };
-        paidDetails.push(`${state.payQty}x ${item.productName}`);
-      }
-    });
+    try {
+        const updatedItems = [...selectedOrderForPayment.items];
+        const paidDetails: string[] = [];
 
-    await updateOrder({ ...selectedOrderForPayment, items: updatedItems });
+        paymentItems.forEach(state => {
+        if (state.selected && state.payQty > 0) {
+            const item = updatedItems[state.index];
+            const newPaidQty = (item.paidQuantity || 0) + state.payQty;
+            updatedItems[state.index] = { ...item, paidQuantity: newPaidQty };
+            paidDetails.push(`${state.payQty}x ${item.productName}`);
+        }
+        });
 
-    const description = paidDetails.length > 0 ? `Payment for: ${paidDetails.join(', ')}` : `Lump sum payment`;
+        await updateOrder({ ...selectedOrderForPayment, items: updatedItems });
 
-    await addTransaction({
-      id: `TXN-${Date.now()}`,
-      type: TransactionType.PAYMENT_RECEIVED,
-      amount: amount,
-      date: paymentDate,
-      referenceId: selectedOrderForPayment.id,
-      description: description
-    });
+        const description = paidDetails.length > 0 ? `Payment for: ${paidDetails.join(', ')}` : `Lump sum payment`;
 
-    setSelectedOrderForPayment(null);
-    await refreshData();
+        await addTransaction({
+        id: `TXN-${Date.now()}`,
+        type: TransactionType.PAYMENT_RECEIVED,
+        amount: amount,
+        date: paymentDate,
+        referenceId: selectedOrderForPayment.id,
+        description: description
+        });
+
+        setSelectedOrderForPayment(null);
+        await refreshData();
+    } catch (error) {
+        console.error(error);
+        alert("Failed to record payment.");
+    } finally {
+        setIsPaymentSubmitting(false);
+    }
   };
 
   /* --- DEPOSIT LOGIC --- */
@@ -264,6 +281,51 @@ const Collections = () => {
       await refreshData();
     }
   }
+
+  /* --- EDIT PAYMENT LOGIC (HISTORY TAB) --- */
+  const openEditPaymentModal = (txn: Transaction) => {
+      setEditPaymentTxn(txn);
+      setEditPaymentAmount(txn.amount.toString());
+      setEditPaymentDate(new Date(txn.date).toISOString().split('T')[0]);
+      setEditPaymentDesc(txn.description);
+  };
+
+  const handleUpdatePayment = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!editPaymentTxn) return;
+      
+      const newAmount = parseFloat(editPaymentAmount);
+      if (isNaN(newAmount) || newAmount <= 0) {
+          alert("Invalid Amount");
+          return;
+      }
+      
+      try {
+          await updateTransaction({
+              ...editPaymentTxn,
+              amount: newAmount,
+              date: editPaymentDate,
+              description: editPaymentDesc
+          });
+          setEditPaymentTxn(null);
+          await refreshData();
+      } catch (err) {
+          console.error(err);
+          alert("Failed to update payment.");
+      }
+  };
+
+  const handleDeletePayment = async (txnId: string) => {
+      if (window.confirm("Are you sure you want to delete this payment record? This will adjust the order balance.")) {
+          try {
+              await deleteTransaction(txnId);
+              await refreshData();
+          } catch (err) {
+              console.error(err);
+              alert("Failed to delete payment.");
+          }
+      }
+  };
 
   /* --- GENERAL EXPENSE LOGIC --- */
   const handleSaveExpense = async (e: React.FormEvent) => {
@@ -679,11 +741,12 @@ const Collections = () => {
                      <th className="p-3 font-medium text-slate-600">{t('refId')}</th>
                      <th className="p-3 font-medium text-slate-600">{t('description')}</th>
                      <th className="p-3 font-medium text-slate-600 text-right">{t('amount')}</th>
+                     <th className="p-3 font-medium text-slate-600 text-right">{t('actions')}</th>
                    </tr>
                  </thead>
                  <tbody className="divide-y divide-slate-100">
                    {collectionHistory.length === 0 ? (
-                      <tr><td colSpan={4} className="p-6 text-center text-slate-400">{t('noHistoryFound')}</td></tr>
+                      <tr><td colSpan={5} className="p-6 text-center text-slate-400">{t('noHistoryFound')}</td></tr>
                    ) : (
                      collectionHistory.map(txn => {
                        const order = orders.find(o => o.id === txn.referenceId);
@@ -697,6 +760,24 @@ const Collections = () => {
                            </td>
                            <td className="p-3 text-right font-bold text-teal-600">
                              {formatCurrency(txn.amount)}
+                           </td>
+                           <td className="p-3 text-right">
+                               <div className="flex justify-end gap-2">
+                                   <button 
+                                     onClick={() => openEditPaymentModal(txn)}
+                                     className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                                     title={t('edit')}
+                                   >
+                                       <Edit2 size={14}/>
+                                   </button>
+                                   <button 
+                                     onClick={() => handleDeletePayment(txn.id)}
+                                     className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+                                     title={t('delete')}
+                                   >
+                                       <Trash2 size={14}/>
+                                   </button>
+                               </div>
                            </td>
                          </tr>
                        )
@@ -982,6 +1063,53 @@ const Collections = () => {
          </div>
       )}
 
+      {/* Edit Payment Modal */}
+      {editPaymentTxn && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+             <div className="bg-white rounded-xl w-full max-w-sm p-5 shadow-2xl">
+                 <h3 className="text-lg font-bold mb-4">{t('edit')} {t('recordPayment')}</h3>
+                 <form onSubmit={handleUpdatePayment} className="space-y-4">
+                     <div>
+                         <label className="block text-xs font-medium mb-1">{t('date')}</label>
+                         <input 
+                           type="date" 
+                           required 
+                           value={editPaymentDate} 
+                           onChange={(e) => setEditPaymentDate(e.target.value)} 
+                           className="w-full p-2 border rounded-lg outline-none text-sm" 
+                         />
+                     </div>
+                     <div>
+                         <label className="block text-xs font-medium mb-1">{t('description')}</label>
+                         <input 
+                           type="text" 
+                           required 
+                           value={editPaymentDesc} 
+                           onChange={(e) => setEditPaymentDesc(e.target.value)} 
+                           className="w-full p-2 border rounded-lg outline-none text-sm" 
+                         />
+                     </div>
+                     <div>
+                         <label className="block text-xs font-medium mb-1">{t('amount')}</label>
+                         <input 
+                           type="number" 
+                           step="any" 
+                           required 
+                           value={editPaymentAmount} 
+                           onChange={(e) => setEditPaymentAmount(e.target.value)} 
+                           className="w-full p-2 border rounded-lg outline-none text-sm font-bold text-slate-800" 
+                         />
+                         <p className="text-[10px] text-red-500 mt-1">Warning: Changing amount will affect invoice balance.</p>
+                     </div>
+                     <div className="flex justify-end gap-2 pt-2">
+                         <button type="button" onClick={() => setEditPaymentTxn(null)} className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">{t('cancel')}</button>
+                         <button type="submit" className="px-3 py-1.5 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm">{t('saveChanges')}</button>
+                     </div>
+                 </form>
+             </div>
+          </div>
+      )}
+
       {/* Itemized Payment Modal */}
       {selectedOrderForPayment && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -1107,7 +1235,14 @@ const Collections = () => {
 
             <div className="p-4 border-t border-slate-200 flex justify-end gap-3 shrink-0">
                <button onClick={() => setSelectedOrderForPayment(null)} className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 font-medium text-sm">{t('cancel')}</button>
-               <button onClick={handleSavePayment} className="px-4 py-2 rounded-lg bg-primary text-white hover:bg-teal-800 font-medium shadow-lg shadow-teal-700/30 text-sm">{t('confirmPayment')}</button>
+               <button 
+                  onClick={handleSavePayment} 
+                  disabled={isPaymentSubmitting}
+                  className="px-4 py-2 rounded-lg bg-primary text-white hover:bg-teal-800 font-medium shadow-lg shadow-teal-700/30 text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+               >
+                 {isPaymentSubmitting ? <Loader2 className="animate-spin" size={16}/> : null}
+                 {t('confirmPayment')}
+               </button>
             </div>
           </div>
         </div>

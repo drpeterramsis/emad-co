@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getOrders, addTransaction, getFinancialStats, updateOrder, getTransactions, deleteTransaction, updateTransaction, getProviders, addProvider } from '../utils/storage';
 import { Order, TransactionType, OrderStatus, DashboardStats, Transaction, PaymentMethod, Provider } from '../types';
-import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search, Calendar, CheckSquare, X, History, FileText, Trash2, Edit2, TrendingDown, TrendingUp, Eye, Plus, Printer, Building2, Landmark, ListFilter } from 'lucide-react';
+import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search, Calendar, CheckSquare, X, History, FileText, Trash2, Edit2, TrendingDown, TrendingUp, Eye, Plus, Printer, Building2, Landmark, ListFilter, Layers } from 'lucide-react';
 import { formatDate, formatCurrency } from '../utils/helpers';
 import ProviderModal from '../components/ProviderModal';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -65,6 +65,7 @@ const Collections = () => {
   const [searchCustomer, setSearchCustomer] = useState('');
   const [searchProduct, setSearchProduct] = useState('');
   const [searchMonth, setSearchMonth] = useState('');
+  const [groupBy, setGroupBy] = useState<'none' | 'customer' | 'month'>('none');
 
   useEffect(() => {
     refreshData();
@@ -387,6 +388,24 @@ const Collections = () => {
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
+  // Grouping Logic for Unpaid Orders
+  const groupedUnpaidOrders = useMemo(() => {
+    if (groupBy === 'none') return { 'All': unpaidOrders };
+    
+    const groups: Record<string, Order[]> = {};
+    unpaidOrders.forEach(order => {
+      let key = 'Other';
+      if (groupBy === 'customer') key = order.customerName;
+      else if (groupBy === 'month') key = order.date.substring(0, 7);
+      
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(order);
+    });
+    
+    // Optional: Sort keys
+    return groups;
+  }, [unpaidOrders, groupBy]);
+
   // Collections History
   const collectionHistory = transactions
     .filter(t => t.type === TransactionType.PAYMENT_RECEIVED)
@@ -651,20 +670,42 @@ const Collections = () => {
       {/* TAB CONTENT: PENDING */}
       {activeTab === 'pending' && (
         <div className="space-y-4">
-           <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-3 items-center">
-              <div className="relative flex-1 min-w-[200px]">
+           <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-3 items-center">
+              <div className="relative flex-1 min-w-[150px] w-full">
                 <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
                 <input 
                   type="text" 
                   placeholder={t('searchCustomerPlaceholder')} 
                   value={searchCustomer}
                   onChange={(e) => setSearchCustomer(e.target.value)}
-                  className="pl-9 pr-4 py-1.5 text-sm border border-slate-300 rounded-lg w-full"
+                  className="pl-9 pr-4 py-1.5 text-sm border border-slate-300 rounded-lg w-full outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
-              <div className="relative">
-                 <input type="month" value={searchMonth} onChange={(e) => setSearchMonth(e.target.value)} className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg" />
+              <div className="relative flex-1 min-w-[150px] w-full">
+                <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
+                <input 
+                  type="text" 
+                  placeholder={t('filterByProduct')}
+                  value={searchProduct}
+                  onChange={(e) => setSearchProduct(e.target.value)}
+                  className="pl-9 pr-4 py-1.5 text-sm border border-slate-300 rounded-lg w-full outline-none focus:ring-1 focus:ring-primary"
+                />
               </div>
+              <div className="relative w-full md:w-auto">
+                 <input type="month" value={searchMonth} onChange={(e) => setSearchMonth(e.target.value)} className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg outline-none focus:ring-1 focus:ring-primary" />
+              </div>
+              <div className="flex items-center gap-2 border-l pl-3 border-slate-200 w-full md:w-auto">
+                <span className="text-xs font-medium text-slate-500 whitespace-nowrap">{t('groupBy')}:</span>
+                <select 
+                    value={groupBy}
+                    onChange={(e) => setGroupBy(e.target.value as any)}
+                    className="w-full md:w-auto text-sm border border-slate-300 rounded-lg py-1.5 px-2 outline-none focus:ring-2 focus:ring-primary bg-white"
+                >
+                    <option value="none">{t('none')}</option>
+                    <option value="customer">{t('customer')}</option>
+                    <option value="month">{t('month')}</option>
+                </select>
+             </div>
            </div>
 
            <div className="text-xs text-slate-500 font-medium">{t('totalRecords')}: {unpaidOrders.length}</div>
@@ -686,24 +727,43 @@ const Collections = () => {
                   {unpaidOrders.length === 0 ? (
                      <tr><td colSpan={7} className="p-6 text-center text-slate-400">All invoices paid or no matches!</td></tr>
                   ) : (
-                    unpaidOrders.map(order => {
-                      const balance = order.totalAmount - order.paidAmount;
-                      return (
-                        <tr key={order.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="p-3 font-mono text-[10px]">{order.id}</td>
-                          <td className="p-3 font-medium text-slate-800">{order.customerName}</td>
-                          <td className="p-3 text-slate-600">{formatDate(order.date)}</td>
-                          <td className="p-3">{formatCurrency(order.totalAmount)}</td>
-                          <td className="p-3 text-green-600 font-medium">{formatCurrency(order.paidAmount)}</td>
-                          <td className="p-3 font-bold text-red-500">{formatCurrency(balance)}</td>
-                          <td className="p-3 text-right">
-                            <button onClick={() => openPaymentModal(order)} className="text-[10px] bg-primary text-white px-2 py-1 rounded hover:bg-teal-800 shadow-sm">
-                              {t('recordPayment')}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
+                    Object.entries(groupedUnpaidOrders).map(([groupKey, groupOrders]) => (
+                      <React.Fragment key={groupKey}>
+                        {groupBy !== 'none' && (
+                          <tr className="bg-slate-100 border-b border-slate-200">
+                            <td colSpan={7} className="p-3 font-bold text-slate-700 text-xs">
+                              <div className="flex justify-between items-center">
+                                <span>
+                                  {groupBy === 'month' ? formatDate(groupKey + '-01').substring(3) : groupKey} 
+                                  <span className="text-slate-500 font-normal ml-2">({(groupOrders as Order[]).length})</span>
+                                </span>
+                                <span className="text-red-600">
+                                  {t('outstanding')}: {formatCurrency((groupOrders as Order[]).reduce((sum, o) => sum + (o.totalAmount - o.paidAmount), 0))}
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        {(groupOrders as Order[]).map(order => {
+                          const balance = order.totalAmount - order.paidAmount;
+                          return (
+                            <tr key={order.id} className="hover:bg-slate-50 transition-colors">
+                              <td className="p-3 font-mono text-[10px]">{order.id}</td>
+                              <td className="p-3 font-medium text-slate-800">{order.customerName}</td>
+                              <td className="p-3 text-slate-600">{formatDate(order.date)}</td>
+                              <td className="p-3">{formatCurrency(order.totalAmount)}</td>
+                              <td className="p-3 text-green-600 font-medium">{formatCurrency(order.paidAmount)}</td>
+                              <td className="p-3 font-bold text-red-500">{formatCurrency(balance)}</td>
+                              <td className="p-3 text-right">
+                                <button onClick={() => openPaymentModal(order)} className="text-[10px] bg-primary text-white px-2 py-1 rounded hover:bg-teal-800 shadow-sm">
+                                  {t('recordPayment')}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </React.Fragment>
+                    ))
                   )}
                 </tbody>
               </table>

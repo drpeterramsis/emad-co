@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { getOrders, addTransaction, getFinancialStats, updateOrder, getTransactions, deleteTransaction, updateTransaction, getProviders, addProvider } from '../utils/storage';
 import { Order, TransactionType, OrderStatus, DashboardStats, Transaction, PaymentMethod, Provider, OrderItem } from '../types';
@@ -388,6 +389,20 @@ const Collections = () => {
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
+  // Calculate Summary for Unpaid Orders
+  const unpaidSummary = useMemo(() => {
+    return unpaidOrders.reduce((acc, order) => {
+      const balance = order.totalAmount - order.paidAmount;
+      const units = order.items.reduce((sum, i) => sum + i.quantity + (i.bonusQuantity || 0), 0);
+      return {
+        total: acc.total + order.totalAmount,
+        paid: acc.paid + order.paidAmount,
+        balance: acc.balance + balance,
+        units: acc.units + units
+      };
+    }, { total: 0, paid: 0, balance: 0, units: 0 });
+  }, [unpaidOrders]);
+
   // Grouping Logic for Unpaid Orders
   const groupedUnpaidOrders = useMemo(() => {
     if (groupBy === 'none') return { 'All': unpaidOrders };
@@ -419,6 +434,14 @@ const Collections = () => {
       
       const matchesMonth = historyMonth === '' || t.date.startsWith(historyMonth);
       return matchesSearch && matchesMonth;
+    })
+    .sort((a, b) => {
+        const timeA = new Date(a.date).getTime();
+        const timeB = new Date(b.date).getTime();
+        // Sort by Date Descending
+        if (timeB !== timeA) return timeB - timeA;
+        // Secondary Sort by ID Descending (Newest created first)
+        return b.id.localeCompare(a.id);
     });
 
   // Deposits History
@@ -708,7 +731,18 @@ const Collections = () => {
              </div>
            </div>
 
-           <div className="text-xs text-slate-500 font-medium">{t('totalRecords')}: {unpaidOrders.length}</div>
+           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500 font-medium bg-slate-50 p-3 rounded-xl border border-slate-200 shadow-sm">
+               <span>{t('totalRecords')}: {unpaidOrders.length}</span>
+               <span className="w-px h-3 bg-slate-300 hidden sm:block"></span>
+               <span>{t('total')}: <span className="text-slate-800 font-bold">{formatCurrency(unpaidSummary.total)}</span></span>
+               <span className="w-px h-3 bg-slate-300 hidden sm:block"></span>
+               <span>{t('paid')}: <span className="text-green-600 font-bold">{formatCurrency(unpaidSummary.paid)}</span></span>
+               <span className="w-px h-3 bg-slate-300 hidden sm:block"></span>
+               <span>{t('balance')}: <span className="text-red-600 font-bold">{formatCurrency(unpaidSummary.balance)}</span></span>
+               <span className="w-px h-3 bg-slate-300 hidden sm:block"></span>
+               <span>{t('quantity')}: <span className="text-slate-800 font-bold">{unpaidSummary.units}</span></span>
+           </div>
+
            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs md:text-sm">

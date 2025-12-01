@@ -469,7 +469,7 @@ export const addTransaction = async (transaction: Transaction) => {
        payment_method: transaction.paymentMethod,
        provider_id: transaction.providerId || null,
        provider_name: transaction.providerName,
-       metadata: transaction.metadata
+       // metadata: transaction.metadata // Removed to prevent schema error
      };
      const { error } = await supabase.from('transactions').insert(dbTxn);
      if (error) throw error;
@@ -540,7 +540,7 @@ export const updateTransaction = async (transaction: Transaction) => {
       payment_method: transaction.paymentMethod,
       provider_id: transaction.providerId,
       provider_name: transaction.providerName,
-      metadata: transaction.metadata
+      // metadata: transaction.metadata // Removed to prevent schema error
     };
     const { error } = await supabase.from('transactions').update(dbTxn).eq('id', transaction.id);
     if(error) throw error;

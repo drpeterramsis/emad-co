@@ -101,9 +101,10 @@ export const getOrders = async (): Promise<Order[]> => {
       paidAmount: Number(o.paid_amount),
       customerName: o.customer_name,
       customerId: o.customer_id,
-      // Robust check for draft status: use column if exists, otherwise fallback to status string
+      // Check column if exists, otherwise fallback to status
       isDraft: !!(o.is_draft || o.status === OrderStatus.DRAFT),
-      isReturn: !!o.is_return,
+      // Check column if exists, OR check status, OR check metadata
+      isReturn: !!(o.is_return || o.status === OrderStatus.RETURNED || o.draft_metadata?.isReturn),
       draftMetadata: o.draft_metadata
     })) || [];
   }
@@ -128,7 +129,7 @@ export const getOrder = async (orderId: string): Promise<Order | null> => {
       customerName: data.customer_name,
       customerId: data.customer_id,
       isDraft: !!(data.is_draft || data.status === OrderStatus.DRAFT),
-      isReturn: !!data.is_return,
+      isReturn: !!(data.is_return || data.status === OrderStatus.RETURNED || data.draft_metadata?.isReturn),
       draftMetadata: data.draft_metadata
     };
   } else {
@@ -161,6 +162,8 @@ export const getTransactions = async (): Promise<Transaction[]> => {
 
 export const saveOrder = async (order: Order) => {
   if (isSupabaseEnabled && supabase) {
+    // Construct DB object but avoid sending 'is_return' column if schema lacks it
+    // We store 'isReturn' status inside 'draft_metadata' JSON as a fallback
     const dbOrder: any = {
       id: order.id,
       customer_id: order.customerId,
@@ -172,8 +175,12 @@ export const saveOrder = async (order: Order) => {
       status: order.status,
       notes: order.notes,
       is_draft: order.isDraft || false,
-      is_return: order.isReturn || false,
-      draft_metadata: order.draftMetadata
+      // Remove direct mapping to avoid schema error: 
+      // is_return: order.isReturn || false, 
+      draft_metadata: {
+        ...order.draftMetadata,
+        isReturn: order.isReturn // Persist here for safety
+      }
     };
     
     const { error } = await supabase.from('orders').upsert(dbOrder);
@@ -246,7 +253,7 @@ export const updateOrder = async (order: Order) => {
     // Revert Stock for Old Data if it wasn't a draft
     if (oldData) {
       const oldIsDraft = oldData.is_draft || oldData.status === OrderStatus.DRAFT;
-      const oldIsReturn = oldData.is_return;
+      const oldIsReturn = !!(oldData.is_return || oldData.status === OrderStatus.RETURNED || oldData.draft_metadata?.isReturn);
       
       if (!oldIsDraft && oldData.items) {
         const oldItems = oldData.items as any[];
@@ -285,8 +292,11 @@ export const updateOrder = async (order: Order) => {
       paid_amount: order.paidAmount,
       status: order.status,
       is_draft: order.isDraft,
-      is_return: order.isReturn,
-      draft_metadata: order.draftMetadata
+      // REMOVED: is_return: order.isReturn,
+      draft_metadata: {
+        ...order.draftMetadata,
+        isReturn: order.isReturn
+      }
     };
     const { error } = await supabase.from('orders').update(dbOrder).eq('id', order.id);
     if (error) throw error;
@@ -376,7 +386,7 @@ export const deleteOrder = async (orderId: string) => {
     if (order) {
       // Restore/Adjust stock logic
       const isDraft = order.is_draft || order.status === OrderStatus.DRAFT;
-      const isReturn = order.is_return;
+      const isReturn = !!(order.is_return || order.status === OrderStatus.RETURNED || order.draft_metadata?.isReturn);
 
       if (!isDraft && order.items) {
         const items = order.items as any[];
@@ -463,7 +473,10 @@ export const addTransaction = async (transaction: Transaction) => {
         if (order) {
            const newPaid = (Number(order.paid_amount) || 0) + transaction.amount;
            let newStatus = order.status;
-           if (!order.is_return) {
+           
+           const isReturn = !!(order.is_return || order.status === OrderStatus.RETURNED || order.draft_metadata?.isReturn);
+
+           if (!isReturn) {
              if (newPaid >= Number(order.total_amount)) newStatus = OrderStatus.PAID;
              else if (newPaid > 0) newStatus = OrderStatus.PARTIAL;
            }

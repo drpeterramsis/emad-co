@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { getFinancialStats, getOrders, getCustomers, getProducts } from '../utils/storage';
 import { Order, DashboardStats, Product } from '../types';
-import { DollarSign, TrendingUp, AlertCircle, Loader2, Wallet, Users, Package, Coins, Landmark, Layers } from 'lucide-react';
-import { formatCurrency } from '../utils/helpers';
+import { DollarSign, TrendingUp, AlertCircle, Loader2, Wallet, Users, Package, Coins, Landmark, Layers, Calendar, BarChart3 } from 'lucide-react';
+import { formatCurrency, formatDate } from '../utils/helpers';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -20,6 +20,8 @@ const Dashboard = () => {
   // Table Data
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
   const [productStats, setProductStats] = useState<any[]>([]);
+  const [rawOrders, setRawOrders] = useState<Order[]>([]);
+  const [rawProducts, setRawProducts] = useState<Product[]>([]);
 
   useEffect(() => {
     loadDashboardData();
@@ -35,6 +37,8 @@ const Dashboard = () => {
     ]);
     
     setStats(fetchedStats);
+    setRawOrders(fetchedOrders);
+    setRawProducts(fetchedProducts);
 
     // Calculate Inventory Stats
     const savedSettings = localStorage.getItem('emad_inventory_settings');
@@ -105,6 +109,45 @@ const Dashboard = () => {
     setLoadingData(false);
   };
   
+  // Calculate Pivot Table for Units
+  const pivotData = useMemo(() => {
+    const activeOrders = rawOrders.filter(o => !o.isDraft);
+    const pData: Record<string, { name: string, total: number, months: Record<string, number> }> = {};
+    const monthsSet = new Set<string>();
+    const monthTotals: Record<string, number> = {};
+
+    activeOrders.forEach(o => {
+        const month = o.date.substring(0, 7);
+        monthsSet.add(month);
+        
+        o.items.forEach(item => {
+            if (!pData[item.productId]) {
+                pData[item.productId] = {
+                    name: item.productName,
+                    total: 0,
+                    months: {}
+                };
+            }
+            if (!pData[item.productId].months[month]) {
+                pData[item.productId].months[month] = 0;
+            }
+            if (!monthTotals[month]) monthTotals[month] = 0;
+
+            const qty = item.quantity;
+            pData[item.productId].months[month] += qty;
+            pData[item.productId].total += qty;
+            monthTotals[month] += qty;
+        });
+    });
+    
+    // Sort months descending (Newest Left)
+    const months = Array.from(monthsSet).sort().reverse();
+    // Sort products by total quantity
+    const rows = Object.values(pData).sort((a, b) => b.total - a.total);
+
+    return { months, rows, monthTotals };
+  }, [rawOrders]);
+
   if (loadingData || !stats) {
     return (
       <div className="flex items-center justify-center h-full min-h-[400px]">
@@ -189,77 +232,19 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Data Tables Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        
-        {/* Table 1: Cash Analysis */}
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-          <h3 className="text-base font-semibold mb-3 text-slate-800 border-b pb-2">Monthly Cash Analysis</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
-                <tr>
-                  <th className="p-2">Month</th>
-                  <th className="p-2 text-right">Collected</th>
-                  <th className="p-2 text-right">Outstanding</th>
-                  <th className="p-2 text-right">Total Flow</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {monthlyData.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50">
-                    <td className="p-2 font-medium text-slate-700">{row.month}</td>
-                    <td className="p-2 text-right text-green-600 font-medium">{formatCurrency(row.cashCollected)}</td>
-                    <td className="p-2 text-right text-red-500 font-medium">{formatCurrency(row.cashOutstanding)}</td>
-                    <td className="p-2 text-right text-slate-800 font-bold">{formatCurrency(row.cashCollected + row.cashOutstanding)}</td>
-                  </tr>
-                ))}
-                {monthlyData.length === 0 && <tr><td colSpan={4} className="p-4 text-center text-slate-400">No data available</td></tr>}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Table 2: Unit Analysis */}
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-          <h3 className="text-base font-semibold mb-3 text-slate-800 border-b pb-2">Monthly Units Analysis</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
-                <tr>
-                  <th className="p-2">Month</th>
-                  <th className="p-2 text-center">Paid Units</th>
-                  <th className="p-2 text-center">Unpaid Units</th>
-                  <th className="p-2 text-center">Total Units</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {monthlyData.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50">
-                    <td className="p-2 font-medium text-slate-700">{row.month}</td>
-                    <td className="p-2 text-center text-green-600 font-medium">{row.unitsCollected}</td>
-                    <td className="p-2 text-center text-amber-500 font-medium">{row.unitsOutstanding}</td>
-                    <td className="p-2 text-center text-slate-800 font-bold">{row.unitsCollected + row.unitsOutstanding}</td>
-                  </tr>
-                ))}
-                {monthlyData.length === 0 && <tr><td colSpan={4} className="p-4 text-center text-slate-400">No data available</td></tr>}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
       {/* Product Statistics Table */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-         <h3 className="text-base font-semibold mb-3 text-slate-800 border-b pb-2">Product Performance Statistics</h3>
-         <div className="overflow-x-auto">
+         <h3 className="text-base font-semibold mb-3 text-slate-800 border-b pb-2 flex items-center gap-2">
+           <BarChart3 size={18} className="text-primary"/> Product Performance Statistics
+         </h3>
+         <div className="overflow-x-auto max-h-[300px]">
             <table className="w-full text-left text-xs md:text-sm">
-               <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+               <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200 sticky top-0 z-10">
                   <tr>
-                     <th className="p-3">Product Name</th>
-                     <th className="p-3 text-center">Units Sold</th>
-                     <th className="p-3 text-center">Current Stock</th>
-                     <th className="p-3 text-right">Total Revenue</th>
+                     <th className="p-3 bg-slate-50">Product Name</th>
+                     <th className="p-3 text-center bg-slate-50">Units Sold</th>
+                     <th className="p-3 text-center bg-slate-50">Current Stock</th>
+                     <th className="p-3 text-right bg-slate-50">Total Revenue</th>
                   </tr>
                </thead>
                <tbody className="divide-y divide-slate-100">
@@ -275,6 +260,100 @@ const Dashboard = () => {
                </tbody>
             </table>
          </div>
+      </div>
+
+      {/* Monthly Units Analysis (Pivot Table) */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+         <h3 className="text-base font-semibold mb-3 text-slate-800 border-b pb-2 flex items-center gap-2">
+            <Calendar size={18} className="text-primary"/> Monthly Units Analysis (Pivot)
+         </h3>
+         <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs whitespace-nowrap">
+               <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                  <tr>
+                     <th className="p-3 min-w-[150px] sticky left-0 bg-slate-50 z-10 border-r border-slate-200">Product \ Month</th>
+                     {pivotData.months.map(m => (
+                        <th key={m} className="p-3 text-center min-w-[80px]">{formatDate(m + '-01').substring(3)}</th>
+                     ))}
+                     <th className="p-3 text-center min-w-[80px] bg-slate-100 font-extrabold text-slate-800 border-l border-slate-200">TOTAL</th>
+                  </tr>
+               </thead>
+               <tbody className="divide-y divide-slate-100">
+                  {pivotData.rows.length === 0 ? (
+                      <tr><td colSpan={pivotData.months.length + 2} className="p-4 text-center text-slate-400">No data available</td></tr>
+                  ) : (
+                      <>
+                        {pivotData.rows.map((row, idx) => (
+                           <tr key={idx} className="hover:bg-slate-50">
+                              <td className="p-3 font-medium text-slate-700 sticky left-0 bg-white z-10 border-r border-slate-200">{row.name}</td>
+                              {pivotData.months.map(m => {
+                                 const val = row.months[m] || 0;
+                                 return (
+                                   <td key={m} className={`p-3 text-center ${val > 0 ? 'text-blue-600 font-medium' : 'text-slate-300'}`}>
+                                      {val > 0 ? val : '-'}
+                                   </td>
+                                 );
+                              })}
+                              <td className="p-3 text-center font-bold text-slate-900 bg-slate-50 border-l border-slate-200">{row.total}</td>
+                           </tr>
+                        ))}
+                        {/* Column Totals */}
+                        <tr className="bg-slate-100 font-bold border-t-2 border-slate-200">
+                           <td className="p-3 text-slate-800 sticky left-0 bg-slate-100 z-10 border-r border-slate-200">MONTHLY TOTAL</td>
+                           {pivotData.months.map(m => (
+                              <td key={m} className="p-3 text-center text-slate-800">
+                                 {pivotData.monthTotals[m] || 0}
+                              </td>
+                           ))}
+                           <td className="p-3 text-center text-slate-900 bg-slate-200 border-l border-slate-300">
+                              {pivotData.rows.reduce((s, r) => s + r.total, 0)}
+                           </td>
+                        </tr>
+                      </>
+                  )}
+               </tbody>
+            </table>
+         </div>
+      </div>
+
+      {/* Monthly Cash Analysis Table */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <h3 className="text-base font-semibold mb-3 text-slate-800 border-b pb-2 flex items-center gap-2">
+           <DollarSign size={18} className="text-primary"/> Monthly Cash Analysis
+        </h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs md:text-sm">
+            <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+              <tr>
+                <th className="p-3">Month</th>
+                <th className="p-3 text-right">Collected</th>
+                <th className="p-3 text-right">Outstanding</th>
+                <th className="p-3 text-right">Total Flow</th>
+                <th className="p-3 text-center">Collection %</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {monthlyData.map((row, idx) => {
+                 const total = row.cashCollected + row.cashOutstanding;
+                 const percent = total > 0 ? (row.cashCollected / total) * 100 : 0;
+                 return (
+                  <tr key={idx} className="hover:bg-slate-50">
+                    <td className="p-3 font-medium text-slate-700">{formatDate(row.month + '-01').substring(3)}</td>
+                    <td className="p-3 text-right text-green-600 font-medium">{formatCurrency(row.cashCollected)}</td>
+                    <td className="p-3 text-right text-red-500 font-medium">{formatCurrency(row.cashOutstanding)}</td>
+                    <td className="p-3 text-right text-slate-800 font-bold">{formatCurrency(total)}</td>
+                    <td className="p-3 text-center">
+                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${percent >= 80 ? 'bg-green-100 text-green-700' : percent >= 50 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                          {percent.toFixed(1)}%
+                       </span>
+                    </td>
+                  </tr>
+                );
+              })}
+              {monthlyData.length === 0 && <tr><td colSpan={5} className="p-4 text-center text-slate-400">No data available</td></tr>}
+            </tbody>
+          </table>
+        </div>
       </div>
 
     </div>

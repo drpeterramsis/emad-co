@@ -1,8 +1,7 @@
-
 import React, { useEffect, useState, useMemo } from 'react';
 import { getOrders, deleteOrder, updateOrder, getCustomers, getTransactions } from '../utils/storage';
 import { Order, OrderStatus, CustomerType, Transaction, TransactionType, OrderItem } from '../types';
-import { Search, Loader2, Edit, Trash2, Filter, Eye, X, Printer, Save, FileText, CheckCircle, AlertTriangle, ArrowUpDown, Layers } from 'lucide-react';
+import { Search, Loader2, Edit, Trash2, Filter, Eye, X, Printer, Save, FileText, CheckCircle, AlertTriangle, ArrowUpDown, Layers, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { formatDate, formatCurrency } from '../utils/helpers';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -116,9 +115,9 @@ const InvoiceList = () => {
   const getStatusColor = (status: OrderStatus) => {
     switch (status) {
       case OrderStatus.PAID: return 'bg-green-100 text-green-700 border-green-200';
-      case OrderStatus.PARTIAL: return 'bg-amber-100 text-amber-700 border-amber-200';
-      case OrderStatus.PENDING: return 'bg-slate-100 text-slate-600 border-slate-200';
-      case OrderStatus.RETURNED: return 'bg-rose-100 text-rose-700 border-rose-200';
+      case OrderStatus.PARTIAL: return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case OrderStatus.PENDING: return 'bg-red-100 text-red-700 border-red-200';
+      case OrderStatus.RETURNED: return 'bg-violet-100 text-violet-700 border-violet-200';
       case OrderStatus.CANCELLED: return 'bg-gray-100 text-gray-600 border-gray-200';
       default: return 'bg-gray-100 text-gray-600';
     }
@@ -232,11 +231,19 @@ const InvoiceList = () => {
   return (
     <div className="p-4 md:p-6 h-[calc(100vh-4rem)] flex flex-col">
       <div className="flex flex-col gap-4 mb-4 print:hidden shrink-0">
-        <div>
-          <h2 className="text-xl md:text-2xl font-bold text-slate-800">
-            {t('invoices')} <span className="text-sm font-normal text-slate-500">({filteredOrders.length})</span>
-          </h2>
-          <p className="text-slate-500 text-xs md:text-sm">{t('invoiceHistory')}</p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-xl md:text-2xl font-bold text-slate-800">
+              {t('invoices')} <span className="text-sm font-normal text-slate-500">({filteredOrders.length})</span>
+            </h2>
+            <p className="text-slate-500 text-xs md:text-sm">{t('invoiceHistory')}</p>
+          </div>
+          <button 
+             onClick={() => navigate('/new-order')}
+             className="bg-primary text-white px-3 py-2 rounded-lg hover:bg-teal-800 shadow-md flex items-center gap-2 text-sm font-medium transition-colors"
+          >
+             <Plus size={16} /> {t('newSale')}
+          </button>
         </div>
 
         {/* Filters Bar */}

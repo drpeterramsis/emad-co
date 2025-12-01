@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getOrders, addTransaction, getFinancialStats, updateOrder, getTransactions, deleteTransaction, updateTransaction, getProviders, addProvider } from '../utils/storage';
-import { Order, TransactionType, OrderStatus, DashboardStats, Transaction, PaymentMethod, Provider } from '../types';
+import { Order, TransactionType, OrderStatus, DashboardStats, Transaction, PaymentMethod, Provider, OrderItem } from '../types';
 import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search, Calendar, CheckSquare, X, History, FileText, Trash2, Edit2, TrendingDown, TrendingUp, Eye, Plus, Printer, Building2, Landmark, ListFilter, Layers } from 'lucide-react';
 import { formatDate, formatCurrency } from '../utils/helpers';
 import ProviderModal from '../components/ProviderModal';
@@ -717,6 +717,7 @@ const Collections = () => {
                     <th className="p-3 font-medium text-slate-600">{t('invoiceId')}</th>
                     <th className="p-3 font-medium text-slate-600">{t('customer')}</th>
                     <th className="p-3 font-medium text-slate-600">{t('date')}</th>
+                    <th className="p-3 font-medium text-slate-600">{t('summary')}</th>
                     <th className="p-3 font-medium text-slate-600">{t('total')}</th>
                     <th className="p-3 font-medium text-slate-600">{t('paid')}</th>
                     <th className="p-3 font-medium text-slate-600">{t('balance')}</th>
@@ -725,13 +726,13 @@ const Collections = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {unpaidOrders.length === 0 ? (
-                     <tr><td colSpan={7} className="p-6 text-center text-slate-400">All invoices paid or no matches!</td></tr>
+                     <tr><td colSpan={8} className="p-6 text-center text-slate-400">All invoices paid or no matches!</td></tr>
                   ) : (
                     Object.entries(groupedUnpaidOrders).map(([groupKey, groupOrders]) => (
                       <React.Fragment key={groupKey}>
                         {groupBy !== 'none' && (
                           <tr className="bg-slate-100 border-b border-slate-200">
-                            <td colSpan={7} className="p-3 font-bold text-slate-700 text-xs">
+                            <td colSpan={8} className="p-3 font-bold text-slate-700 text-xs">
                               <div className="flex justify-between items-center">
                                 <span>
                                   {groupBy === 'month' ? formatDate(groupKey + '-01').substring(3) : groupKey} 
@@ -746,15 +747,38 @@ const Collections = () => {
                         )}
                         {(groupOrders as Order[]).map(order => {
                           const balance = order.totalAmount - order.paidAmount;
+                          const totalDiscount = order.items.reduce((s, i) => s + (i.discount || 0), 0);
+                          const grossTotal = order.totalAmount + totalDiscount;
+                          const effectiveDiscountPercent = grossTotal > 0 ? (totalDiscount / grossTotal) * 100 : 0;
+                          
                           return (
                             <tr key={order.id} className="hover:bg-slate-50 transition-colors">
-                              <td className="p-3 font-mono text-[10px]">{order.id}</td>
-                              <td className="p-3 font-medium text-slate-800">{order.customerName}</td>
-                              <td className="p-3 text-slate-600">{formatDate(order.date)}</td>
-                              <td className="p-3">{formatCurrency(order.totalAmount)}</td>
-                              <td className="p-3 text-green-600 font-medium">{formatCurrency(order.paidAmount)}</td>
-                              <td className="p-3 font-bold text-red-500">{formatCurrency(balance)}</td>
-                              <td className="p-3 text-right">
+                              <td className="p-3 font-mono text-[10px] align-top">{order.id}</td>
+                              <td className="p-3 font-medium text-slate-800 align-top">{order.customerName}</td>
+                              <td className="p-3 text-slate-600 align-top">{formatDate(order.date)}</td>
+                              <td className="p-3 align-top min-w-[200px]">
+                                <div className="flex flex-col gap-1 text-[10px] md:text-xs max-h-24 overflow-y-auto pr-1 custom-scrollbar">
+                                   {(order.items).map((item, i) => (
+                                     <div key={i} className="flex justify-between gap-2 border-b border-slate-100 last:border-0 pb-0.5 last:pb-0">
+                                       <span className="font-medium text-slate-700 truncate max-w-[120px]" title={item.productName}>{item.productName}</span>
+                                       <div className="flex gap-1 text-slate-500 whitespace-nowrap">
+                                          <span>{item.quantity}u</span>
+                                          {item.bonusQuantity > 0 && <span className="text-orange-600 font-bold">+{item.bonusQuantity}b</span>}
+                                       </div>
+                                     </div>
+                                   ))}
+                                   {totalDiscount > 0 && (
+                                     <div className="mt-1 pt-0.5 border-t border-slate-200 text-blue-600 font-medium flex justify-between bg-blue-50 px-1.5 py-0.5 rounded">
+                                        <span>Disc:</span>
+                                        <span>{formatCurrency(totalDiscount)} ({effectiveDiscountPercent.toFixed(1)}%)</span>
+                                     </div>
+                                   )}
+                                </div>
+                              </td>
+                              <td className="p-3 align-top">{formatCurrency(order.totalAmount)}</td>
+                              <td className="p-3 text-green-600 font-medium align-top">{formatCurrency(order.paidAmount)}</td>
+                              <td className="p-3 font-bold text-red-500 align-top">{formatCurrency(balance)}</td>
+                              <td className="p-3 text-right align-top">
                                 <button onClick={() => openPaymentModal(order)} className="text-[10px] bg-primary text-white px-2 py-1 rounded hover:bg-teal-800 shadow-sm">
                                   {t('recordPayment')}
                                 </button>

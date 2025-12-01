@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { getOrders, getCustomers, getProducts } from '../utils/storage';
-import { Order, Customer, Product, OrderStatus, OrderItem } from '../types';
-import { Loader2, Filter, Calendar, User, Package, Layers, Download, Printer, TrendingUp, DollarSign, BarChart3, AlertCircle } from 'lucide-react';
-import { formatDate, formatCurrency } from '../utils/helpers';
+import { Order, Customer, Product, OrderStatus } from '../types';
+import { Loader2, Filter, User, Package, Printer, BarChart3, Layers, CheckCircle } from 'lucide-react';
+import { formatCurrency, formatDate } from '../utils/helpers';
 import { useLanguage } from '../contexts/LanguageContext';
 
 type GroupByOption = 'none' | 'customer' | 'product' | 'month';
@@ -63,24 +63,20 @@ const Reports = () => {
       return true;
     });
 
-    // 2. Filter Items (If Product is selected, we only consider that product's contribution)
-    // Note: If grouping by Order/Customer, we usually sum the WHOLE order, 
-    // but if filtering by Product, we typically only want stats for THAT product.
-    
-    // Helper to calculate relevant totals based on product filter
+    // Helper to calculate relevant items
     const getRelevantItems = (order: Order) => {
       if (selectedProduct === 'All') return order.items;
       return order.items.filter(i => i.productId === selectedProduct);
     };
 
-    // If Product Filter is active, filter out orders that don't contain the product at all
+    // If Product Filter is active, filter out orders that don't contain the product
     if (selectedProduct !== 'All') {
       filteredOrders = filteredOrders.filter(o => o.items.some(i => i.productId === selectedProduct));
     }
 
     // 3. Grouping Logic
     let groupedResult: any[] = [];
-    let summary = { totalSales: 0, totalCount: 0, totalProfit: 0 }; // Profit not calculated yet
+    let summary = { totalSales: 0, totalCount: 0 };
 
     if (groupBy === 'customer') {
       const groups: Record<string, { id: string, name: string, count: number, total: number, lastDate: string }> = {};
@@ -89,7 +85,6 @@ const Reports = () => {
         const relevantItems = getRelevantItems(o);
         const orderTotal = relevantItems.reduce((sum, i) => sum + i.subtotal, 0);
         
-        // For Customers, we aggregate the filtered value
         if (!groups[o.customerId]) {
           groups[o.customerId] = { id: o.customerId, name: o.customerName, count: 0, total: 0, lastDate: o.date };
         }
@@ -148,7 +143,7 @@ const Reports = () => {
         const orderTotal = relevantItems.reduce((sum, i) => sum + i.subtotal, 0);
         return {
           ...o,
-          computedTotal: orderTotal // This might differ from o.totalAmount if product filter is on
+          computedTotal: orderTotal 
         };
       }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
@@ -159,7 +154,7 @@ const Reports = () => {
        summary.totalCount = groupedResult.length;
     } else if (groupBy === 'product') {
        summary.totalSales = groupedResult.reduce((sum, item) => sum + item.revenue, 0);
-       summary.totalCount = filteredOrders.length; // Approximate context
+       summary.totalCount = filteredOrders.length; 
     } else {
        summary.totalSales = groupedResult.reduce((sum, item) => sum + item.total, 0);
        summary.totalCount = filteredOrders.length;
@@ -198,7 +193,7 @@ const Reports = () => {
           <Filter size={16} /> {t('reportFilters')}
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           {/* Date Range */}
           <div className="space-y-1">
             <label className="text-[10px] uppercase font-bold text-slate-500">{t('dateRange')}</label>
@@ -248,183 +243,156 @@ const Reports = () => {
                 <option value="All">{t('allProducts')}</option>
                 {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-            </div>
+             </div>
           </div>
 
-          {/* Status & Group By */}
+          {/* Status */}
           <div className="space-y-1">
-             <div className="flex gap-2">
-               <div className="flex-1">
-                 <label className="text-[10px] uppercase font-bold text-slate-500">{t('status')}</label>
-                 <select
-                   value={selectedStatus}
-                   onChange={(e) => setSelectedStatus(e.target.value)}
-                   className="w-full p-2 border border-slate-300 rounded-lg text-xs outline-none focus:border-primary bg-white"
-                 >
-                   <option value="All">{t('allStatus')}</option>
-                   {Object.values(OrderStatus).map(s => <option key={s} value={s}>{s}</option>)}
-                 </select>
-               </div>
-               <div className="flex-1">
-                 <label className="text-[10px] uppercase font-bold text-slate-500">{t('groupBy')}</label>
-                 <select
-                   value={groupBy}
-                   onChange={(e) => setGroupBy(e.target.value as GroupByOption)}
-                   className="w-full p-2 border border-teal-200 bg-teal-50 text-teal-800 rounded-lg text-xs outline-none focus:border-teal-500 font-medium"
-                 >
-                   <option value="customer">{t('customer')}</option>
-                   <option value="product">{t('product')}</option>
-                   <option value="month">{t('month')}</option>
-                   <option value="none">{t('noneFlatList')}</option>
-                 </select>
-               </div>
+            <label className="text-[10px] uppercase font-bold text-slate-500">{t('status')}</label>
+             <div className="relative">
+              <CheckCircle className="absolute left-2.5 top-2.5 text-slate-400" size={14} />
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-xs outline-none focus:border-primary bg-white appearance-none"
+              >
+                <option value="All">{t('allStatus')}</option>
+                <option value={OrderStatus.PAID}>{t('paid')}</option>
+                <option value={OrderStatus.PARTIAL}>Partial</option>
+                <option value={OrderStatus.PENDING}>Pending</option>
+                <option value={OrderStatus.RETURNED}>Returned</option>
+                <option value={OrderStatus.CANCELLED}>Cancelled</option>
+              </select>
+             </div>
+          </div>
+
+          {/* Group By */}
+          <div className="space-y-1">
+             <label className="text-[10px] uppercase font-bold text-slate-500">{t('groupBy')}</label>
+             <div className="relative">
+               <Layers className="absolute left-2.5 top-2.5 text-slate-400" size={14} />
+               <select
+                value={groupBy}
+                onChange={(e) => setGroupBy(e.target.value as GroupByOption)}
+                className="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-lg text-xs outline-none focus:border-primary bg-white appearance-none"
+              >
+                <option value="customer">{t('customer')}</option>
+                <option value="product">{t('product')}</option>
+                <option value="month">{t('month')}</option>
+                <option value="none">{t('noneFlatList')}</option>
+              </select>
              </div>
           </div>
         </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
-           <div className="bg-teal-100 p-3 rounded-full text-teal-600">
-             <DollarSign size={24} />
-           </div>
-           <div>
-             <p className="text-xs text-slate-500 font-bold uppercase">{t('totalSales')}</p>
-             <h3 className="text-xl font-bold text-slate-800">{formatCurrency(reportData.summary.totalSales)}</h3>
-           </div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
-           <div className="bg-blue-100 p-3 rounded-full text-blue-600">
-             <Layers size={24} />
-           </div>
-           <div>
-             <p className="text-xs text-slate-500 font-bold uppercase">{groupBy === 'product' ? t('productsSold') : t('ordersCount')}</p>
-             <h3 className="text-xl font-bold text-slate-800">
-               {groupBy === 'product' ? reportData.data.length : reportData.summary.totalCount}
-             </h3>
-           </div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
-           <div className="bg-amber-100 p-3 rounded-full text-amber-600">
-             <TrendingUp size={24} />
-           </div>
-           <div>
-             <p className="text-xs text-slate-500 font-bold uppercase">{t('averageValue')}</p>
-             <h3 className="text-xl font-bold text-slate-800">
-               {formatCurrency(reportData.summary.totalCount > 0 ? reportData.summary.totalSales / reportData.summary.totalCount : 0)}
-             </h3>
-           </div>
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <p className="text-[10px] text-slate-500 font-bold uppercase">{t('totalRevenue')}</p>
+            <p className="text-xl font-bold text-slate-800">{formatCurrency(reportData.summary.totalSales)}</p>
+         </div>
+         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <p className="text-[10px] text-slate-500 font-bold uppercase">{t('records')}</p>
+            <p className="text-xl font-bold text-slate-800">{reportData.summary.totalCount}</p>
+         </div>
       </div>
 
-      {/* Dynamic Report Table */}
+      {/* Results Table */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-          <h3 className="font-bold text-slate-700">{t('reportResults')} - {t(groupBy === 'none' ? 'none' : groupBy)}</h3>
-          <span className="text-xs text-slate-500">{reportData.data.length} {t('records')}</span>
+        <div className="p-4 border-b border-slate-200 font-bold text-slate-800 text-sm">
+           {t('reportResults')}
         </div>
-        
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs md:text-sm">
-            {/* Table Header */}
-            <thead className="bg-white border-b border-slate-200 text-slate-500 uppercase text-[10px] tracking-wider font-bold">
-              {groupBy === 'customer' && (
-                <tr>
-                   <th className="p-3">{t('customerName')}</th>
-                   <th className="p-3 text-center">{t('ordersCount')}</th>
-                   <th className="p-3">{t('lastActivity')}</th>
-                   <th className="p-3 text-right">{t('totalRevenue')}</th>
-                </tr>
-              )}
-              {groupBy === 'product' && (
-                <tr>
-                   <th className="p-3">{t('productName')}</th>
-                   <th className="p-3 text-center">{t('unitsSold')}</th>
-                   <th className="p-3 text-center">{t('bonusUnits')}</th>
-                   <th className="p-3 text-center">{t('ordersInvolved')}</th>
-                   <th className="p-3 text-right">{t('totalRevenue')}</th>
-                </tr>
-              )}
-              {groupBy === 'month' && (
-                <tr>
-                   <th className="p-3">{t('month')}</th>
-                   <th className="p-3 text-center">{t('ordersCount')}</th>
-                   <th className="p-3 text-right">{t('totalSales')}</th>
-                </tr>
-              )}
-              {groupBy === 'none' && (
-                <tr>
-                   <th className="p-3">{t('date')}</th>
-                   <th className="p-3">{t('invoiceId')}</th>
-                   <th className="p-3">{t('customer')}</th>
-                   <th className="p-3">{t('status')}</th>
-                   <th className="p-3 text-right">{t('amount')}</th>
-                </tr>
-              )}
-            </thead>
-            
-            {/* Table Body */}
-            <tbody className="divide-y divide-slate-100">
-              {reportData.data.length === 0 ? (
-                 <tr><td colSpan={5} className="p-8 text-center text-slate-400">{t('noDataFound')}</td></tr>
-              ) : (
-                reportData.data.map((row: any, idx: number) => (
-                  <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                    
-                    {/* CUSTOMER VIEW */}
-                    {groupBy === 'customer' && (
-                      <>
-                        <td className="p-3 font-medium text-slate-800">{row.name}</td>
-                        <td className="p-3 text-center text-slate-600">{row.count}</td>
-                        <td className="p-3 text-slate-500">{formatDate(row.lastDate)}</td>
-                        <td className="p-3 text-right font-bold text-primary">{formatCurrency(row.total)}</td>
-                      </>
-                    )}
-
-                    {/* PRODUCT VIEW */}
-                    {groupBy === 'product' && (
-                      <>
-                        <td className="p-3 font-medium text-slate-800">{row.name}</td>
-                        <td className="p-3 text-center font-bold text-slate-700">{row.qty}</td>
-                        <td className="p-3 text-center text-orange-600">{row.bonus > 0 ? `+${row.bonus}` : '-'}</td>
-                        <td className="p-3 text-center text-slate-500">{row.ordersCount}</td>
-                        <td className="p-3 text-right font-bold text-primary">{formatCurrency(row.revenue)}</td>
-                      </>
-                    )}
-
-                    {/* MONTH VIEW */}
-                    {groupBy === 'month' && (
-                      <>
-                        <td className="p-3 font-medium text-slate-800">{row.month}</td>
-                        <td className="p-3 text-center text-slate-600">{row.count}</td>
-                        <td className="p-3 text-right font-bold text-primary">{formatCurrency(row.total)}</td>
-                      </>
-                    )}
-
-                    {/* FLAT LIST VIEW */}
-                    {groupBy === 'none' && (
-                      <>
-                        <td className="p-3 text-slate-600">{formatDate(row.date)}</td>
-                        <td className="p-3 font-mono text-[10px] text-slate-500">{row.id}</td>
-                        <td className="p-3 font-medium text-slate-800">{row.customerName}</td>
-                        <td className="p-3">
-                           <span className={`px-2 py-0.5 rounded text-[10px] border ${
-                             row.status === 'Paid' ? 'bg-green-50 text-green-700 border-green-200' : 
-                             row.status === 'Returned' ? 'bg-red-50 text-red-700 border-red-200' : 
-                             'bg-slate-50 text-slate-600 border-slate-200'
-                           }`}>
-                             {row.status}
-                           </span>
-                        </td>
-                        <td className="p-3 text-right font-bold text-slate-800">{formatCurrency(row.computedTotal)}</td>
-                      </>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+           <table className="w-full text-left text-xs md:text-sm">
+             <thead className="bg-slate-50 border-b border-slate-200">
+               <tr>
+                 {groupBy === 'customer' && (
+                    <>
+                      <th className="p-3 font-medium text-slate-600">{t('customer')}</th>
+                      <th className="p-3 font-medium text-slate-600 text-center">{t('ordersCount')}</th>
+                      <th className="p-3 font-medium text-slate-600">{t('lastActivity')}</th>
+                      <th className="p-3 font-medium text-slate-600 text-right">{t('totalRevenue')}</th>
+                    </>
+                 )}
+                 {groupBy === 'product' && (
+                    <>
+                      <th className="p-3 font-medium text-slate-600">{t('product')}</th>
+                      <th className="p-3 font-medium text-slate-600 text-center">{t('unitsSold')}</th>
+                      <th className="p-3 font-medium text-slate-600 text-center">{t('bonusUnits')}</th>
+                      <th className="p-3 font-medium text-slate-600 text-center">{t('ordersInvolved')}</th>
+                      <th className="p-3 font-medium text-slate-600 text-right">{t('totalRevenue')}</th>
+                    </>
+                 )}
+                 {groupBy === 'month' && (
+                    <>
+                      <th className="p-3 font-medium text-slate-600">{t('month')}</th>
+                      <th className="p-3 font-medium text-slate-600 text-center">{t('ordersCount')}</th>
+                      <th className="p-3 font-medium text-slate-600 text-right">{t('averageValue')}</th>
+                      <th className="p-3 font-medium text-slate-600 text-right">{t('totalRevenue')}</th>
+                    </>
+                 )}
+                 {groupBy === 'none' && (
+                    <>
+                      <th className="p-3 font-medium text-slate-600">{t('date')}</th>
+                      <th className="p-3 font-medium text-slate-600">{t('invoiceId')}</th>
+                      <th className="p-3 font-medium text-slate-600">{t('customer')}</th>
+                      <th className="p-3 font-medium text-slate-600">{t('status')}</th>
+                      <th className="p-3 font-medium text-slate-600 text-right">{t('total')}</th>
+                    </>
+                 )}
+               </tr>
+             </thead>
+             <tbody className="divide-y divide-slate-100">
+                {reportData.data.length === 0 ? (
+                   <tr><td colSpan={5} className="p-6 text-center text-slate-400">{t('noDataFound')}</td></tr>
+                ) : (
+                   reportData.data.map((row: any, i: number) => (
+                      <tr key={i} className="hover:bg-slate-50">
+                        {groupBy === 'customer' && (
+                           <>
+                             <td className="p-3 font-medium">{row.name}</td>
+                             <td className="p-3 text-center">{row.count}</td>
+                             <td className="p-3">{formatDate(row.lastDate)}</td>
+                             <td className="p-3 text-right font-bold">{formatCurrency(row.total)}</td>
+                           </>
+                        )}
+                        {groupBy === 'product' && (
+                           <>
+                             <td className="p-3 font-medium">{row.name}</td>
+                             <td className="p-3 text-center">{row.qty}</td>
+                             <td className="p-3 text-center">{row.bonus}</td>
+                             <td className="p-3 text-center">{row.ordersCount}</td>
+                             <td className="p-3 text-right font-bold">{formatCurrency(row.revenue)}</td>
+                           </>
+                        )}
+                        {groupBy === 'month' && (
+                           <>
+                             <td className="p-3 font-medium">{row.month}</td>
+                             <td className="p-3 text-center">{row.count}</td>
+                             <td className="p-3 text-right">{formatCurrency(row.total / row.count)}</td>
+                             <td className="p-3 text-right font-bold">{formatCurrency(row.total)}</td>
+                           </>
+                        )}
+                        {groupBy === 'none' && (
+                           <>
+                             <td className="p-3">{formatDate(row.date)}</td>
+                             <td className="p-3 font-mono text-xs">{row.id}</td>
+                             <td className="p-3">{row.customerName}</td>
+                             <td className="p-3">
+                                <span className={`text-[10px] px-2 py-0.5 rounded border ${
+                                   row.status === OrderStatus.PAID ? 'bg-green-50 border-green-200 text-green-700' : 
+                                   row.status === OrderStatus.PENDING ? 'bg-red-50 border-red-200 text-red-700' : 'bg-slate-50 border-slate-200'
+                                }`}>{row.status}</span>
+                             </td>
+                             <td className="p-3 text-right font-bold">{formatCurrency(row.computedTotal)}</td>
+                           </>
+                        )}
+                      </tr>
+                   ))
+                )}
+             </tbody>
+           </table>
         </div>
       </div>
     </div>

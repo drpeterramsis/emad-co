@@ -163,6 +163,7 @@ const Collections = () => {
     try {
         const updatedItems = [...selectedOrderForPayment.items];
         const paidDetails: string[] = [];
+        const paidItemsMetadata: { productId: string, quantity: number }[] = [];
 
         paymentItems.forEach(state => {
         if (state.selected && state.payQty > 0) {
@@ -170,6 +171,7 @@ const Collections = () => {
             const newPaidQty = (item.paidQuantity || 0) + state.payQty;
             updatedItems[state.index] = { ...item, paidQuantity: newPaidQty };
             paidDetails.push(`${state.payQty}x ${item.productName}`);
+            paidItemsMetadata.push({ productId: item.productId, quantity: state.payQty });
         }
         });
 
@@ -178,12 +180,13 @@ const Collections = () => {
         const description = paidDetails.length > 0 ? `Payment for: ${paidDetails.join(', ')}` : `Lump sum payment`;
 
         await addTransaction({
-        id: `TXN-${Date.now()}`,
-        type: TransactionType.PAYMENT_RECEIVED,
-        amount: amount,
-        date: paymentDate,
-        referenceId: selectedOrderForPayment.id,
-        description: description
+          id: `TXN-${Date.now()}`,
+          type: TransactionType.PAYMENT_RECEIVED,
+          amount: amount,
+          date: paymentDate,
+          referenceId: selectedOrderForPayment.id,
+          description: description,
+          metadata: { paidItems: paidItemsMetadata }
         });
 
         setSelectedOrderForPayment(null);
@@ -1128,7 +1131,7 @@ const Collections = () => {
                                          <span className="font-bold text-slate-800 text-xs">
                                             {txn.mainLabel}
                                          </span>
-                                         <span className="text-[10px] text-slate-500 mt-0.5 whitespace-pre-wrap">
+                                         <span className="text-slate-500 text-[10px] mt-0.5 whitespace-pre-wrap">
                                             {txn.subLabel}
                                          </span>
                                       </div>

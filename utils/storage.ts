@@ -468,7 +468,7 @@ export const addTransaction = async (transaction: Transaction) => {
        payment_method: transaction.paymentMethod,
        provider_id: transaction.providerId || null,
        provider_name: transaction.providerName,
-       // metadata: transaction.metadata // Removed to prevent schema error
+       metadata: transaction.metadata // Store metadata including paid items
      };
      const { error } = await supabase.from('transactions').insert(dbTxn);
      if (error) throw error;
@@ -568,7 +568,7 @@ export const updateTransaction = async (transaction: Transaction) => {
       payment_method: transaction.paymentMethod,
       provider_id: transaction.providerId,
       provider_name: transaction.providerName,
-      // metadata: transaction.metadata // Removed to prevent schema error
+      metadata: transaction.metadata
     };
     const { error } = await supabase.from('transactions').update(dbTxn).eq('id', transaction.id);
     if(error) throw error;
@@ -617,7 +617,9 @@ export const deleteTransaction = async (transactionId: string) => {
   // Handle Payment Reversal for Orders
   if (txn.type === TransactionType.PAYMENT_RECEIVED && txn.referenceId) {
      const orders = await getOrders();
+     // Use local find because getOrders handles data mapping
      const order = orders.find(o => o.id === txn.referenceId);
+     
      if (order) {
         const newPaid = (order.paidAmount || 0) - txn.amount;
         let newStatus = order.status;
@@ -626,14 +628,54 @@ export const deleteTransaction = async (transactionId: string) => {
            if (newPaid >= order.totalAmount) newStatus = OrderStatus.PAID;
            else if (newPaid > 0) newStatus = OrderStatus.PARTIAL;
         }
+
+        // Revert paid quantities on items (Critical Fix)
+        let itemsChanged = false;
+        if (order.items && order.items.length > 0) {
+            // Strategy 1: Metadata (New way)
+            if (txn.metadata && txn.metadata.paidItems) {
+                const paidItems = txn.metadata.paidItems as { productId: string, quantity: number }[];
+                paidItems.forEach(pItem => {
+                   const itemIndex = order.items.findIndex(i => i.productId === pItem.productId);
+                   if (itemIndex >= 0) {
+                       const currentPaid = order.items[itemIndex].paidQuantity || 0;
+                       order.items[itemIndex].paidQuantity = Math.max(0, currentPaid - pItem.quantity);
+                       itemsChanged = true;
+                   }
+                });
+            } 
+            // Strategy 2: Description Parsing (Legacy way)
+            else if (txn.description.startsWith('Payment for:')) {
+                 const details = txn.description.replace('Payment for: ', '');
+                 const parts = details.split(', ');
+                 parts.forEach(part => {
+                     // Regex to match "5x Product Name" or "10x Some Product"
+                     const match = part.match(/^(\d+)x (.+)$/);
+                     if (match) {
+                         const qty = parseInt(match[1]);
+                         const name = match[2];
+                         // Find by name (Best effort for legacy data)
+                         const itemIndex = order.items.findIndex(i => i.productName === name);
+                         if (itemIndex >= 0) {
+                             const currentPaid = order.items[itemIndex].paidQuantity || 0;
+                             order.items[itemIndex].paidQuantity = Math.max(0, currentPaid - qty);
+                             itemsChanged = true;
+                         }
+                     }
+                 });
+            }
+        }
         
         if (isSupabaseEnabled && supabase) {
-           await supabase.from('orders').update({ paid_amount: newPaid, status: newStatus }).eq('id', txn.referenceId);
+           const updatePayload: any = { paid_amount: newPaid, status: newStatus };
+           if (itemsChanged) updatePayload.items = order.items;
+           await supabase.from('orders').update(updatePayload).eq('id', txn.referenceId);
         } else {
            const idx = orders.findIndex(o => o.id === txn.referenceId);
            if (idx >= 0) {
               orders[idx].paidAmount = newPaid;
               orders[idx].status = newStatus;
+              // orders[idx].items is already updated by reference if found above
               localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
            }
         }

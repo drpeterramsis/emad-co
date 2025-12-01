@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { getCustomers, getProducts, saveOrder, getOrder, updateOrder, addCustomer } from '../utils/storage';
 import { Customer, Product, OrderItem, OrderStatus, CustomerType } from '../types';
@@ -82,17 +80,6 @@ const NewOrder = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [editOrderId]);
-
-  // UUID Generator for compat with strict DB schemas
-  const generateUUID = () => {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return crypto.randomUUID();
-    }
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-      return v.toString(16);
-    });
-  };
 
   const getCustomerDefaultDiscount = () => {
     const c = customers.find(x => x.id === selectedCustomer);
@@ -194,8 +181,8 @@ const NewOrder = () => {
         // Use existing paidAmount to prevent reset
         await updateOrder({ ...orderData, id: editOrderId, paidAmount: existingPaidAmount } as any);
       } else {
-        // Generate a proper UUID for new orders to satisfy potential DB constraints
-        const newId = generateUUID();
+        // Reverting to legacy ID format as per user request
+        const newId = `ORD-${Date.now()}`;
         await saveOrder({ ...orderData, id: newId, paidAmount: 0 } as any);
       }
       navigate('/invoices');

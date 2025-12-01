@@ -189,7 +189,8 @@ export const saveOrder = async (order: Order) => {
     // Handle Stock Updates
     if (!order.isDraft) {
       for (const item of order.items) {
-         const qty = item.quantity + (item.bonusQuantity || 0);
+         // Force number type conversion
+         const qty = Number(item.quantity) + Number(item.bonusQuantity || 0);
          let stockChange = 0;
 
          if (order.isReturn) {
@@ -206,7 +207,8 @@ export const saveOrder = async (order: Order) => {
          if (stockChange !== 0) {
            const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
            if (prod) {
-             await supabase.from('products').update({ stock: prod.stock + stockChange }).eq('id', item.productId);
+             const newStock = Number(prod.stock) + stockChange;
+             await supabase.from('products').update({ stock: newStock }).eq('id', item.productId);
            }
          }
       }
@@ -229,7 +231,7 @@ export const saveOrder = async (order: Order) => {
       order.items.forEach(item => {
         const pIndex = products.findIndex(p => p.id === item.productId);
         if (pIndex >= 0) {
-          const qty = item.quantity + (item.bonusQuantity || 0);
+          const qty = Number(item.quantity) + Number(item.bonusQuantity || 0);
           
           if (order.isReturn) {
              if (item.condition !== 'EXPIRED') {
@@ -258,7 +260,7 @@ export const updateOrder = async (order: Order) => {
       if (!oldIsDraft && oldData.items) {
         const oldItems = oldData.items as any[];
         for (const item of oldItems) {
-           const qty = item.quantity + (item.bonusQuantity || 0);
+           const qty = Number(item.quantity) + Number(item.bonusQuantity || 0);
            let stockChange = 0;
 
            if (oldIsReturn) {
@@ -274,7 +276,8 @@ export const updateOrder = async (order: Order) => {
            if (stockChange !== 0) {
              const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
              if (prod) {
-               await supabase.from('products').update({ stock: prod.stock + stockChange }).eq('id', item.productId);
+               const newStock = Number(prod.stock) + stockChange;
+               await supabase.from('products').update({ stock: newStock }).eq('id', item.productId);
              }
            }
         }
@@ -304,7 +307,7 @@ export const updateOrder = async (order: Order) => {
     // 3. Apply New Stock if not draft
     if (!order.isDraft) {
       for (const item of order.items) {
-         const qty = item.quantity + (item.bonusQuantity || 0);
+         const qty = Number(item.quantity) + Number(item.bonusQuantity || 0);
          let stockChange = 0;
 
          if (order.isReturn) {
@@ -320,7 +323,8 @@ export const updateOrder = async (order: Order) => {
          if (stockChange !== 0) {
            const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
            if (prod) {
-             await supabase.from('products').update({ stock: prod.stock + stockChange }).eq('id', item.productId);
+             const newStock = Number(prod.stock) + stockChange;
+             await supabase.from('products').update({ stock: newStock }).eq('id', item.productId);
            }
          }
       }
@@ -340,7 +344,7 @@ export const updateOrder = async (order: Order) => {
       oldOrder.items.forEach(item => {
         const pIndex = products.findIndex(p => p.id === item.productId);
         if (pIndex >= 0) {
-           const qty = item.quantity + (item.bonusQuantity || 0);
+           const qty = Number(item.quantity) + Number(item.bonusQuantity || 0);
            if (oldOrder.isReturn) {
              // Revert Return
              if (item.condition !== 'EXPIRED') {
@@ -359,7 +363,7 @@ export const updateOrder = async (order: Order) => {
       order.items.forEach(item => {
         const pIndex = products.findIndex(p => p.id === item.productId);
         if (pIndex >= 0) {
-           const qty = item.quantity + (item.bonusQuantity || 0);
+           const qty = Number(item.quantity) + Number(item.bonusQuantity || 0);
            if (order.isReturn) {
              // Apply Return
              if (item.condition !== 'EXPIRED') {
@@ -391,7 +395,7 @@ export const deleteOrder = async (orderId: string) => {
       if (!isDraft && order.items) {
         const items = order.items as any[];
         for (const item of items) {
-           const qty = item.quantity + (item.bonusQuantity || 0);
+           const qty = Number(item.quantity) + Number(item.bonusQuantity || 0);
            let stockChange = 0;
 
            if (isReturn) {
@@ -409,7 +413,8 @@ export const deleteOrder = async (orderId: string) => {
            if (stockChange !== 0) {
               const { data: prod } = await supabase.from('products').select('stock').eq('id', item.productId).single();
               if (prod) {
-                await supabase.from('products').update({ stock: prod.stock + stockChange }).eq('id', item.productId);
+                const newStock = Number(prod.stock) + stockChange;
+                await supabase.from('products').update({ stock: newStock }).eq('id', item.productId);
               }
            }
         }
@@ -429,7 +434,7 @@ export const deleteOrder = async (orderId: string) => {
         orderToDelete.items.forEach(item => {
           const pIndex = products.findIndex(p => p.id === item.productId);
           if (pIndex >= 0) {
-             const qty = item.quantity + (item.bonusQuantity || 0);
+             const qty = Number(item.quantity) + Number(item.bonusQuantity || 0);
              if (orderToDelete.isReturn) {
                // Reverse return: Take back stock if it was good
                if (item.condition !== 'EXPIRED') {
@@ -513,8 +518,8 @@ export const updateTransaction = async (transaction: Transaction) => {
   
   // If editing an Expense that has metadata (Stock purchase), check if quantity changed
   if (oldTxn && oldTxn.type === TransactionType.EXPENSE && oldTxn.metadata?.quantity && transaction.metadata?.quantity && oldTxn.referenceId === transaction.referenceId) {
-     const oldQty = oldTxn.metadata.quantity;
-     const newQty = transaction.metadata.quantity;
+     const oldQty = Number(oldTxn.metadata.quantity);
+     const newQty = Number(transaction.metadata.quantity);
      const diff = newQty - oldQty;
      
      if (diff !== 0) {

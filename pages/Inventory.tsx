@@ -1,8 +1,9 @@
 
-import React, { useEffect, useState } from 'react';
-import { getProducts, getProviders, addProduct, updateProduct, restockProduct, addProvider, updateProvider, deleteProvider, getTransactions, getFinancialStats } from '../utils/storage';
+
+import React, { useEffect, useState, useMemo } from 'react';
+import { getProducts, getProviders, addProduct, updateProduct, restockProduct, addProvider, updateProvider, deleteProvider, getTransactions, getFinancialStats, deleteTransaction, updateTransaction } from '../utils/storage';
 import { Product, Provider, PaymentMethod, Transaction, TransactionType, DashboardStats } from '../types';
-import { Package, AlertTriangle, Loader2, Plus, Edit2, ShoppingBag, Truck, Building2, Calendar, DollarSign, History, Settings, Coins, Layers, Trash2 } from 'lucide-react';
+import { Package, AlertTriangle, Loader2, Plus, Edit2, ShoppingBag, Truck, Building2, Calendar, DollarSign, History, Settings, Coins, Layers, Trash2, Search, Filter, ArrowUpDown } from 'lucide-react';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import LoadingOverlay from '../components/LoadingOverlay';
 import ProviderModal from '../components/ProviderModal';
@@ -26,6 +27,7 @@ const Inventory = () => {
   const [showProductModal, setShowProductModal] = useState(false);
   const [showProviderModal, setShowProviderModal] = useState(false);
   const [showRestockModal, setShowRestockModal] = useState(false);
+  const [showEditPurchaseModal, setShowEditPurchaseModal] = useState(false);
 
   // Form States
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -41,6 +43,19 @@ const Inventory = () => {
   const [restockProvider, setRestockProvider] = useState('');
   const [restockMethod, setRestockMethod] = useState<PaymentMethod>(PaymentMethod.BANK_TRANSFER);
   const [restockDate, setRestockDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Purchase Edit Form
+  const [editPurchaseTxn, setEditPurchaseTxn] = useState<Transaction | null>(null);
+  const [editPurchaseQty, setEditPurchaseQty] = useState('');
+  const [editPurchaseCost, setEditPurchaseCost] = useState('');
+  const [editPurchaseDate, setEditPurchaseDate] = useState('');
+  const [editPurchaseProvider, setEditPurchaseProvider] = useState('');
+  const [editPurchaseMethod, setEditPurchaseMethod] = useState<PaymentMethod>(PaymentMethod.BANK_TRANSFER);
+
+  // Purchase List Filters
+  const [purchaseSearch, setPurchaseSearch] = useState('');
+  const [purchaseSort, setPurchaseSort] = useState<'date' | 'amount'>('date');
+  const [purchaseGroup, setPurchaseGroup] = useState<'none' | 'provider' | 'month'>('none');
 
   useEffect(() => {
     fetchData();
@@ -202,6 +217,114 @@ const Inventory = () => {
       setProcessing(false);
     }
   };
+
+  const handleDeletePurchase = async (txnId: string) => {
+    if (window.confirm("Are you sure? This will remove the expense record AND revert (reduce) the added stock.")) {
+       setProcessing(true);
+       try {
+         await deleteTransaction(txnId);
+         await fetchData();
+       } catch (err) {
+         console.error(err);
+         alert("Failed to delete purchase.");
+       } finally {
+         setProcessing(false);
+       }
+    }
+  };
+
+  const handleOpenEditPurchase = (txn: Transaction) => {
+    setEditPurchaseTxn(txn);
+    setEditPurchaseCost(txn.amount.toString());
+    setEditPurchaseDate(new Date(txn.date).toISOString().split('T')[0]);
+    setEditPurchaseProvider(txn.providerId || '');
+    setEditPurchaseMethod(txn.paymentMethod || PaymentMethod.BANK_TRANSFER);
+    
+    // Try to get quantity from metadata or description
+    let qty = 0;
+    if (txn.metadata?.quantity) {
+       qty = txn.metadata.quantity;
+    } else {
+       const match = txn.description.match(/Stock Purchase: (\d+)x/);
+       if (match) qty = parseInt(match[1]);
+    }
+    setEditPurchaseQty(qty > 0 ? qty.toString() : '');
+    setShowEditPurchaseModal(true);
+  };
+
+  const handleEditPurchase = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editPurchaseTxn) return;
+    setProcessing(true);
+    
+    try {
+      const newCost = parseFloat(editPurchaseCost);
+      const newQty = parseInt(editPurchaseQty);
+      
+      if (isNaN(newCost) || isNaN(newQty) || newQty <= 0) throw new Error("Invalid values");
+      
+      // We need to construct a new description if quantity changed, mainly for display legacy
+      const productName = products.find(p => p.id === editPurchaseTxn.referenceId)?.name || 'Product';
+      const newDesc = `Stock Purchase: ${newQty}x ${productName}`;
+      
+      const provider = providers.find(p => p.id === editPurchaseProvider);
+
+      await updateTransaction({
+        ...editPurchaseTxn,
+        amount: newCost,
+        date: editPurchaseDate,
+        paymentMethod: editPurchaseMethod,
+        providerId: editPurchaseProvider,
+        providerName: provider?.name,
+        description: newDesc,
+        metadata: {
+           ...editPurchaseTxn.metadata,
+           quantity: newQty // Important: updateTransaction logic uses this to adjust stock
+        }
+      });
+      
+      await fetchData();
+      setShowEditPurchaseModal(false);
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to update purchase.");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // --- Purchase List Filtering ---
+  const filteredPurchases = useMemo(() => {
+     let data = purchases.filter(t => 
+        t.description.toLowerCase().includes(purchaseSearch.toLowerCase()) || 
+        (t.providerName && t.providerName.toLowerCase().includes(purchaseSearch.toLowerCase()))
+     );
+     
+     if (purchaseSort === 'amount') {
+        data.sort((a, b) => b.amount - a.amount);
+     } else {
+        data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+     }
+     
+     return data;
+  }, [purchases, purchaseSearch, purchaseSort]);
+
+  const groupedPurchases = useMemo(() => {
+     if (purchaseGroup === 'none') return { 'All': filteredPurchases };
+     
+     const groups: Record<string, Transaction[]> = {};
+     filteredPurchases.forEach(txn => {
+        let key = 'Other';
+        if (purchaseGroup === 'provider') key = txn.providerName || 'Unknown Provider';
+        if (purchaseGroup === 'month') key = txn.date.substring(0, 7); // YYYY-MM
+        
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(txn);
+     });
+     
+     return groups;
+  }, [filteredPurchases, purchaseGroup]);
+
 
   if (loading) {
     return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin text-primary" size={32} /></div>;
@@ -396,38 +519,104 @@ const Inventory = () => {
       )}
 
       {activeTab === 'purchases' && (
-         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs md:text-sm">
-                 <thead className="bg-slate-50 border-b border-slate-200">
-                   <tr>
-                     <th className="p-3 font-medium text-slate-600">{t('date')}</th>
-                     <th className="p-3 font-medium text-slate-600">{t('description')}</th>
-                     <th className="p-3 font-medium text-slate-600">{t('providerName')}</th>
-                     <th className="p-3 font-medium text-slate-600">{t('paymentMethod')}</th>
-                     <th className="p-3 font-medium text-slate-600 text-right">{t('totalCost')}</th>
-                   </tr>
-                 </thead>
-                 <tbody className="divide-y divide-slate-100">
-                    {purchases.map(txn => (
-                      <tr key={txn.id} className="hover:bg-slate-50">
-                         <td className="p-3 text-slate-600">{formatDate(txn.date)}</td>
-                         <td className="p-3 font-medium text-slate-800">{txn.description}</td>
-                         <td className="p-3 text-slate-600">{txn.providerName || '-'}</td>
-                         <td className="p-3 text-[10px]">
-                            <span className={`px-2 py-0.5 rounded border ${txn.paymentMethod === PaymentMethod.CASH ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
-                               {txn.paymentMethod === PaymentMethod.CASH ? t('cashFromRep') : t('hqBankTransfer')}
-                            </span>
-                         </td>
-                         <td className="p-3 text-right font-bold text-red-600">{formatCurrency(txn.amount)}</td>
-                      </tr>
-                    ))}
-                    {purchases.length === 0 && (
-                      <tr><td colSpan={5} className="p-6 text-center text-slate-400">{t('noPurchases')}</td></tr>
-                    )}
-                 </tbody>
-              </table>
-            </div>
+         <div className="space-y-4">
+             {/* Toolbar */}
+             <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-3">
+                 <div className="relative flex-1">
+                    <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
+                    <input 
+                      type="text" 
+                      value={purchaseSearch}
+                      onChange={(e) => setPurchaseSearch(e.target.value)}
+                      placeholder={t('search')}
+                      className="w-full pl-9 pr-4 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    />
+                 </div>
+                 <div className="flex gap-2">
+                    <div className="relative">
+                       <select 
+                         value={purchaseGroup}
+                         onChange={(e) => setPurchaseGroup(e.target.value as any)}
+                         className="pl-2 pr-8 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none bg-white h-full"
+                       >
+                         <option value="none">{t('groupBy')}: {t('none')}</option>
+                         <option value="provider">{t('groupBy')}: {t('providerName')}</option>
+                         <option value="month">{t('groupBy')}: {t('month')}</option>
+                       </select>
+                    </div>
+                    <button 
+                      onClick={() => setPurchaseSort(prev => prev === 'date' ? 'amount' : 'date')}
+                      className="flex items-center gap-2 px-3 py-1.5 border border-slate-300 rounded-lg bg-white hover:bg-slate-50 text-sm font-medium"
+                    >
+                      <ArrowUpDown size={14} /> {purchaseSort === 'date' ? t('date') : t('amount')}
+                    </button>
+                 </div>
+             </div>
+
+             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs md:text-sm">
+                     <thead className="bg-slate-50 border-b border-slate-200">
+                       <tr>
+                         <th className="p-3 font-medium text-slate-600">{t('date')}</th>
+                         <th className="p-3 font-medium text-slate-600">{t('description')}</th>
+                         <th className="p-3 font-medium text-slate-600">{t('providerName')}</th>
+                         <th className="p-3 font-medium text-slate-600">{t('paymentMethod')}</th>
+                         <th className="p-3 font-medium text-slate-600 text-right">{t('totalCost')}</th>
+                         <th className="p-3 font-medium text-slate-600 text-right w-20">{t('actions')}</th>
+                       </tr>
+                     </thead>
+                     {filteredPurchases.length === 0 ? (
+                        <tbody><tr><td colSpan={6} className="p-6 text-center text-slate-400">{t('noPurchases')}</td></tr></tbody>
+                     ) : (
+                        Object.entries(groupedPurchases).map(([groupKey, txns]: [string, Transaction[]]) => (
+                           <React.Fragment key={groupKey}>
+                              {purchaseGroup !== 'none' && (
+                                <tbody>
+                                  <tr className="bg-slate-100 border-b border-slate-200">
+                                    <td colSpan={6} className="p-2 font-bold text-slate-700">{groupKey} ({txns.length})</td>
+                                  </tr>
+                                </tbody>
+                              )}
+                              <tbody className="divide-y divide-slate-100">
+                                {txns.map(txn => (
+                                  <tr key={txn.id} className="hover:bg-slate-50 group">
+                                     <td className="p-3 text-slate-600">{formatDate(txn.date)}</td>
+                                     <td className="p-3 font-medium text-slate-800">{txn.description}</td>
+                                     <td className="p-3 text-slate-600">{txn.providerName || '-'}</td>
+                                     <td className="p-3 text-[10px]">
+                                        <span className={`px-2 py-0.5 rounded border ${txn.paymentMethod === PaymentMethod.CASH ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                                           {txn.paymentMethod === PaymentMethod.CASH ? t('cashFromRep') : t('hqBankTransfer')}
+                                        </span>
+                                     </td>
+                                     <td className="p-3 text-right font-bold text-red-600">{formatCurrency(txn.amount)}</td>
+                                     <td className="p-3 text-right">
+                                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                           <button 
+                                             onClick={() => handleOpenEditPurchase(txn)}
+                                             className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                                             title={t('edit')}
+                                           >
+                                              <Edit2 size={14}/>
+                                           </button>
+                                           <button 
+                                             onClick={() => handleDeletePurchase(txn.id)}
+                                             className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                                             title={t('delete')}
+                                           >
+                                              <Trash2 size={14}/>
+                                           </button>
+                                        </div>
+                                     </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                           </React.Fragment>
+                        ))
+                     )}
+                  </table>
+                </div>
+             </div>
          </div>
       )}
 
@@ -584,6 +773,49 @@ const Inventory = () => {
               </form>
            </div>
         </div>
+      )}
+
+      {/* Edit Purchase Modal */}
+      {showEditPurchaseModal && (
+         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl w-full max-w-sm p-5 shadow-2xl">
+               <h3 className="text-lg font-bold mb-4">{t('edit')} {t('restockProduct')}</h3>
+               <form onSubmit={handleEditPurchase} className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                     <div>
+                        <label className="block text-xs font-medium mb-1">{t('quantity')}</label>
+                        <input type="number" required value={editPurchaseQty} onChange={e => setEditPurchaseQty(e.target.value)} className="w-full p-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary outline-none" />
+                     </div>
+                     <div>
+                        <label className="block text-xs font-medium mb-1">{t('totalCost')}</label>
+                        <input type="number" required value={editPurchaseCost} onChange={e => setEditPurchaseCost(e.target.value)} className="w-full p-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary outline-none" />
+                     </div>
+                  </div>
+                  <div>
+                     <label className="block text-xs font-medium mb-1">{t('providerName')}</label>
+                     <select value={editPurchaseProvider} onChange={e => setEditPurchaseProvider(e.target.value)} className="w-full p-2 border rounded-lg text-sm bg-white outline-none">
+                        <option value="">{t('noneGeneral')}</option>
+                        {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                     </select>
+                  </div>
+                  <div>
+                     <label className="block text-xs font-medium mb-1">{t('paymentMethod')}</label>
+                     <select value={editPurchaseMethod} onChange={e => setEditPurchaseMethod(e.target.value as PaymentMethod)} className="w-full p-2 border rounded-lg text-sm bg-white outline-none">
+                        <option value={PaymentMethod.CASH}>{t('cashFromRep')}</option>
+                        <option value={PaymentMethod.BANK_TRANSFER}>{t('hqBankTransfer')}</option>
+                     </select>
+                  </div>
+                  <div>
+                     <label className="block text-xs font-medium mb-1">{t('date')}</label>
+                     <input type="date" required value={editPurchaseDate} onChange={e => setEditPurchaseDate(e.target.value)} className="w-full p-2 border rounded-lg text-sm outline-none" />
+                  </div>
+                  <div className="flex justify-end gap-2 mt-4 pt-2 border-t border-slate-100">
+                     <button type="button" onClick={() => setShowEditPurchaseModal(false)} className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">{t('cancel')}</button>
+                     <button type="submit" className="px-3 py-1.5 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm">{t('saveChanges')}</button>
+                  </div>
+               </form>
+            </div>
+         </div>
       )}
 
     </div>

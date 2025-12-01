@@ -99,6 +99,7 @@ export interface Transaction {
   paymentMethod?: PaymentMethod;
   providerId?: string;
   providerName?: string;
+  metadata?: any; // Generic metadata for extended functionality (e.g., quantity for stock purchases)
 }
 
 export interface DashboardStats {

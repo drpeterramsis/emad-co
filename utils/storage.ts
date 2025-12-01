@@ -1,4 +1,5 @@
 
+
 import { Product, Customer, Order, Transaction, OrderStatus, TransactionType, Provider, PaymentMethod } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_CUSTOMERS } from '../constants';
 import { supabase, isSupabaseEnabled } from '../services/supabaseClient';
@@ -149,7 +150,8 @@ export const getTransactions = async (): Promise<Transaction[]> => {
       referenceId: t.reference_id,
       paymentMethod: t.payment_method,
       providerId: t.provider_id,
-      providerName: t.provider_name
+      providerName: t.provider_name,
+      metadata: t.metadata
     })) || [];
   }
   return JSON.parse(localStorage.getItem(STORAGE_KEYS.TRANSACTIONS) || '[]');
@@ -347,7 +349,8 @@ export const addTransaction = async (transaction: Transaction) => {
        description: transaction.description,
        payment_method: transaction.paymentMethod,
        provider_id: transaction.providerId || null,
-       provider_name: transaction.providerName
+       provider_name: transaction.providerName,
+       metadata: transaction.metadata
      };
      const { error } = await supabase.from('transactions').insert(dbTxn);
      if (error) throw error;
@@ -387,12 +390,35 @@ export const addTransaction = async (transaction: Transaction) => {
 };
 
 export const updateTransaction = async (transaction: Transaction) => {
+  // Logic to handle potential stock updates if the transaction is an inventory purchase being edited
+  const oldTransactions = await getTransactions();
+  const oldTxn = oldTransactions.find(t => t.id === transaction.id);
+  
+  // If editing an Expense that has metadata (Stock purchase), check if quantity changed
+  if (oldTxn && oldTxn.type === TransactionType.EXPENSE && oldTxn.metadata?.quantity && transaction.metadata?.quantity && oldTxn.referenceId === transaction.referenceId) {
+     const oldQty = oldTxn.metadata.quantity;
+     const newQty = transaction.metadata.quantity;
+     const diff = newQty - oldQty;
+     
+     if (diff !== 0) {
+        const products = await getProducts();
+        const product = products.find(p => p.id === transaction.referenceId);
+        if (product) {
+           product.stock += diff; // Add diff (e.g. 5 to 7 = +2)
+           await updateProduct(product);
+        }
+     }
+  }
+
   if (isSupabaseEnabled && supabase) {
     const dbTxn = {
       amount: transaction.amount,
       date: transaction.date,
       description: transaction.description,
-      payment_method: transaction.paymentMethod
+      payment_method: transaction.paymentMethod,
+      provider_id: transaction.providerId,
+      provider_name: transaction.providerName,
+      metadata: transaction.metadata
     };
     const { error } = await supabase.from('transactions').update(dbTxn).eq('id', transaction.id);
     if(error) throw error;
@@ -407,44 +433,69 @@ export const updateTransaction = async (transaction: Transaction) => {
 }
 
 export const deleteTransaction = async (transactionId: string) => {
-  if (isSupabaseEnabled && supabase) {
-    const { data: txn } = await supabase.from('transactions').select('*').eq('id', transactionId).single();
-    if (!txn) return;
-    if (txn.type === TransactionType.PAYMENT_RECEIVED && txn.reference_id) {
-      const { data: order } = await supabase.from('orders').select('*').eq('id', txn.reference_id).single();
-      if (order) {
-        const newPaid = (Number(order.paid_amount) || 0) - Number(txn.amount);
+  // Fetch transaction details first to handle logic
+  const allTxns = await getTransactions();
+  const txn = allTxns.find(t => t.id === transactionId);
+
+  if (!txn) return; // Transaction not found
+
+  // Special Logic for Inventory Purchase Reversal (Delete Stock)
+  if (txn.type === TransactionType.EXPENSE && txn.referenceId) {
+     const products = await getProducts();
+     const product = products.find(p => p.id === txn.referenceId);
+     
+     if (product) {
+       let qty = 0;
+       if (txn.metadata && txn.metadata.quantity) {
+          qty = Number(txn.metadata.quantity);
+       } else {
+          // Fallback: try to parse legacy description "Stock Purchase: 10x Product Name"
+          const match = txn.description.match(/Stock Purchase: (\d+)x/);
+          if (match && match[1]) {
+             qty = parseInt(match[1]);
+          }
+       }
+       
+       if (qty > 0) {
+          // Revert stock (subtract what was bought)
+          product.stock -= qty;
+          await updateProduct(product);
+       }
+     }
+  }
+
+  // Handle Payment Reversal for Orders
+  if (txn.type === TransactionType.PAYMENT_RECEIVED && txn.referenceId) {
+     const orders = await getOrders();
+     const order = orders.find(o => o.id === txn.referenceId);
+     if (order) {
+        const newPaid = (order.paidAmount || 0) - txn.amount;
         let newStatus = order.status;
-        if (!order.is_return) {
+        if (!order.isReturn) {
            newStatus = OrderStatus.PENDING;
-           if (newPaid >= Number(order.total_amount)) newStatus = OrderStatus.PAID;
+           if (newPaid >= order.totalAmount) newStatus = OrderStatus.PAID;
            else if (newPaid > 0) newStatus = OrderStatus.PARTIAL;
         }
-        await supabase.from('orders').update({ paid_amount: newPaid, status: newStatus }).eq('id', txn.reference_id);
-      }
-    }
+        
+        if (isSupabaseEnabled && supabase) {
+           await supabase.from('orders').update({ paid_amount: newPaid, status: newStatus }).eq('id', txn.referenceId);
+        } else {
+           const idx = orders.findIndex(o => o.id === txn.referenceId);
+           if (idx >= 0) {
+              orders[idx].paidAmount = newPaid;
+              orders[idx].status = newStatus;
+              localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+           }
+        }
+     }
+  }
+
+  // Finally delete the transaction record
+  if (isSupabaseEnabled && supabase) {
     const { error } = await supabase.from('transactions').delete().eq('id', transactionId);
     if (error) throw error;
   } else {
     let transactions = await getTransactions();
-    const txn = transactions.find(t => t.id === transactionId);
-    if (txn && txn.type === TransactionType.PAYMENT_RECEIVED && txn.referenceId) {
-      const orders = await getOrders();
-      const orderIndex = orders.findIndex(o => o.id === txn.referenceId);
-      if (orderIndex >= 0) {
-        orders[orderIndex].paidAmount = orders[orderIndex].paidAmount - txn.amount;
-        if (!orders[orderIndex].isReturn) {
-          if (orders[orderIndex].paidAmount >= orders[orderIndex].totalAmount) {
-            orders[orderIndex].status = OrderStatus.PAID;
-          } else if (orders[orderIndex].paidAmount > 0) {
-            orders[orderIndex].status = OrderStatus.PARTIAL;
-          } else {
-            orders[orderIndex].status = OrderStatus.PENDING;
-          }
-        }
-        localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
-      }
-    }
     transactions = transactions.filter(t => t.id !== transactionId);
     localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
   }
@@ -550,7 +601,12 @@ export const restockProduct = async (productId: string, quantity: number, cost: 
     description: `Stock Purchase: ${quantity}x ${product.name}`,
     paymentMethod: method,
     providerId: providerId,
-    providerName: providerName
+    providerName: providerName,
+    // Add metadata to easily track quantity for deletion/editing later
+    metadata: {
+       quantity: quantity,
+       productId: productId
+    }
   };
 
   await addTransaction(expense);

@@ -1,8 +1,9 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { getOrders, addTransaction, getFinancialStats, updateOrder, getTransactions, deleteTransaction, updateTransaction, getProviders, addProvider } from '../utils/storage';
 import { Order, TransactionType, OrderStatus, DashboardStats, Transaction, PaymentMethod, Provider } from '../types';
-import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search, Calendar, CheckSquare, X, History, FileText, Trash2, Edit2, TrendingDown, TrendingUp, Eye, Plus, Printer, Building2 } from 'lucide-react';
+import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search, Calendar, CheckSquare, X, History, FileText, Trash2, Edit2, TrendingDown, TrendingUp, Eye, Plus, Printer, Building2, Landmark } from 'lucide-react';
 import { formatDate, formatCurrency } from '../utils/helpers';
 import ProviderModal from '../components/ProviderModal';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -25,6 +26,7 @@ const Collections = () => {
   const [searchStatement, setSearchStatement] = useState('');
   const [statementStart, setStatementStart] = useState('');
   const [statementEnd, setStatementEnd] = useState('');
+  const [statementAccount, setStatementAccount] = useState<'CASH' | 'HQ' | 'ALL'>('CASH');
   const [viewTxn, setViewTxn] = useState<Transaction | null>(null);
 
   // HQ Transfer State
@@ -341,57 +343,85 @@ const Collections = () => {
   const depositHistory = transactions.filter(t => t.type === TransactionType.DEPOSIT_TO_HQ);
   
   // Statement Data Preparation
-  const rawStatementTxns = transactions
-    .filter(t => 
-      t.type === TransactionType.PAYMENT_RECEIVED || 
-      t.type === TransactionType.DEPOSIT_TO_HQ || 
-      (t.type === TransactionType.EXPENSE && t.paymentMethod === PaymentMethod.CASH)
-    )
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()); // Ascending for balance calc
+  const allTxnsForStatement = transactions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  // Filter by date range for Report
-  let statementTxns = rawStatementTxns;
+  // Filter by date range first for opening balance calculation
+  let statementTxns = allTxnsForStatement;
   let openingBalance = 0;
 
   if (statementStart) {
     const start = new Date(statementStart).getTime();
-    const preTxns = rawStatementTxns.filter(t => new Date(t.date).getTime() < start);
+    const preTxns = allTxnsForStatement.filter(t => new Date(t.date).getTime() < start);
+    
     preTxns.forEach(t => {
-      if (t.type === TransactionType.PAYMENT_RECEIVED) openingBalance += t.amount;
-      else if (t.type === TransactionType.DEPOSIT_TO_HQ) {
-         if (!t.paymentMethod || t.paymentMethod === PaymentMethod.CASH) openingBalance -= t.amount;
-         // External deposits don't affect balance
+      if (statementAccount === 'CASH' || statementAccount === 'ALL') {
+          // Cash Logic
+          if (t.type === TransactionType.PAYMENT_RECEIVED) openingBalance += t.amount;
+          if (t.type === TransactionType.DEPOSIT_TO_HQ && (!t.paymentMethod || t.paymentMethod === PaymentMethod.CASH)) openingBalance -= t.amount;
+          if (t.type === TransactionType.EXPENSE && t.paymentMethod === PaymentMethod.CASH) openingBalance -= t.amount;
       }
-      else if (t.type === TransactionType.EXPENSE && t.paymentMethod === PaymentMethod.CASH) openingBalance -= t.amount;
+      // HQ Logic is tricky because we don't track "HQ Balance" strictly from 0 usually, 
+      // but let's assume it tracks Net Transfers + HQ Expenses.
+      // Actually HQ Balance usually implies what we Sent there.
+      // If switching to HQ view, maybe Opening Balance isn't as relevant as "Total Transferred".
+      // Let's stick to Cash Opening Balance logic mostly.
     });
 
-    statementTxns = rawStatementTxns.filter(t => {
+    statementTxns = allTxnsForStatement.filter(t => {
        const d = new Date(t.date).getTime();
        let matchEnd = true;
        if (statementEnd) matchEnd = d <= new Date(statementEnd).getTime() + 86400000;
        return d >= start && matchEnd;
     });
   } else if (statementEnd) {
-     statementTxns = rawStatementTxns.filter(t => new Date(t.date).getTime() <= new Date(statementEnd).getTime());
+     statementTxns = allTxnsForStatement.filter(t => new Date(t.date).getTime() <= new Date(statementEnd).getTime());
   }
 
   // Calculate Balance & Enrich Data
   let runningBalance = openingBalance;
-  const enrichedStatementData = statementTxns.map(txn => {
-    const isCredit = txn.type === TransactionType.PAYMENT_RECEIVED;
-    const isDebit = (txn.type === TransactionType.DEPOSIT_TO_HQ && (!txn.paymentMethod || txn.paymentMethod === PaymentMethod.CASH)) || 
-                    (txn.type === TransactionType.EXPENSE && txn.paymentMethod === PaymentMethod.CASH);
+
+  // Filter Transactions based on Account Selection
+  const filteredStatementData = statementTxns.filter(t => {
+     if (statementAccount === 'CASH') {
+        // Show: Collections, Cash Expenses (including Purchases), Cash Deposits
+        const isCollection = t.type === TransactionType.PAYMENT_RECEIVED;
+        const isCashDeposit = t.type === TransactionType.DEPOSIT_TO_HQ && (!t.paymentMethod || t.paymentMethod === PaymentMethod.CASH);
+        const isCashExpense = t.type === TransactionType.EXPENSE && t.paymentMethod === PaymentMethod.CASH;
+        return isCollection || isCashDeposit || isCashExpense;
+     } else if (statementAccount === 'HQ') {
+        // Show: Deposits (All types), Expenses paid by HQ
+        const isDeposit = t.type === TransactionType.DEPOSIT_TO_HQ;
+        const isHQExpense = t.type === TransactionType.EXPENSE && t.paymentMethod === PaymentMethod.BANK_TRANSFER;
+        return isDeposit || isHQExpense;
+     }
+     return true; // Show ALL
+  }).map(txn => {
+    // Determine effect on Running Balance (Mainly relevant for Cash View)
+    let amount = txn.amount;
+    let isCredit = false; // Add to balance
+    let isDebit = false;  // Subtract from balance
+
+    if (statementAccount === 'CASH') {
+        if (txn.type === TransactionType.PAYMENT_RECEIVED) isCredit = true;
+        else isDebit = true; // Expenses and Deposits reduce cash
+    } else if (statementAccount === 'HQ') {
+        if (txn.type === TransactionType.DEPOSIT_TO_HQ) isCredit = true; // Money Entering HQ
+        else if (txn.type === TransactionType.EXPENSE) isDebit = true; // Money Leaving HQ
+    } else {
+        // ALL VIEW: Just list them. Running balance is confusing here, maybe track Net Cash Flow?
+        if (txn.type === TransactionType.PAYMENT_RECEIVED) isCredit = true;
+        else isDebit = true;
+    }
     
-    // Only adjust balance if it affects cash on hand
-    if (isCredit) runningBalance += txn.amount;
-    else if (isDebit) runningBalance -= txn.amount;
+    if (isCredit) runningBalance += amount;
+    else if (isDebit) runningBalance -= amount;
 
     // Determine Display Name
     let mainLabel = '';
     if (txn.type === TransactionType.PAYMENT_RECEIVED) {
       mainLabel = txn.referenceId && orderLookup[txn.referenceId] ? orderLookup[txn.referenceId] : 'Customer Payment';
     } else if (txn.type === TransactionType.EXPENSE) {
-      mainLabel = txn.providerName ? txn.providerName : 'Cash Expense';
+      mainLabel = txn.providerName ? txn.providerName : (txn.metadata?.quantity ? 'Stock Purchase' : 'Expense');
     } else if (txn.type === TransactionType.DEPOSIT_TO_HQ) {
       mainLabel = 'Deposit to HQ';
     }
@@ -400,19 +430,18 @@ const Collections = () => {
       ...txn,
       balanceSnapshot: runningBalance,
       mainLabel,
-      affectsCash: isCredit || isDebit
+      isCredit,
+      isDebit
     };
-  }).filter(t => t.affectsCash); // Only show cash-affecting transactions in Cash Statement
-
-  // Apply Filters
-  const filteredStatementData = enrichedStatementData.filter(txn => {
-    const search = searchStatement.toLowerCase();
-    return (
-      txn.mainLabel.toLowerCase().includes(search) ||
-      txn.description.toLowerCase().includes(search) ||
-      txn.amount.toString().includes(search) ||
-      formatDate(txn.date).includes(search)
-    );
+  }).filter(txn => {
+      // Search Text Filter
+      const search = searchStatement.toLowerCase();
+      return (
+        txn.mainLabel.toLowerCase().includes(search) ||
+        txn.description.toLowerCase().includes(search) ||
+        txn.amount.toString().includes(search) ||
+        formatDate(txn.date).includes(search)
+      );
   });
 
   // Calculate Monthly Report Stats
@@ -469,7 +498,7 @@ const Collections = () => {
 
            {/* HQ Balance Card */}
            <div className="bg-blue-50 border border-blue-200 px-4 py-2 rounded-xl flex items-center gap-3 shadow-sm">
-              <div className="bg-blue-100 p-2 rounded-full text-blue-600"><Building2 size={18}/></div>
+              <div className="bg-blue-100 p-2 rounded-full text-blue-600"><Landmark size={18}/></div>
               <div>
                 <p className="text-[10px] text-blue-800 font-bold uppercase tracking-wider">{t('hqBalance')}</p>
                 <p className="text-lg font-bold text-blue-900">{formatCurrency(stats.transferredToHQ)}</p>
@@ -527,7 +556,7 @@ const Collections = () => {
           onClick={() => setActiveTab('statement')}
           className={`px-4 py-2 font-medium text-xs md:text-sm transition-colors border-b-2 whitespace-nowrap ${activeTab === 'statement' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
-          {t('cashStatement')} ({filteredStatementData.length})
+          {t('cashStatement')}
         </button>
       </div>
 
@@ -728,13 +757,38 @@ const Collections = () => {
       {activeTab === 'statement' && (
          <div className="space-y-4">
             {/* Statement Header Controls */}
-            <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-start md:items-center print:hidden">
+            <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col xl:flex-row gap-4 justify-between items-start xl:items-center print:hidden">
                 <div className="flex-1">
                   <h3 className="font-bold text-slate-800 text-sm">{t('cashStatementReport')}</h3>
                   <div className="text-xs text-slate-500">{t('statementSubtitle')}</div>
                 </div>
                 
                 <div className="flex flex-wrap items-center gap-3">
+                   
+                   {/* Account Switcher */}
+                   <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200">
+                      <button 
+                        onClick={() => setStatementAccount('CASH')}
+                        className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${statementAccount === 'CASH' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                      >
+                        Cash (Rep)
+                      </button>
+                      <button 
+                        onClick={() => setStatementAccount('HQ')}
+                        className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${statementAccount === 'HQ' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                      >
+                        HQ (Bank)
+                      </button>
+                      <button 
+                        onClick={() => setStatementAccount('ALL')}
+                        className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${statementAccount === 'ALL' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                      >
+                        All (Log)
+                      </button>
+                   </div>
+                   
+                   <div className="w-px h-6 bg-slate-200 mx-1"></div>
+
                    <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
                       <span className="text-[10px] font-medium text-slate-500 ml-1">{t('from')}:</span>
                       <input 
@@ -765,13 +819,17 @@ const Collections = () => {
 
             {/* Print Header */}
             <div className="hidden print:block text-center border-b pb-4 mb-4">
-               <h1 className="text-xl font-bold">{t('cashStatementReport')}</h1>
+               <h1 className="text-xl font-bold">{t('cashStatementReport')} - {statementAccount}</h1>
                <p className="text-slate-600 mt-2 text-sm">
                  {t('duration')}: <span className="font-bold">{statementStart ? formatDate(statementStart) : t('start')}</span> {t('to')} <span className="font-bold">{statementEnd ? formatDate(statementEnd) : t('present')}</span>
                </p>
             </div>
 
-            <div className="text-xs text-slate-500 font-medium print:hidden">{t('totalRecords')}: {filteredStatementData.length}</div>
+            <div className="text-xs text-slate-500 font-medium print:hidden flex justify-between items-center">
+               <span>{t('totalRecords')}: {filteredStatementData.length}</span>
+               <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold">{statementAccount} VIEW</span>
+            </div>
+            
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden print:shadow-none print:border">
                <div className="overflow-x-auto">
                  <table className="w-full text-left text-xs">
@@ -786,8 +844,8 @@ const Collections = () => {
                        </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                       {/* Opening Balance Row if date filter active */}
-                       {statementStart && (
+                       {/* Opening Balance Row if date filter active & viewing single account */}
+                       {statementStart && statementAccount !== 'ALL' && (
                           <tr className="bg-yellow-50 font-medium">
                              <td className="p-2 text-slate-800">{formatDate(statementStart)}</td>
                              <td className="p-2 text-slate-800" colSpan={4}>{t('openingBalance')}</td>
@@ -799,7 +857,6 @@ const Collections = () => {
                           <tr><td colSpan={6} className="p-6 text-center text-slate-400">{t('noTransactionsFound')}</td></tr>
                        ) : (
                           filteredStatementData.map(txn => {
-                             const isCredit = txn.type === TransactionType.PAYMENT_RECEIVED;
                              return (
                                 <tr key={txn.id} className="hover:bg-slate-50">
                                    <td className="p-2 text-slate-600 align-top pt-3">{formatDate(txn.date)}</td>
@@ -819,12 +876,14 @@ const Collections = () => {
                                       {txn.type === TransactionType.EXPENSE && <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase">Exp.</span>}
                                    </td>
                                    <td className="p-2 text-right text-slate-500 align-top pt-3">
-                                      {!isCredit ? formatCurrency(txn.amount) : '-'}
+                                      {txn.isDebit ? formatCurrency(txn.amount) : '-'}
                                    </td>
                                    <td className="p-2 text-right text-slate-500 align-top pt-3">
-                                      {isCredit ? formatCurrency(txn.amount) : '-'}
+                                      {txn.isCredit ? formatCurrency(txn.amount) : '-'}
                                    </td>
-                                   <td className="p-2 text-right font-bold text-slate-800 align-top pt-3">{formatCurrency(txn.balanceSnapshot)}</td>
+                                   <td className="p-2 text-right font-bold text-slate-800 align-top pt-3">
+                                      {statementAccount !== 'ALL' ? formatCurrency(txn.balanceSnapshot) : '-'}
+                                   </td>
                                 </tr>
                              );
                           })
@@ -1165,7 +1224,7 @@ const Collections = () => {
                  )}
                  {expenseMethod === PaymentMethod.BANK_TRANSFER && stats && (
                     <p className="text-[10px] text-blue-600 mt-1 flex items-center gap-1">
-                       <Building2 size={10}/> {t('transferredToHQ')}: {formatCurrency(stats.transferredToHQ)}
+                       <Landmark size={10}/> {t('transferredToHQ')}: {formatCurrency(stats.transferredToHQ)}
                     </p>
                  )}
               </div>

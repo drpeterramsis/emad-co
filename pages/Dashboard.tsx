@@ -1,12 +1,12 @@
 
+
 import React, { useEffect, useState } from 'react';
-import { getFinancialStats, getOrders, getCustomers } from '../utils/storage';
-import { Order, DashboardStats } from '../types';
+import { getFinancialStats, getOrders, getCustomers, getProducts } from '../utils/storage';
+import { Order, DashboardStats, Product } from '../types';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend 
 } from 'recharts';
-import { DollarSign, TrendingUp, Briefcase, AlertCircle, Loader2, Wallet, Users } from 'lucide-react';
+import { DollarSign, TrendingUp, Briefcase, AlertCircle, Loader2, Wallet, Users, Package, Coins, Landmark, Layers } from 'lucide-react';
 import { formatCurrency } from '../utils/helpers';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNavigate } from 'react-router-dom';
@@ -15,9 +15,16 @@ const Dashboard = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [recentOrders, setRecentOrders] = useState<Order[]>([]);
-  const [customerCount, setCustomerCount] = useState(0);
   const [loadingData, setLoadingData] = useState(true);
+  
+  // New Stats
+  const [inventoryCapital, setInventoryCapital] = useState(0);
+  const [pharmacyValue, setPharmacyValue] = useState(0);
+  const [sumAllCapitals, setSumAllCapitals] = useState(0);
+  const [customerCount, setCustomerCount] = useState(0);
+
+  // Chart Data
+  const [monthlyData, setMonthlyData] = useState<any[]>([]);
 
   useEffect(() => {
     loadDashboardData();
@@ -25,32 +32,71 @@ const Dashboard = () => {
 
   const loadDashboardData = async () => {
     setLoadingData(true);
-    const [fetchedStats, fetchedOrders, fetchedCustomers] = await Promise.all([
+    const [fetchedStats, fetchedOrders, fetchedCustomers, fetchedProducts] = await Promise.all([
       getFinancialStats(),
       getOrders(),
-      getCustomers()
+      getCustomers(),
+      getProducts()
     ]);
-    // Filter drafts from recent orders list for dashboard display
-    const activeOrders = fetchedOrders.filter(o => !o.isDraft);
+    
     setStats(fetchedStats);
-    setRecentOrders(activeOrders);
     setCustomerCount(fetchedCustomers.length);
+
+    // Calculate Inventory Stats
+    const savedSettings = localStorage.getItem('emad_inventory_settings');
+    let settings = { factoryPercent: 30, customerPercent: 75 };
+    if (savedSettings) {
+      try { settings = JSON.parse(savedSettings); } catch(e) {}
+    }
+
+    const totalCap = fetchedProducts.reduce((acc, p) => acc + (p.stock * p.basePrice * (settings.factoryPercent / 100)), 0);
+    const totalPharm = fetchedProducts.reduce((acc, p) => acc + (p.stock * p.basePrice * (settings.customerPercent / 100)), 0);
+    
+    setInventoryCapital(totalCap);
+    setPharmacyValue(totalPharm);
+
+    // Sum of All Capitals = Outstanding + HQ + Pharmacy Value
+    const outstanding = fetchedStats.totalSales - fetchedStats.totalCollected;
+    setSumAllCapitals(outstanding + fetchedStats.transferredToHQ + totalPharm);
+
+    // Prepare Chart Data (Group by Month of Order)
+    const activeOrders = fetchedOrders.filter(o => !o.isDraft);
+    const monthMap: Record<string, { month: string, cashCollected: number, cashOutstanding: number, unitsCollected: number, unitsOutstanding: number }> = {};
+
+    activeOrders.forEach(order => {
+       const month = order.date.substring(0, 7); // YYYY-MM
+       if (!monthMap[month]) {
+          monthMap[month] = { 
+            month, 
+            cashCollected: 0, 
+            cashOutstanding: 0, 
+            unitsCollected: 0, 
+            unitsOutstanding: 0 
+          };
+       }
+       
+       // Cash
+       monthMap[month].cashCollected += order.paidAmount;
+       monthMap[month].cashOutstanding += (order.totalAmount - order.paidAmount);
+
+       // Units
+       order.items.forEach(item => {
+           const paid = item.paidQuantity || 0;
+           // Handle case where paid > qty (overshot, shouldn't happen but safe to clamp)
+           const totalQty = item.quantity;
+           const remaining = Math.max(0, totalQty - paid);
+           
+           monthMap[month].unitsCollected += paid;
+           monthMap[month].unitsOutstanding += remaining;
+       });
+    });
+
+    const sortedMonths = Object.values(monthMap).sort((a, b) => a.month.localeCompare(b.month));
+    setMonthlyData(sortedMonths);
+
     setLoadingData(false);
   };
   
-  // Data for Charts
-  const salesData = recentOrders.slice(-7).map(o => ({
-    name: new Date(o.date).toLocaleDateString(undefined, {weekday: 'short'}),
-    amount: o.totalAmount
-  }));
-
-  const collectionData = stats ? [
-    { name: t('collected'), value: stats.totalCollected },
-    { name: t('outstanding'), value: stats.totalSales - stats.totalCollected },
-  ] : [];
-
-  const COLORS = ['#0f766e', '#cbd5e1'];
-
   if (loadingData || !stats) {
     return (
       <div className="flex items-center justify-center h-full min-h-[400px]">
@@ -76,8 +122,9 @@ const Dashboard = () => {
         </button>
       </header>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 md:gap-4">
+      {/* Primary Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        {/* Row 1: Sales & Collection Flow */}
         <StatCard 
           title={t('totalSales')}
           value={formatCurrency(stats.totalSales)}
@@ -102,66 +149,76 @@ const Dashboard = () => {
           icon={Wallet} 
           color="bg-amber-500" 
         />
+        
+        {/* Row 2: Asset & Capital */}
         <StatCard 
           title={t('transferredToHQ')} 
           value={formatCurrency(stats.transferredToHQ)} 
-          icon={Briefcase} 
+          icon={Landmark} 
           color="bg-slate-600" 
         />
         <StatCard 
-          title={t('customers')} 
-          value={customerCount} 
-          icon={Users} 
+          title={t('totalCapital')}
+          subtitle="(Factory Value)"
+          value={formatCurrency(inventoryCapital)} 
+          icon={Coins} 
           color="bg-indigo-500" 
         />
+        <StatCard 
+          title={t('pharmacyValue')} 
+          subtitle="(Sales Value)"
+          value={formatCurrency(pharmacyValue)} 
+          icon={Package} 
+          color="bg-emerald-500" 
+        />
+        <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-4 rounded-xl shadow-lg border border-slate-700 flex flex-col justify-center text-white relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+               <Layers size={64} />
+            </div>
+            <p className="text-slate-400 text-[10px] md:text-xs font-bold uppercase tracking-wider mb-1">Sum of All Capitals</p>
+            <h3 className="text-lg md:text-xl font-bold text-white tracking-tight">{formatCurrency(sumAllCapitals)}</h3>
+            <p className="text-[10px] text-slate-500 mt-1">Outstanding + HQ + Inventory</p>
+        </div>
       </div>
 
       {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
-        <div className="bg-white p-4 md:p-5 rounded-xl shadow-sm border border-slate-200 lg:col-span-2">
-          <h3 className="text-base font-semibold mb-3 text-slate-800">{t('recentSalesTrend')}</h3>
-          <div className="h-56">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+        
+        {/* Chart 1: Cash Analysis */}
+        <div className="bg-white p-4 md:p-5 rounded-xl shadow-sm border border-slate-200">
+          <h3 className="text-base font-semibold mb-1 text-slate-800">Monthly Cash: Outstanding vs Collected</h3>
+          <p className="text-xs text-slate-500 mb-4">Breakdown of order values by collection status (Net Flow)</p>
+          <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={salesData} margin={{top: 5, right: 0, left: -20, bottom: 0}}>
+              <BarChart data={monthlyData} margin={{top: 5, right: 0, left: -10, bottom: 0}}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 11}} />
+                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 10}} />
+                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10}} />
                 <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={{fontSize: '12px', padding: '8px'}} />
-                <Bar dataKey="amount" fill="#0f766e" radius={[4, 4, 0, 0]} />
+                <Legend iconSize={8} wrapperStyle={{fontSize: '12px'}} />
+                <Bar dataKey="cashCollected" name="Collected Cash" stackId="a" fill="#0f766e" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="cashOutstanding" name="Outstanding Cash" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
+        {/* Chart 2: Unit Analysis */}
         <div className="bg-white p-4 md:p-5 rounded-xl shadow-sm border border-slate-200">
-          <h3 className="text-base font-semibold mb-3 text-slate-800">{t('collectionStatus')}</h3>
-          <div className="h-56">
+          <h3 className="text-base font-semibold mb-1 text-slate-800">Monthly Units: Outstanding vs Collected</h3>
+          <p className="text-xs text-slate-500 mb-4">Product units sold vs units paid for</p>
+          <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={collectionData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={70}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {collectionData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={{fontSize: '12px', padding: '8px'}} />
-              </PieChart>
+              <BarChart data={monthlyData} margin={{top: 5, right: 0, left: -10, bottom: 0}}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 10}} />
+                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10}} />
+                <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={{fontSize: '12px', padding: '8px'}} />
+                <Legend iconSize={8} wrapperStyle={{fontSize: '12px'}} />
+                <Bar dataKey="unitsCollected" name="Collected Units" stackId="a" fill="#10b981" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="unitsOutstanding" name="Outstanding Units" stackId="a" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+              </BarChart>
             </ResponsiveContainer>
-          </div>
-          <div className="flex justify-center gap-4 mt-2">
-            <div className="flex items-center gap-2 text-xs text-slate-600">
-              <span className="w-2.5 h-2.5 rounded-full bg-primary"></span> {t('collected')}
-            </div>
-            <div className="flex items-center gap-2 text-xs text-slate-600">
-              <span className="w-2.5 h-2.5 rounded-full bg-slate-300"></span> {t('outstanding')}
-            </div>
           </div>
         </div>
       </div>
@@ -169,14 +226,20 @@ const Dashboard = () => {
   );
 };
 
-const StatCard = ({ title, value, icon: Icon, color }: any) => (
-  <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-start justify-between min-h-[90px]">
-    <div>
-      <p className="text-slate-500 text-[10px] md:text-xs font-bold uppercase tracking-wider mb-1">{title}</p>
+const StatCard = ({ title, value, icon: Icon, color, subtitle }: any) => (
+  <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-start justify-between min-h-[90px] relative overflow-hidden group">
+    <div className="relative z-10">
+      <p className="text-slate-500 text-[10px] md:text-xs font-bold uppercase tracking-wider mb-1">
+          {title} {subtitle && <span className="text-[9px] text-slate-400 font-normal lowercase">{subtitle}</span>}
+      </p>
       <h3 className="text-base md:text-lg font-bold text-slate-800">{value}</h3>
     </div>
-    <div className={`p-2 rounded-lg ${color} text-white shadow-lg shadow-opacity-20`}>
+    <div className={`p-2 rounded-lg ${color} text-white shadow-lg shadow-opacity-20 relative z-10`}>
       <Icon size={18} />
+    </div>
+    {/* Decorative BG Icon */}
+    <div className={`absolute -bottom-2 -right-2 opacity-5 text-slate-900 group-hover:scale-110 transition-transform`}>
+        <Icon size={64} />
     </div>
   </div>
 );

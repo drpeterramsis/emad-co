@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getOrders, addTransaction, getFinancialStats, updateOrder, getTransactions, deleteTransaction, updateTransaction, getProviders, addProvider } from '../utils/storage';
 import { Order, TransactionType, OrderStatus, DashboardStats, Transaction, PaymentMethod, Provider } from '../types';
-import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search, Calendar, CheckSquare, X, History, FileText, Trash2, Edit2, TrendingDown, TrendingUp, Eye, Plus, Printer, Building2, Landmark } from 'lucide-react';
+import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search, Calendar, CheckSquare, X, History, FileText, Trash2, Edit2, TrendingDown, TrendingUp, Eye, Plus, Printer, Building2, Landmark, ListFilter } from 'lucide-react';
 import { formatDate, formatCurrency } from '../utils/helpers';
 import ProviderModal from '../components/ProviderModal';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -27,6 +27,7 @@ const Collections = () => {
   const [statementStart, setStatementStart] = useState('');
   const [statementEnd, setStatementEnd] = useState('');
   const [statementAccount, setStatementAccount] = useState<'CASH' | 'HQ' | 'ALL'>('CASH');
+  const [statementFilterType, setStatementFilterType] = useState<'ALL' | 'CREDIT' | 'DEBIT'>('ALL');
   const [viewTxn, setViewTxn] = useState<Transaction | null>(null);
 
   // HQ Transfer State
@@ -359,12 +360,13 @@ const Collections = () => {
           if (t.type === TransactionType.PAYMENT_RECEIVED) openingBalance += t.amount;
           if (t.type === TransactionType.DEPOSIT_TO_HQ && (!t.paymentMethod || t.paymentMethod === PaymentMethod.CASH)) openingBalance -= t.amount;
           if (t.type === TransactionType.EXPENSE && t.paymentMethod === PaymentMethod.CASH) openingBalance -= t.amount;
+      } else if (statementAccount === 'HQ') {
+          // HQ Logic: 
+          // HQ Balance = (All Deposits) - (Expenses paid by Bank Transfer)
+          // Note: Payment Received goes to Rep, not HQ directly unless deposited.
+          if (t.type === TransactionType.DEPOSIT_TO_HQ) openingBalance += t.amount;
+          if (t.type === TransactionType.EXPENSE && t.paymentMethod === PaymentMethod.BANK_TRANSFER) openingBalance -= t.amount;
       }
-      // HQ Logic is tricky because we don't track "HQ Balance" strictly from 0 usually, 
-      // but let's assume it tracks Net Transfers + HQ Expenses.
-      // Actually HQ Balance usually implies what we Sent there.
-      // If switching to HQ view, maybe Opening Balance isn't as relevant as "Total Transferred".
-      // Let's stick to Cash Opening Balance logic mostly.
     });
 
     statementTxns = allTxnsForStatement.filter(t => {
@@ -379,6 +381,8 @@ const Collections = () => {
 
   // Calculate Balance & Enrich Data
   let runningBalance = openingBalance;
+  let summaryTotalCredit = 0;
+  let summaryTotalDebit = 0;
 
   // Filter Transactions based on Account Selection
   const filteredStatementData = statementTxns.filter(t => {
@@ -413,15 +417,30 @@ const Collections = () => {
         else isDebit = true;
     }
     
+    // Accumulate summary totals before balance update
+    if (isCredit) summaryTotalCredit += amount;
+    else if (isDebit) summaryTotalDebit += amount;
+
     if (isCredit) runningBalance += amount;
     else if (isDebit) runningBalance -= amount;
 
     // Determine Display Name
     let mainLabel = '';
+    let subLabel = txn.description;
+    
     if (txn.type === TransactionType.PAYMENT_RECEIVED) {
       mainLabel = txn.referenceId && orderLookup[txn.referenceId] ? orderLookup[txn.referenceId] : 'Customer Payment';
     } else if (txn.type === TransactionType.EXPENSE) {
-      mainLabel = txn.providerName ? txn.providerName : (txn.metadata?.quantity ? 'Stock Purchase' : 'Expense');
+      // Enhanced item logic
+      if (txn.metadata?.quantity && txn.metadata?.productId) {
+         // It's a stock purchase with item details
+         // Fetch item name from txn.description if available or just show "Stock Purchase"
+         mainLabel = txn.providerName || 'Stock Purchase';
+         // Ensure subLabel contains item info
+         if (!subLabel.includes('Stock Purchase')) subLabel = `${txn.metadata.quantity}x items - ${txn.description}`;
+      } else {
+         mainLabel = txn.providerName ? txn.providerName : 'Expense';
+      }
     } else if (txn.type === TransactionType.DEPOSIT_TO_HQ) {
       mainLabel = 'Deposit to HQ';
     }
@@ -430,10 +449,15 @@ const Collections = () => {
       ...txn,
       balanceSnapshot: runningBalance,
       mainLabel,
+      subLabel,
       isCredit,
       isDebit
     };
   }).filter(txn => {
+      // Filter by Statement Type (ALL, CREDIT, DEBIT)
+      if (statementFilterType === 'CREDIT' && !txn.isCredit) return false;
+      if (statementFilterType === 'DEBIT' && !txn.isDebit) return false;
+      
       // Search Text Filter
       const search = searchStatement.toLowerCase();
       return (
@@ -443,6 +467,8 @@ const Collections = () => {
         formatDate(txn.date).includes(search)
       );
   });
+  
+  const closingBalance = openingBalance + summaryTotalCredit - summaryTotalDebit;
 
   // Calculate Monthly Report Stats
   const getMonthlyReport = () => {
@@ -789,6 +815,22 @@ const Collections = () => {
                    
                    <div className="w-px h-6 bg-slate-200 mx-1"></div>
 
+                   {/* Transaction Type Filter */}
+                   <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200">
+                       <span className="text-[10px] font-medium text-slate-500 ml-1"><ListFilter size={12}/></span>
+                       <select 
+                         value={statementFilterType}
+                         onChange={(e) => setStatementFilterType(e.target.value as any)}
+                         className="text-xs bg-transparent outline-none w-20 text-slate-700 font-medium"
+                       >
+                         <option value="ALL">All Types</option>
+                         <option value="CREDIT">In (Credit)</option>
+                         <option value="DEBIT">Out (Debit)</option>
+                       </select>
+                   </div>
+
+                   <div className="w-px h-6 bg-slate-200 mx-1"></div>
+
                    <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
                       <span className="text-[10px] font-medium text-slate-500 ml-1">{t('from')}:</span>
                       <input 
@@ -824,6 +866,28 @@ const Collections = () => {
                  {t('duration')}: <span className="font-bold">{statementStart ? formatDate(statementStart) : t('start')}</span> {t('to')} <span className="font-bold">{statementEnd ? formatDate(statementEnd) : t('present')}</span>
                </p>
             </div>
+            
+            {/* Statement Summary Cards */}
+            {statementAccount !== 'ALL' && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                 <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-200">
+                    <p className="text-[10px] text-slate-500 font-bold uppercase">{t('openingBalance')}</p>
+                    <p className="text-sm font-bold text-slate-800">{formatCurrency(openingBalance)}</p>
+                 </div>
+                 <div className="bg-white p-3 rounded-xl shadow-sm border border-green-200 bg-green-50/30">
+                    <p className="text-[10px] text-green-600 font-bold uppercase">{t('totalCredits')}</p>
+                    <p className="text-sm font-bold text-green-700">+{formatCurrency(summaryTotalCredit)}</p>
+                 </div>
+                 <div className="bg-white p-3 rounded-xl shadow-sm border border-red-200 bg-red-50/30">
+                    <p className="text-[10px] text-red-600 font-bold uppercase">{t('totalDebits')}</p>
+                    <p className="text-sm font-bold text-red-700">-{formatCurrency(summaryTotalDebit)}</p>
+                 </div>
+                 <div className="bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-700 text-white">
+                    <p className="text-[10px] text-slate-300 font-bold uppercase">{t('closingBalance')}</p>
+                    <p className="text-sm font-bold text-white">{formatCurrency(closingBalance)}</p>
+                 </div>
+              </div>
+            )}
 
             <div className="text-xs text-slate-500 font-medium print:hidden flex justify-between items-center">
                <span>{t('totalRecords')}: {filteredStatementData.length}</span>
@@ -865,8 +929,8 @@ const Collections = () => {
                                          <span className="font-bold text-slate-800 text-xs">
                                             {txn.mainLabel}
                                          </span>
-                                         <span className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">
-                                            {txn.description}
+                                         <span className="text-[10px] text-slate-500 mt-0.5 whitespace-pre-wrap">
+                                            {txn.subLabel}
                                          </span>
                                       </div>
                                    </td>
@@ -875,10 +939,10 @@ const Collections = () => {
                                       {txn.type === TransactionType.DEPOSIT_TO_HQ && <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase">Dep.</span>}
                                       {txn.type === TransactionType.EXPENSE && <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase">Exp.</span>}
                                    </td>
-                                   <td className="p-2 text-right text-slate-500 align-top pt-3">
+                                   <td className="p-2 text-right text-slate-500 align-top pt-3 font-medium">
                                       {txn.isDebit ? formatCurrency(txn.amount) : '-'}
                                    </td>
-                                   <td className="p-2 text-right text-slate-500 align-top pt-3">
+                                   <td className="p-2 text-right text-slate-500 align-top pt-3 font-medium">
                                       {txn.isCredit ? formatCurrency(txn.amount) : '-'}
                                    </td>
                                    <td className="p-2 text-right font-bold text-slate-800 align-top pt-3">

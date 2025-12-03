@@ -74,6 +74,10 @@ const Collections = () => {
   const [searchMonth, setSearchMonth] = useState('');
   const [groupBy, setGroupBy] = useState<'none' | 'customer' | 'month'>('none');
 
+  // View Invoice State
+  const [viewOrder, setViewOrder] = useState<Order | null>(null);
+  const [viewOrderTxns, setViewOrderTxns] = useState<Transaction[]>([]);
+
   useEffect(() => {
     refreshData();
   }, []);
@@ -93,6 +97,17 @@ const Collections = () => {
     setLoading(false);
   };
 
+  const getStatusColor = (status: OrderStatus) => {
+    switch (status) {
+      case OrderStatus.PAID: return 'bg-green-100 text-green-700 border-green-200';
+      case OrderStatus.PARTIAL: return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case OrderStatus.PENDING: return 'bg-red-100 text-red-700 border-red-200';
+      case OrderStatus.RETURNED: return 'bg-violet-100 text-violet-700 border-violet-200';
+      case OrderStatus.CANCELLED: return 'bg-gray-100 text-gray-600 border-gray-200';
+      default: return 'bg-gray-100 text-gray-600';
+    }
+  };
+
   /* --- DATA PROCESSING --- */
   
   // Lookup map for fast Customer Name access by Order ID
@@ -101,6 +116,17 @@ const Collections = () => {
     orders.forEach(o => { map[o.id] = o.customerName; });
     return map;
   }, [orders]);
+
+  /* --- VIEW ORDER LOGIC --- */
+  const handleViewOrder = (order: Order) => {
+    // Fetch transactions for this order
+    const related = transactions
+        .filter(t => t.referenceId === order.id && t.type === TransactionType.PAYMENT_RECEIVED)
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    setViewOrderTxns(related);
+    setViewOrder(order);
+  };
 
   /* --- PAYMENT LOGIC --- */
   const openPaymentModal = (order: Order) => {
@@ -823,18 +849,19 @@ const Collections = () => {
                     <th className="p-3 font-medium text-slate-600">{t('total')}</th>
                     <th className="p-3 font-medium text-slate-600">{t('paid')}</th>
                     <th className="p-3 font-medium text-slate-600">{t('balance')}</th>
+                    <th className="p-3 font-medium text-slate-600">{t('status')}</th>
                     <th className="p-3 font-medium text-slate-600 text-right">{t('actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {unpaidOrders.length === 0 ? (
-                     <tr><td colSpan={8} className="p-6 text-center text-slate-400">All invoices paid or no matches!</td></tr>
+                     <tr><td colSpan={9} className="p-6 text-center text-slate-400">All invoices paid or no matches!</td></tr>
                   ) : (
                     Object.entries(groupedUnpaidOrders).map(([groupKey, groupOrders]) => (
                       <React.Fragment key={groupKey}>
                         {groupBy !== 'none' && (
                           <tr className="bg-slate-100 border-b border-slate-200">
-                            <td colSpan={8} className="p-3 font-bold text-slate-700 text-xs">
+                            <td colSpan={9} className="p-3 font-bold text-slate-700 text-xs">
                               <div className="flex justify-between items-center">
                                 <span>
                                   {groupBy === 'month' ? formatDate(groupKey + '-01').substring(3) : groupKey} 
@@ -880,8 +907,20 @@ const Collections = () => {
                               <td className="p-3 align-top">{formatCurrency(order.totalAmount)}</td>
                               <td className="p-3 text-green-600 font-medium align-top">{formatCurrency(order.paidAmount)}</td>
                               <td className="p-3 font-bold text-red-500 align-top">{formatCurrency(balance)}</td>
+                              <td className="p-3 align-top">
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium whitespace-nowrap ${getStatusColor(order.status)}`}>
+                                   {order.status}
+                                </span>
+                              </td>
                               <td className="p-3 text-right align-top">
                                 <div className="flex justify-end gap-2 items-center">
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handleViewOrder(order); }}
+                                        className="p-1 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded transition-colors"
+                                        title={t('viewDetails')} // Note: Ensure key exists or fallback
+                                    >
+                                        <Eye size={14} />
+                                    </button>
                                     <button
                                         onClick={(e) => { e.stopPropagation(); navigate(`/new-order?id=${order.id}`); }}
                                         className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
@@ -1185,6 +1224,150 @@ const Collections = () => {
                </div>
             </div>
          </div>
+      )}
+
+      {/* View Invoice Modal */}
+      {viewOrder && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b border-slate-200 flex justify-between items-start">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">{t('invoiceDetails')}</h3>
+                <p className="text-slate-500 text-xs">#{viewOrder.id}</p>
+              </div>
+              <button onClick={() => setViewOrder(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="flex justify-between items-start">
+                <div>
+                   <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">{t('billTo')}:</p>
+                   <p className="font-bold text-lg text-slate-800">{viewOrder.customerName}</p>
+                   <p className="text-xs text-slate-600">ID: {viewOrder.customerId}</p>
+                </div>
+                <div className="text-right">
+                   <p className="text-[10px] text-slate-500 uppercase font-bold">{t('invoiceId')}</p>
+                   <p className="font-mono text-base text-slate-800">{viewOrder.id}</p>
+                   <p className="text-xs text-slate-600 mt-0.5">{t('date')}: {formatDate(viewOrder.date)}</p>
+                </div>
+              </div>
+
+              <div>
+                <table className="w-full text-left text-xs mt-4">
+                  <thead className="bg-slate-100 border-b-2 border-slate-300">
+                    <tr>
+                      <th className="p-2 text-slate-800 font-bold">{t('product')}</th>
+                      <th className="p-2 text-slate-800 font-bold text-right">{t('price')}</th>
+                      <th className="p-2 text-slate-800 font-bold text-center">{t('quantity')}</th>
+                      <th className="p-2 text-slate-800 font-bold text-center">{t('bonus')}</th>
+                      <th className="p-2 text-slate-800 font-bold text-center">{t('discountPercent')}</th>
+                      <th className="p-2 text-slate-800 font-bold text-center">{t('discountAmt')}</th>
+                      <th className="p-2 text-slate-800 font-bold text-right">{t('total')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {viewOrder.items.map((item, idx) => {
+                      const gross = item.unitPrice * item.quantity;
+                      const percent = item.discountPercent || (gross > 0 ? (item.discount / gross) * 100 : 0);
+                      
+                      return (
+                      <tr key={idx}>
+                        <td className="p-2 font-medium text-slate-800">{item.productName}</td>
+                        <td className="p-2 text-right">{item.unitPrice}</td>
+                        <td className="p-2 text-center">{item.quantity}</td>
+                        <td className="p-2 text-center">{item.bonusQuantity > 0 ? item.bonusQuantity : '-'}</td>
+                        <td className="p-2 text-center text-slate-600">
+                          {percent > 0.01 ? percent.toFixed(2) + '%' : '-'}
+                        </td>
+                        <td className="p-2 text-center">
+                          {item.discount > 0 ? item.discount.toFixed(2) : '-'}
+                        </td>
+                        <td className="p-2 text-right font-bold">{item.subtotal.toFixed(2)}</td>
+                      </tr>
+                    )})}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex flex-col items-end pt-4 border-t border-slate-300 gap-1">
+                {(() => {
+                   const subTotal = viewOrder.items.reduce((s, i) => s + (i.unitPrice * i.quantity), 0);
+                   const totalDiscount = viewOrder.items.reduce((s, i) => s + (i.discount || 0), 0);
+                   const totalPercent = subTotal > 0 ? (totalDiscount / subTotal) * 100 : 0;
+                   
+                   return (
+                   <>
+                     <div className="w-64 flex justify-between text-xs">
+                       <span className="text-slate-600">{t('subtotal')}:</span>
+                       <span className="font-medium">
+                         {formatCurrency(subTotal)}
+                       </span>
+                     </div>
+                     <div className="w-64 flex justify-between text-xs">
+                       <span className="text-slate-600">{t('discount')}:</span>
+                       <span className="text-red-500 font-medium flex items-center gap-2">
+                         {totalDiscount > 0 && <span className="text-[10px] text-slate-500">({totalPercent.toFixed(2)}%)</span>}
+                         <span>- {formatCurrency(totalDiscount)}</span>
+                       </span>
+                     </div>
+                     <div className="w-64 flex justify-between text-base font-bold border-t border-slate-300 pt-2 mt-2">
+                       <span>{t('total')}:</span>
+                       <span>{formatCurrency(viewOrder.totalAmount)}</span>
+                     </div>
+                     <div className="w-64 flex justify-between text-xs pt-1">
+                       <span className="text-slate-500">{t('paid')}:</span>
+                       <span className="text-green-600 font-medium">{formatCurrency(viewOrder.paidAmount)}</span>
+                     </div>
+                     <div className="w-64 flex justify-between text-xs pt-1">
+                       <span className="text-slate-500">{t('balance')}:</span>
+                       <span className="text-red-600 font-bold">{formatCurrency(viewOrder.totalAmount - viewOrder.paidAmount)}</span>
+                     </div>
+                   </>
+                   );
+                })()}
+              </div>
+
+              {/* Payment History Section */}
+              {viewOrderTxns.length > 0 && (
+                <div className="mt-6 pt-3 border-t border-slate-300">
+                  <h4 className="text-xs font-bold text-slate-800 mb-2 uppercase tracking-wide">{t('paymentsReceived')}</h4>
+                  <table className="w-full text-left text-[10px]">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="p-1.5 text-slate-600">{t('date')}</th>
+                        <th className="p-1.5 text-slate-600">{t('description')}</th>
+                        <th className="p-1.5 text-slate-600 text-right">{t('amount')}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {viewOrderTxns.map((txn, i) => (
+                        <tr key={i}>
+                          <td className="p-1.5 text-slate-700">{formatDate(txn.date)}</td>
+                          <td className="p-1.5 text-slate-500">{txn.description}</td>
+                          <td className="p-1.5 text-slate-800 font-medium text-right">{formatCurrency(txn.amount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="text-right mt-1 text-xs font-bold text-green-700">
+                    {t('totalPaid')}: {formatCurrency(viewOrderTxns.reduce((sum, t) => sum + t.amount, 0))}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="p-4 bg-slate-50 border-t border-slate-200 text-right">
+              <button 
+                onClick={() => setViewOrder(null)}
+                className="px-3 py-1.5 bg-slate-800 text-white rounded-lg hover:bg-slate-900 text-sm"
+              >
+                {t('close')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Edit Payment Modal */}

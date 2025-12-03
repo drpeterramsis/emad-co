@@ -562,7 +562,7 @@ export const updateTransaction = async (transaction: Transaction) => {
   }
 
   // Handle Payment RECEIVED Updates (Affects Order Balance)
-  if (oldTxn && oldTxn.type === TransactionType.PAYMENT_RECEIVED && oldTxn.referenceId && oldTxn.amount !== transaction.amount) {
+  if (!transaction.metadata?.skipOrderUpdate && oldTxn && oldTxn.type === TransactionType.PAYMENT_RECEIVED && oldTxn.referenceId && oldTxn.amount !== transaction.amount) {
      const orders = await getOrders();
      const order = orders.find(o => o.id === oldTxn.referenceId);
      if (order) {

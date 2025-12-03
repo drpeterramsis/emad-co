@@ -63,10 +63,7 @@ const Collections = () => {
   const [isItemDataInconsistent, setIsItemDataInconsistent] = useState(false);
   
   // Edit Payment State
-  const [editPaymentTxn, setEditPaymentTxn] = useState<Transaction | null>(null);
-  const [editPaymentAmount, setEditPaymentAmount] = useState('');
-  const [editPaymentDate, setEditPaymentDate] = useState('');
-  const [editPaymentDesc, setEditPaymentDesc] = useState('');
+  const [editingPaymentTxnId, setEditingPaymentTxnId] = useState<string | null>(null);
   
   // Filters for Pending
   const [searchCustomer, setSearchCustomer] = useState('');
@@ -133,6 +130,7 @@ const Collections = () => {
     setSelectedOrderForPayment(order);
     setPaymentDate(new Date().toISOString().split('T')[0]);
     setIsPaymentSubmitting(false);
+    setEditingPaymentTxnId(null); // Ensure we are in Create mode
     
     // Fetch History
     const history = transactions
@@ -187,6 +185,7 @@ const Collections = () => {
       const newItems = paymentItems.map(state => {
           const item = selectedOrderForPayment.items[state.index];
           const itemPrice = item.quantity > 0 ? item.subtotal / item.quantity : 0;
+          // When editing, available maxQty might be higher because we reversed the current txn
           const maxQty = Math.max(0, item.quantity - (item.paidQuantity || 0));
           
           if (remaining <= 0.01 || maxQty <= 0 || itemPrice <= 0) {
@@ -287,6 +286,7 @@ const Collections = () => {
             paidDetails.push("Lump Sum (Balance Correction)");
         }
 
+        // Apply Final State to Order
         await updateOrderPaidStatus({
             ...selectedOrderForPayment,
             paidAmount: newPaidAmount,
@@ -296,8 +296,8 @@ const Collections = () => {
 
         const description = paidDetails.length > 0 ? `Payment for: ${paidDetails.join(', ')}` : `Payment of ${formatCurrency(amount)}`;
 
-        await addTransaction({
-          id: `TXN-${Date.now()}`,
+        const txnData = {
+          id: editingPaymentTxnId || `TXN-${Date.now()}`,
           type: TransactionType.PAYMENT_RECEIVED,
           amount: amount,
           date: paymentDate,
@@ -305,11 +305,18 @@ const Collections = () => {
           description: description,
           metadata: { 
              paidItems: paidItemsMetadata,
-             skipOrderUpdate: true 
+             skipOrderUpdate: true // IMPORTANT: We handled order update manually above
           }
-        });
+        };
+
+        if (editingPaymentTxnId) {
+            await updateTransaction(txnData);
+        } else {
+            await addTransaction(txnData);
+        }
 
         setSelectedOrderForPayment(null);
+        setEditingPaymentTxnId(null);
         await refreshData();
     } catch (error) {
         console.error(error);
@@ -404,36 +411,84 @@ const Collections = () => {
   }
 
   /* --- EDIT PAYMENT LOGIC (HISTORY TAB) --- */
-  const openEditPaymentModal = (txn: Transaction) => {
-      setEditPaymentTxn(txn);
-      setEditPaymentAmount(txn.amount.toString());
-      setEditPaymentDate(new Date(txn.date).toISOString().split('T')[0]);
-      setEditPaymentDesc(txn.description);
-  };
+  
+  const handleEditHistoryPayment = (txn: Transaction) => {
+    const order = orders.find(o => o.id === txn.referenceId);
+    if (!order) {
+      alert("Associated order not found.");
+      return;
+    }
 
-  const handleUpdatePayment = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!editPaymentTxn) return;
-      
-      const newAmount = parseFloat(editPaymentAmount);
-      if (isNaN(newAmount) || newAmount <= 0) {
-          alert("Invalid Amount");
-          return;
-      }
-      
-      try {
-          await updateTransaction({
-              ...editPaymentTxn,
-              amount: newAmount,
-              date: editPaymentDate,
-              description: editPaymentDesc
-          });
-          setEditPaymentTxn(null);
-          await refreshData();
-      } catch (err) {
-          console.error(err);
-          alert("Failed to update payment.");
-      }
+    // Determine what was paid in this transaction to reverse it (in memory only)
+    let paidItemsMap: Record<string, number> = {};
+    
+    if (txn.metadata?.paidItems) {
+       (txn.metadata.paidItems as any[]).forEach((pi: any) => {
+          paidItemsMap[pi.productId] = pi.quantity;
+       });
+    } else if (txn.description.startsWith('Payment for:')) {
+       // Legacy parsing
+       const details = txn.description.replace('Payment for: ', '');
+       const parts = details.split(', ');
+       parts.forEach(part => {
+           const match = part.match(/^(\d+)x (.+)$/);
+           if (match) {
+               const qty = parseInt(match[1]);
+               const name = match[2];
+               const item = order.items.find(i => i.productName === name);
+               if (item) paidItemsMap[item.productId] = qty;
+           }
+       });
+    }
+
+    // Create Pre-Transaction Order State (Revert effects of this payment)
+    const reducedItems = order.items.map(item => {
+        const paidInTxn = paidItemsMap[item.productId] || 0;
+        return {
+            ...item,
+            paidQuantity: Math.max(0, (item.paidQuantity || 0) - paidInTxn)
+        };
+    });
+    
+    const preTxnPaidAmount = Math.max(0, order.paidAmount - txn.amount);
+    
+    const preTxnOrder = {
+        ...order,
+        paidAmount: preTxnPaidAmount,
+        items: reducedItems,
+        // Approximate status for the modal view
+        status: preTxnPaidAmount > 0 ? OrderStatus.PARTIAL : OrderStatus.PENDING 
+    };
+
+    // Open Modal with Pre-State
+    setSelectedOrderForPayment(preTxnOrder);
+    setPaymentDate(new Date(txn.date).toISOString().split('T')[0]);
+    setActualCollectedAmount(txn.amount.toString());
+    setEditingPaymentTxnId(txn.id);
+    setIsPaymentSubmitting(false);
+
+    // Setup Items State for Modal
+    const initItems = preTxnOrder.items.map((item, idx) => {
+       const txQty = paidItemsMap[item.productId] || 0;
+       return {
+         index: idx,
+         payQty: txQty, // Pre-fill with what was paid in this txn
+         selected: txQty > 0
+       };
+    });
+    setPaymentItems(initItems);
+
+    // Check Consistency on Pre-State
+    const remainingBalance = preTxnOrder.totalAmount - preTxnOrder.paidAmount;
+    const totalItemRemainingValue = initItems.reduce((sum, state) => {
+        const item = preTxnOrder.items[state.index];
+        const remainingQty = item.quantity - (item.paidQuantity || 0); // "Available"
+        const price = item.quantity > 0 ? item.subtotal / item.quantity : 0;
+        return sum + (remainingQty * price);
+    }, 0);
+    
+    const isInconsistent = remainingBalance > 1 && Math.abs(remainingBalance - totalItemRemainingValue) > 1;
+    setIsItemDataInconsistent(isInconsistent);
   };
 
   const handleDeletePayment = async (txnId: string) => {
@@ -946,10 +1001,8 @@ const Collections = () => {
         </div>
       )}
 
-      {/* History, Deposits, Statement Tabs remain similar but condensed for brevity */}
-      {/* ... TAB CONTENT HISTORY, DEPOSITS, STATEMENT ... */}
+      {/* History, Deposits, Statement Tabs */}
       {activeTab === 'history' && (
-         /* Content preserved from original file */
          <div className="space-y-4">
            {/* ... search bars ... */}
            <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-3 items-center">
@@ -1000,7 +1053,7 @@ const Collections = () => {
                            <td className="p-3 text-right">
                                <div className="flex justify-end gap-2">
                                    <button 
-                                     onClick={() => openEditPaymentModal(txn)}
+                                     onClick={() => handleEditHistoryPayment(txn)}
                                      className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"
                                      title={t('edit')}
                                    >
@@ -1027,7 +1080,6 @@ const Collections = () => {
       )}
       
       {activeTab === 'deposits' && (
-         /* Content preserved */
          <div className="space-y-4">
            <div className="flex justify-end">
               <button 
@@ -1037,624 +1089,461 @@ const Collections = () => {
                 <ArrowRightLeft size={16} /> {t('newDeposit')}
               </button>
            </div>
-           <div className="text-xs text-slate-500 font-medium">{t('totalRecords')}: {depositHistory.length}</div>
+           
            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
              <div className="overflow-x-auto">
-               <table className="w-full text-left text-xs md:text-sm">
-                 <thead className="bg-slate-50 border-b border-slate-200">
-                   <tr>
-                     <th className="p-3 font-medium text-slate-600">{t('depositDate')}</th>
-                     <th className="p-3 font-medium text-slate-600">{t('description')}</th>
-                     <th className="p-3 font-medium text-slate-600">{t('amount')}</th>
-                     <th className="p-3 font-medium text-slate-600 text-right">{t('actions')}</th>
-                   </tr>
-                 </thead>
-                 <tbody className="divide-y divide-slate-100">
-                   {depositHistory.length === 0 ? (
-                      <tr><td colSpan={4} className="p-6 text-center text-slate-400">{t('noDepositsFound')}</td></tr>
-                   ) : (
-                     depositHistory.map(txn => {
-                       const isExternal = txn.paymentMethod === PaymentMethod.BANK_TRANSFER;
-                       return (
-                       <tr key={txn.id} className="hover:bg-slate-50">
-                         <td className="p-3 text-slate-600">{formatDate(txn.date)}</td>
-                         <td className="p-3 text-slate-800">
-                            <div>{txn.description}</div>
-                            <div className="mt-1">
-                               {isExternal ? (
-                                   <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200">External Investment</span>
-                               ) : (
-                                   <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200">From Collections</span>
-                               )}
-                            </div>
-                         </td>
-                         <td className="p-3 font-bold text-slate-800">{formatCurrency(txn.amount)}</td>
-                         <td className="p-3 text-right flex justify-end gap-2">
-                            <button 
-                              onClick={() => openDepositModal(txn)}
-                              className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-                              title={t('editDeposit')}
-                            >
-                               <Edit2 size={14} />
-                            </button>
-                            <button 
-                              onClick={() => handleDeleteDeposit(txn.id)}
-                              className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
-                              title="Delete Deposit"
-                            >
-                               <Trash2 size={14} />
-                            </button>
-                         </td>
-                       </tr>
-                     )})
-                   )}
-                 </tbody>
-               </table>
+                <table className="w-full text-left text-xs md:text-sm">
+                   <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                         <th className="p-3 font-medium text-slate-600">{t('date')}</th>
+                         <th className="p-3 font-medium text-slate-600">{t('description')}</th>
+                         <th className="p-3 font-medium text-slate-600 text-center">{t('paymentMethod')}</th>
+                         <th className="p-3 font-medium text-slate-600 text-right">{t('amount')}</th>
+                         <th className="p-3 font-medium text-slate-600 text-right">{t('actions')}</th>
+                      </tr>
+                   </thead>
+                   <tbody className="divide-y divide-slate-100">
+                      {depositHistory.length === 0 ? (
+                         <tr><td colSpan={5} className="p-6 text-center text-slate-400">{t('noDepositsFound')}</td></tr>
+                      ) : (
+                         depositHistory.map(txn => (
+                            <tr key={txn.id} className="hover:bg-slate-50">
+                               <td className="p-3 text-slate-600">{formatDate(txn.date)}</td>
+                               <td className="p-3 font-medium text-slate-800">{txn.description}</td>
+                               <td className="p-3 text-center">
+                                  <span className={`px-2 py-0.5 rounded border text-[10px] ${txn.paymentMethod === PaymentMethod.CASH ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                                     {txn.paymentMethod === PaymentMethod.CASH ? t('cashFromRep') : t('hqBankTransfer')}
+                                  </span>
+                               </td>
+                               <td className="p-3 text-right font-bold text-blue-600">{formatCurrency(txn.amount)}</td>
+                               <td className="p-3 text-right">
+                                  <div className="flex justify-end gap-2">
+                                     <button onClick={() => openDepositModal(txn)} className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"><Edit2 size={14}/></button>
+                                     <button onClick={() => handleDeleteDeposit(txn.id)} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 size={14}/></button>
+                                  </div>
+                               </td>
+                            </tr>
+                         ))
+                      )}
+                   </tbody>
+                </table>
              </div>
            </div>
          </div>
       )}
 
       {activeTab === 'statement' && (
-         /* Content preserved */
          <div className="space-y-4">
-            {/* Statement Filters */}
-            <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col xl:flex-row gap-4 justify-between items-start xl:items-center print:hidden">
-                <div className="flex-1">
-                  <h3 className="font-bold text-slate-800 text-sm">{t('cashStatementReport')}</h3>
-                  <div className="text-xs text-slate-500">{t('statementSubtitle')}</div>
+             <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-3">
+                {/* Filters */}
+                <div className="flex items-center gap-2 border-r border-slate-200 pr-3">
+                   <select 
+                     value={statementAccount}
+                     onChange={(e) => setStatementAccount(e.target.value as any)}
+                     className="text-sm font-bold text-slate-700 outline-none bg-transparent"
+                   >
+                      <option value="CASH">Cash on Hand (Rep)</option>
+                      <option value="HQ">HQ Balance</option>
+                      <option value="ALL">All Accounts</option>
+                   </select>
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
-                   <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200">
-                      <button onClick={() => setStatementAccount('CASH')} className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${statementAccount === 'CASH' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Cash (Rep)</button>
-                      <button onClick={() => setStatementAccount('HQ')} className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${statementAccount === 'HQ' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>HQ (Bank)</button>
-                      <button onClick={() => setStatementAccount('ALL')} className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${statementAccount === 'ALL' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>All (Log)</button>
-                   </div>
-                   <div className="w-px h-6 bg-slate-200 mx-1"></div>
-                   <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200">
-                       <span className="text-[10px] font-medium text-slate-500 ml-1"><ListFilter size={12}/></span>
-                       <select value={statementFilterType} onChange={(e) => setStatementFilterType(e.target.value as any)} className="text-xs bg-transparent outline-none w-20 text-slate-700 font-medium">
-                         <option value="ALL">All Types</option>
-                         <option value="CREDIT">In (Credit)</option>
-                         <option value="DEBIT">Out (Debit)</option>
-                       </select>
-                   </div>
-                   <div className="w-px h-6 bg-slate-200 mx-1"></div>
-                   <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
-                      <span className="text-[10px] font-medium text-slate-500 ml-1">{t('from')}:</span>
-                      <input type="date" value={statementStart} onChange={(e) => setStatementStart(e.target.value)} className="text-xs bg-transparent outline-none w-28"/>
-                   </div>
-                   <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
-                      <span className="text-[10px] font-medium text-slate-500 ml-1">{t('to')}:</span>
-                      <input type="date" value={statementEnd} onChange={(e) => setStatementEnd(e.target.value)} className="text-xs bg-transparent outline-none w-28"/>
-                   </div>
-                   <button onClick={() => window.print()} className="p-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg"><Printer size={18}/></button>
+                
+                <div className="flex items-center gap-2">
+                   <span className="text-xs text-slate-500">{t('from')}</span>
+                   <input type="date" value={statementStart} onChange={e => setStatementStart(e.target.value)} className="border border-slate-300 rounded p-1 text-xs outline-none focus:border-primary"/>
+                   <span className="text-xs text-slate-500">{t('to')}</span>
+                   <input type="date" value={statementEnd} onChange={e => setStatementEnd(e.target.value)} className="border border-slate-300 rounded p-1 text-xs outline-none focus:border-primary"/>
                 </div>
-            </div>
-            
-            {/* Statement Summary Cards */}
-            {statementAccount !== 'ALL' && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                 <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-200">
-                    <p className="text-[10px] text-slate-500 font-bold uppercase">{t('openingBalance')}</p>
-                    <p className="text-sm font-bold text-slate-800">{formatCurrency(openingBalance)}</p>
-                 </div>
-                 <div className="bg-white p-3 rounded-xl shadow-sm border border-green-200 bg-green-50/30">
-                    <p className="text-[10px] text-green-600 font-bold uppercase">{t('totalCredits')}</p>
-                    <p className="text-sm font-bold text-green-700">+{formatCurrency(summaryTotalCredit)}</p>
-                 </div>
-                 <div className="bg-white p-3 rounded-xl shadow-sm border border-red-200 bg-red-50/30">
-                    <p className="text-[10px] text-red-600 font-bold uppercase">{t('totalDebits')}</p>
-                    <p className="text-sm font-bold text-red-700">-{formatCurrency(summaryTotalDebit)}</p>
-                 </div>
-                 <div className="bg-slate-800 p-3 rounded-xl shadow-sm border border-slate-700 text-white">
-                    <p className="text-[10px] text-slate-300 font-bold uppercase">{t('closingBalance')}</p>
-                    <p className="text-sm font-bold text-white">{formatCurrency(closingBalance)}</p>
-                 </div>
-              </div>
-            )}
-            
-            {/* Statement Table */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden print:shadow-none print:border">
-               <div className="overflow-x-auto">
-                 <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 border-b border-slate-200 print:bg-slate-100">
-                       <tr>
-                          <th className="p-2 font-medium text-slate-600 w-24">{t('date')}</th>
-                          <th className="p-2 font-medium text-slate-600">{t('description')}</th>
-                          <th className="p-2 font-medium text-slate-600 text-center w-20">{t('type')}</th>
-                          <th className="p-2 font-medium text-slate-600 text-right w-24">{t('debitOut')}</th>
-                          <th className="p-2 font-medium text-slate-600 text-right w-24">{t('creditIn')}</th>
-                          <th className="p-2 font-medium text-slate-600 text-right w-24">{t('balance')}</th>
-                       </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                       {statementStart && statementAccount !== 'ALL' && (
-                          <tr className="bg-yellow-50 font-medium">
-                             <td className="p-2 text-slate-800">{formatDate(statementStart)}</td>
-                             <td className="p-2 text-slate-800" colSpan={4}>{t('openingBalance')}</td>
-                             <td className="p-2 text-right font-bold text-slate-800">{formatCurrency(openingBalance)}</td>
-                          </tr>
-                       )}
-                       {filteredStatementData.length === 0 ? (
-                          <tr><td colSpan={6} className="p-6 text-center text-slate-400">{t('noTransactionsFound')}</td></tr>
-                       ) : (
-                          filteredStatementData.map(txn => (
-                                <tr key={txn.id} className="hover:bg-slate-50">
-                                   <td className="p-2 text-slate-600 align-top pt-3">{formatDate(txn.date)}</td>
-                                   <td className="p-2 align-top pt-2">
-                                      <div className="flex flex-col">
-                                         <span className="font-bold text-slate-800 text-xs">{txn.mainLabel}</span>
-                                         <span className="text-slate-500 text-[10px] mt-0.5 whitespace-pre-wrap">{txn.subLabel}</span>
-                                      </div>
-                                   </td>
-                                   <td className="p-2 text-center align-top pt-3">
-                                      {txn.type === TransactionType.PAYMENT_RECEIVED && <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase">Coll.</span>}
-                                      {txn.type === TransactionType.DEPOSIT_TO_HQ && <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase">Dep.</span>}
-                                      {txn.type === TransactionType.EXPENSE && <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase">Exp.</span>}
-                                   </td>
-                                   <td className="p-2 text-right text-slate-500 align-top pt-3 font-medium">
-                                      {txn.isDebit ? formatCurrency(txn.amount) : '-'}
-                                   </td>
-                                   <td className="p-2 text-right text-slate-500 align-top pt-3 font-medium">
-                                      {txn.isCredit ? formatCurrency(txn.amount) : '-'}
-                                   </td>
-                                   <td className="p-2 text-right font-bold text-slate-800 align-top pt-3">
-                                      {statementAccount !== 'ALL' ? formatCurrency(txn.balanceSnapshot) : '-'}
-                                   </td>
-                                </tr>
-                          ))
-                       )}
-                    </tbody>
-                 </table>
-               </div>
-            </div>
-         </div>
-      )}
 
-      {/* Transaction Details Modal */}
-      {viewTxn && (
-         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl w-full max-w-md shadow-2xl p-6 relative">
-               <button onClick={() => setViewTxn(null)} className="absolute right-4 top-4 text-slate-400 hover:text-slate-600"><X size={18}/></button>
-               <h3 className="text-lg font-bold text-slate-800 mb-1">{t('transactionDetails')}</h3>
-               <p className="text-xs text-slate-500 mb-6 font-mono">{viewTxn.id}</p>
-               <div className="mt-6 text-right">
-                  <button onClick={() => setViewTxn(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium text-sm">{t('close')}</button>
-               </div>
-            </div>
-         </div>
-      )}
-
-      {/* View Invoice Modal */}
-      {viewOrder && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-4 border-b border-slate-200 flex justify-between items-start">
-              <div>
-                <h3 className="text-lg font-bold text-slate-800">{t('invoiceDetails')}</h3>
-                <p className="text-slate-500 text-xs">#{viewOrder.id}</p>
-              </div>
-              <button onClick={() => setViewOrder(null)} className="text-slate-400 hover:text-slate-600">
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="p-6 space-y-4">
-              <div className="flex justify-between items-start">
-                <div>
-                   <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">{t('billTo')}:</p>
-                   <p className="font-bold text-lg text-slate-800">{viewOrder.customerName}</p>
-                   <p className="text-xs text-slate-600">ID: {viewOrder.customerId}</p>
+                <div className="flex-1 relative">
+                   <Search className="absolute left-3 top-2 text-slate-400" size={14} />
+                   <input type="text" value={searchStatement} onChange={e => setSearchStatement(e.target.value)} placeholder={t('search')} className="w-full pl-9 pr-4 py-1.5 border border-slate-300 rounded text-xs outline-none focus:border-primary" />
                 </div>
-                <div className="text-right">
-                   <p className="text-[10px] text-slate-500 uppercase font-bold">{t('invoiceId')}</p>
-                   <p className="font-mono text-base text-slate-800">{viewOrder.id}</p>
-                   <p className="text-xs text-slate-600 mt-0.5">{t('date')}: {formatDate(viewOrder.date)}</p>
-                </div>
-              </div>
-
-              <div>
-                <table className="w-full text-left text-xs mt-4">
-                  <thead className="bg-slate-100 border-b-2 border-slate-300">
-                    <tr>
-                      <th className="p-2 text-slate-800 font-bold">{t('product')}</th>
-                      <th className="p-2 text-slate-800 font-bold text-right">{t('price')}</th>
-                      <th className="p-2 text-slate-800 font-bold text-center">{t('quantity')}</th>
-                      <th className="p-2 text-slate-800 font-bold text-center">{t('bonus')}</th>
-                      <th className="p-2 text-slate-800 font-bold text-center">{t('discountPercent')}</th>
-                      <th className="p-2 text-slate-800 font-bold text-center">{t('discountAmt')}</th>
-                      <th className="p-2 text-slate-800 font-bold text-right">{t('total')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {viewOrder.items.map((item, idx) => {
-                      const gross = item.unitPrice * item.quantity;
-                      const percent = item.discountPercent || (gross > 0 ? (item.discount / gross) * 100 : 0);
-                      
-                      return (
-                      <tr key={idx}>
-                        <td className="p-2 font-medium text-slate-800">{item.productName}</td>
-                        <td className="p-2 text-right">{item.unitPrice}</td>
-                        <td className="p-2 text-center">{item.quantity}</td>
-                        <td className="p-2 text-center">{item.bonusQuantity > 0 ? item.bonusQuantity : '-'}</td>
-                        <td className="p-2 text-center text-slate-600">
-                          {percent > 0.01 ? percent.toFixed(2) + '%' : '-'}
-                        </td>
-                        <td className="p-2 text-center">
-                          {item.discount > 0 ? item.discount.toFixed(2) : '-'}
-                        </td>
-                        <td className="p-2 text-right font-bold">{item.subtotal.toFixed(2)}</td>
-                      </tr>
-                    )})}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="flex flex-col items-end pt-4 border-t border-slate-300 gap-1">
-                {(() => {
-                   const subTotal = viewOrder.items.reduce((s, i) => s + (i.unitPrice * i.quantity), 0);
-                   const totalDiscount = viewOrder.items.reduce((s, i) => s + (i.discount || 0), 0);
-                   const totalPercent = subTotal > 0 ? (totalDiscount / subTotal) * 100 : 0;
-                   
-                   return (
-                   <>
-                     <div className="w-64 flex justify-between text-xs">
-                       <span className="text-slate-600">{t('subtotal')}:</span>
-                       <span className="font-medium">
-                         {formatCurrency(subTotal)}
-                       </span>
-                     </div>
-                     <div className="w-64 flex justify-between text-xs">
-                       <span className="text-slate-600">{t('discount')}:</span>
-                       <span className="text-red-500 font-medium flex items-center gap-2">
-                         {totalDiscount > 0 && <span className="text-[10px] text-slate-500">({totalPercent.toFixed(2)}%)</span>}
-                         <span>- {formatCurrency(totalDiscount)}</span>
-                       </span>
-                     </div>
-                     <div className="w-64 flex justify-between text-base font-bold border-t border-slate-300 pt-2 mt-2">
-                       <span>{t('total')}:</span>
-                       <span>{formatCurrency(viewOrder.totalAmount)}</span>
-                     </div>
-                     <div className="w-64 flex justify-between text-xs pt-1">
-                       <span className="text-slate-500">{t('paid')}:</span>
-                       <span className="text-green-600 font-medium">{formatCurrency(viewOrder.paidAmount)}</span>
-                     </div>
-                     <div className="w-64 flex justify-between text-xs pt-1">
-                       <span className="text-slate-500">{t('balance')}:</span>
-                       <span className="text-red-600 font-bold">{formatCurrency(viewOrder.totalAmount - viewOrder.paidAmount)}</span>
-                     </div>
-                   </>
-                   );
-                })()}
-              </div>
-
-              {/* Payment History Section */}
-              {viewOrderTxns.length > 0 && (
-                <div className="mt-6 pt-3 border-t border-slate-300">
-                  <h4 className="text-xs font-bold text-slate-800 mb-2 uppercase tracking-wide">{t('paymentsReceived')}</h4>
-                  <table className="w-full text-left text-[10px]">
-                    <thead className="bg-slate-50 border-b border-slate-200">
-                      <tr>
-                        <th className="p-1.5 text-slate-600">{t('date')}</th>
-                        <th className="p-1.5 text-slate-600">{t('description')}</th>
-                        <th className="p-1.5 text-slate-600 text-right">{t('amount')}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {viewOrderTxns.map((txn, i) => (
-                        <tr key={i}>
-                          <td className="p-1.5 text-slate-700">{formatDate(txn.date)}</td>
-                          <td className="p-1.5 text-slate-500">{txn.description}</td>
-                          <td className="p-1.5 text-slate-800 font-medium text-right">{formatCurrency(txn.amount)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <div className="text-right mt-1 text-xs font-bold text-green-700">
-                    {t('totalPaid')}: {formatCurrency(viewOrderTxns.reduce((sum, t) => sum + t.amount, 0))}
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            <div className="p-4 bg-slate-50 border-t border-slate-200 text-right">
-              <button 
-                onClick={() => setViewOrder(null)}
-                className="px-3 py-1.5 bg-slate-800 text-white rounded-lg hover:bg-slate-900 text-sm"
-              >
-                {t('close')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Payment Modal */}
-      {editPaymentTxn && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-             <div className="bg-white rounded-xl w-full max-w-sm p-5 shadow-2xl">
-                 <h3 className="text-lg font-bold mb-4">{t('edit')} {t('recordPayment')}</h3>
-                 <form onSubmit={handleUpdatePayment} className="space-y-4">
-                     <div>
-                         <label className="block text-xs font-medium mb-1">{t('date')}</label>
-                         <input type="date" required value={editPaymentDate} onChange={(e) => setEditPaymentDate(e.target.value)} className="w-full p-2 border rounded-lg outline-none text-sm" />
-                     </div>
-                     <div>
-                         <label className="block text-xs font-medium mb-1">{t('description')}</label>
-                         <input type="text" required value={editPaymentDesc} onChange={(e) => setEditPaymentDesc(e.target.value)} className="w-full p-2 border rounded-lg outline-none text-sm" />
-                     </div>
-                     <div>
-                         <label className="block text-xs font-medium mb-1">{t('amount')}</label>
-                         <input type="number" step="any" required value={editPaymentAmount} onChange={(e) => setEditPaymentAmount(e.target.value)} className="w-full p-2 border rounded-lg outline-none text-sm font-bold text-slate-800" />
-                         <p className="text-[10px] text-red-500 mt-1">Warning: Changing amount will affect invoice balance.</p>
-                     </div>
-                     <div className="flex justify-end gap-2 pt-2">
-                         <button type="button" onClick={() => setEditPaymentTxn(null)} className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">{t('cancel')}</button>
-                         <button type="submit" className="px-3 py-1.5 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm">{t('saveChanges')}</button>
-                     </div>
-                 </form>
+                
+                <button 
+                  onClick={() => window.print()}
+                  className="bg-slate-100 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-200 flex items-center gap-2 text-xs"
+                >
+                  <Printer size={14}/> {t('print')}
+                </button>
              </div>
-          </div>
-      )}
 
-      {/* Itemized Payment Modal */}
-      {selectedOrderForPayment && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-3xl shadow-2xl max-h-[90vh] flex flex-col">
-            <div className="p-4 border-b border-slate-200 flex justify-between items-center shrink-0">
-              <div>
-                <h3 className="text-lg font-bold text-slate-800">{t('recordPayment')}</h3>
-                <p className="text-slate-500 text-xs">#{selectedOrderForPayment.id} - {selectedOrderForPayment.customerName}</p>
-              </div>
-              <button onClick={() => setSelectedOrderForPayment(null)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4">
-              {selectedOrderHistory.length > 0 && (
-                <div className="mb-4 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                  <h4 className="font-bold text-slate-700 text-xs mb-2 flex items-center gap-2"><History size={14}/> {t('previousPayments')}</h4>
-                  <ul className="space-y-1 text-xs">
-                    {selectedOrderHistory.map(tx => (
-                      <li key={tx.id} className="flex justify-between text-slate-600">
-                        <span>{formatDate(tx.date)} - {tx.description}</span>
-                        <span className="font-medium text-green-600">{formatCurrency(tx.amount)}</span>
-                      </li>
-                    ))}
-                    <li className="flex justify-between font-bold text-slate-800 border-t border-slate-200 pt-1 mt-1">
-                      <span>{t('totalPaid')}</span>
-                      <span>{formatCurrency(selectedOrderHistory.reduce((s,t) => s + t.amount, 0))}</span>
-                    </li>
-                  </ul>
-                </div>
-              )}
-
-              {/* Inconsistency Warning */}
-              {isItemDataInconsistent && (
-                  <div className="mb-4 bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg flex items-start gap-2">
-                      <AlertTriangle size={16} className="mt-0.5 shrink-0"/>
-                      <div className="text-xs">
-                          <p className="font-bold">Data Inconsistency Detected</p>
-                          <p>The remaining balance ({formatCurrency(selectedOrderForPayment.totalAmount - selectedOrderForPayment.paidAmount)}) does not match the remaining item value (0). This usually happens if items were marked paid incorrectly.</p>
-                          <p className="mt-1 font-medium">Please enter the Lump Sum amount to pay below. Item tracking is disabled for this payment.</p>
-                      </div>
-                  </div>
-              )}
-
-              <div className="mb-4">
-                 <h4 className="font-medium text-slate-800 mb-2 flex items-center gap-2 text-sm">
-                   <CheckSquare size={16} className="text-primary"/> {isItemDataInconsistent ? "Items (Disabled)" : t('selectItemsPaid')}
-                 </h4>
-                 {!isItemDataInconsistent ? (
-                   <div className="border border-slate-200 rounded-lg overflow-hidden">
-                     <table className="w-full text-left text-xs">
-                       <thead className="bg-slate-50 border-b border-slate-200">
-                         <tr>
-                           <th className="p-2 w-8"></th>
-                           <th className="p-2 text-slate-600">{t('product')}</th>
-                           <th className="p-2 text-slate-600 text-right">{t('price')}</th>
-                           <th className="p-2 text-slate-600 text-center">{t('remaining')}</th>
-                           <th className="p-2 text-slate-600 text-center w-20">{t('payNow')}</th>
-                         </tr>
-                       </thead>
-                       <tbody className="divide-y divide-slate-100">
-                         {selectedOrderForPayment.items.map((item, idx) => {
-                           const state = paymentItems.find(i => i.index === idx);
-                           if (!state) return null;
-                           const remaining = Math.max(0, item.quantity - (item.paidQuantity || 0));
-                           
-                           return (
-                             <tr key={idx} className={state.selected ? 'bg-teal-50/30' : ''}>
-                               <td className="p-2 text-center">
-                                 <input 
-                                   type="checkbox" 
-                                   checked={state.selected}
-                                   onChange={(e) => handlePaymentItemChange(idx, 'selected', e.target.checked)}
-                                   disabled={remaining <= 0}
-                                   className="rounded border-slate-300 text-primary focus:ring-primary"
-                                 />
-                               </td>
-                               <td className="p-2 font-medium text-slate-800">{item.productName}</td>
-                               <td className="p-2 text-right">{(item.subtotal / (item.quantity || 1)).toFixed(2)}</td>
-                               <td className="p-2 text-center font-bold text-slate-700">{remaining}</td>
-                               <td className="p-2">
-                                 <input 
-                                   type="number" 
-                                   min="0"
-                                   max={remaining}
-                                   value={state.payQty}
-                                   onChange={(e) => handlePaymentItemChange(idx, 'payQty', e.target.value)}
-                                   disabled={!state.selected || remaining <= 0}
-                                   className="w-full p-1 text-center border border-slate-300 rounded focus:ring-2 focus:ring-primary outline-none text-xs"
-                                 />
-                               </td>
-                             </tr>
-                           );
-                         })}
-                       </tbody>
-                     </table>
+             {/* Statement Table */}
+             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden print:shadow-none print:border-none">
+                <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center print:bg-white print:border-b-2 print:border-black">
+                   <div>
+                      <h3 className="font-bold text-lg text-slate-800">{t('cashStatementReport')}</h3>
+                      <p className="text-xs text-slate-500">{statementAccount} Account • {statementStart || 'Start'} to {statementEnd || 'Present'}</p>
                    </div>
-                 ) : (
-                    <div className="p-4 bg-slate-50 rounded-lg text-center text-slate-400 text-xs border border-dashed border-slate-300">
-                        Item selection disabled due to data inconsistency.
-                    </div>
-                 )}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                 <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1 flex items-center gap-2">
-                       <Calendar size={14} /> {t('paymentDate')}
-                    </label>
-                    <input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none bg-white text-sm"/>
-                 </div>
-                 <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1 flex items-center gap-2">
-                       <DollarSign size={14} /> {t('collectedAmount')}
-                    </label>
-                    <div className="relative">
-                       <span className="absolute left-3 top-2 text-slate-400 font-bold text-xs">EGP</span>
-                       <input 
-                         type="number"
-                         step="any" 
-                         value={actualCollectedAmount}
-                         onChange={(e) => handleAmountChange(e.target.value)}
-                         className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none font-bold text-base bg-white text-primary"
-                       />
-                       {!isItemDataInconsistent && (
-                           <div className="absolute right-3 top-2 text-[10px] text-slate-400 flex items-center gap-1">
-                               <Calculator size={12}/> Auto-Distribute
-                           </div>
-                       )}
-                    </div>
-                 </div>
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-slate-200 flex justify-end gap-3 shrink-0">
-               <button onClick={() => setSelectedOrderForPayment(null)} className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 font-medium text-sm">{t('cancel')}</button>
-               <button 
-                  onClick={handleSavePayment} 
-                  disabled={isPaymentSubmitting}
-                  className="px-4 py-2 rounded-lg bg-primary text-white hover:bg-teal-800 font-medium shadow-lg shadow-teal-700/30 text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-               >
-                 {isPaymentSubmitting ? <Loader2 className="animate-spin" size={16}/> : null}
-                 {t('confirmPayment')}
-               </button>
-            </div>
-          </div>
-        </div>
+                   <div className="text-right">
+                      <p className="text-xs text-slate-500 uppercase">{t('closingBalance')}</p>
+                      <p className={`text-xl font-bold ${closingBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(closingBalance)}</p>
+                   </div>
+                </div>
+                <div className="overflow-x-auto">
+                   <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                         <tr>
+                            <th className="p-3 font-medium text-slate-600">{t('date')}</th>
+                            <th className="p-3 font-medium text-slate-600">{t('refId')}</th>
+                            <th className="p-3 font-medium text-slate-600">{t('description')}</th>
+                            <th className="p-3 font-medium text-slate-600 text-right text-green-700">{t('creditIn')}</th>
+                            <th className="p-3 font-medium text-slate-600 text-right text-red-700">{t('debitOut')}</th>
+                            <th className="p-3 font-medium text-slate-600 text-right">{t('balance')}</th>
+                         </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                         {/* Opening Balance Row */}
+                         <tr className="bg-slate-50/50 italic">
+                            <td className="p-3 text-slate-500">{statementStart}</td>
+                            <td className="p-3 text-slate-500">-</td>
+                            <td className="p-3 text-slate-500">{t('openingBalance')}</td>
+                            <td className="p-3 text-right text-slate-400">-</td>
+                            <td className="p-3 text-right text-slate-400">-</td>
+                            <td className="p-3 text-right font-bold text-slate-600">{formatCurrency(openingBalance)}</td>
+                         </tr>
+                         {filteredStatementData.length === 0 && (
+                            <tr><td colSpan={6} className="p-6 text-center text-slate-400">{t('noTransactionsFound')}</td></tr>
+                         )}
+                         {filteredStatementData.map((txn, idx) => (
+                            <tr key={txn.id} className="hover:bg-slate-50">
+                               <td className="p-3 text-slate-600 whitespace-nowrap">{formatDate(txn.date)}</td>
+                               <td className="p-3 font-mono text-[10px] text-slate-500">{txn.referenceId || '-'}</td>
+                               <td className="p-3">
+                                  <div className="font-medium text-slate-800">{txn.mainLabel}</div>
+                                  <div className="text-[10px] text-slate-500">{txn.subLabel}</div>
+                               </td>
+                               <td className="p-3 text-right font-medium text-green-600">
+                                  {txn.isCredit ? formatCurrency(txn.amount) : '-'}
+                               </td>
+                               <td className="p-3 text-right font-medium text-red-500">
+                                  {txn.isDebit ? formatCurrency(txn.amount) : '-'}
+                               </td>
+                               <td className="p-3 text-right font-bold text-slate-700">
+                                  {formatCurrency(txn.balanceSnapshot)}
+                               </td>
+                            </tr>
+                         ))}
+                      </tbody>
+                   </table>
+                </div>
+             </div>
+         </div>
       )}
 
-      {/* Transfer & Expense Modals */}
+      {/* MODALS */}
+      
+      {/* Transfer/Deposit Modal */}
       {showTransferModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-5 rounded-xl w-full max-w-sm shadow-2xl">
-            <h3 className="text-lg font-bold mb-3">{editingDeposit ? t('editDeposit') : t('depositCashToHQ')}</h3>
-            <form onSubmit={handleDepositToHQ}>
-              <div className="mb-3">
-                 <label className="block text-xs font-medium text-slate-700 mb-1">Source of Funds</label>
-                 <div className="flex gap-4">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="radio" name="source" checked={transferSource === 'CASH'} onChange={() => setTransferSource('CASH')} className="text-primary focus:ring-primary"/>
-                      <span className="text-sm">Collections (Cash)</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="radio" name="source" checked={transferSource === 'EXTERNAL'} onChange={() => setTransferSource('EXTERNAL')} className="text-primary focus:ring-primary"/>
-                      <span className="text-sm">External / Personal</span>
-                    </label>
+           <div className="bg-white rounded-xl w-full max-w-sm p-5 shadow-2xl">
+              <h3 className="text-lg font-bold mb-4">{editingDeposit ? t('editDeposit') : t('depositCashToHQ')}</h3>
+              <form onSubmit={handleDepositToHQ} className="space-y-4">
+                 <div>
+                    <label className="block text-xs font-medium mb-1">{t('amountToTransfer')}</label>
+                    <input type="number" required min="0" step="any" value={transferAmount} onChange={e => setTransferAmount(e.target.value)} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none" />
                  </div>
-              </div>
-              <div className="mb-3">
-                <label className="block text-xs font-medium text-slate-700 mb-1">{t('date')}</label>
-                <input type="date" required value={transferDate} onChange={(e) => setTransferDate(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm"/>
-              </div>
-              <div className="mb-3">
-                <label className="block text-xs font-medium text-slate-700 mb-1">{t('description')}</label>
-                <input type="text" value={transferDesc} onChange={(e) => setTransferDesc(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm"/>
-              </div>
-              <div className="mb-3">
-                <label className="block text-xs font-medium text-slate-700 mb-1">{t('amountToTransfer')}</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2 text-slate-400 text-xs">EGP</span>
-                  <input type="number" required value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm" placeholder="0.00"/>
-                </div>
-                {transferSource === 'CASH' && <p className="text-[10px] text-slate-500 mt-1">{t('available')}: {formatCurrency(stats.repCashOnHand)}</p>}
-              </div>
-              <div className="flex justify-end gap-2">
-                <button type="button" onClick={() => setShowTransferModal(false)} className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">{t('cancel')}</button>
-                <button type="submit" className="px-3 py-1.5 bg-slate-800 text-white rounded-lg hover:bg-slate-900 text-sm">{editingDeposit ? 'Update' : t('confirmDeposit')}</button>
-              </div>
-            </form>
-          </div>
+                 <div>
+                    <label className="block text-xs font-medium mb-1">{t('date')}</label>
+                    <input type="date" required value={transferDate} onChange={e => setTransferDate(e.target.value)} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none" />
+                 </div>
+                 <div>
+                    <label className="block text-xs font-medium mb-1">{t('description')}</label>
+                    <input type="text" value={transferDesc} onChange={e => setTransferDesc(e.target.value)} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-primary outline-none" placeholder="Description" />
+                 </div>
+                 <div>
+                    <label className="block text-xs font-medium mb-1">{t('type')}</label>
+                    <div className="flex gap-2">
+                       <button type="button" onClick={() => setTransferSource('CASH')} className={`flex-1 py-2 text-xs rounded-lg border ${transferSource === 'CASH' ? 'bg-amber-50 border-amber-500 text-amber-700 font-bold' : 'border-slate-200 text-slate-500'}`}>
+                          {t('cashFromRep')}
+                       </button>
+                       <button type="button" onClick={() => setTransferSource('EXTERNAL')} className={`flex-1 py-2 text-xs rounded-lg border ${transferSource === 'EXTERNAL' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'border-slate-200 text-slate-500'}`}>
+                          {t('hqBankTransfer')}
+                       </button>
+                    </div>
+                    {transferSource === 'CASH' && stats && (
+                       <p className="text-[10px] text-amber-600 mt-1">{t('available')}: {formatCurrency(stats.repCashOnHand)}</p>
+                    )}
+                 </div>
+                 <div className="flex justify-end gap-2 pt-2">
+                    <button type="button" onClick={() => setShowTransferModal(false)} className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">{t('cancel')}</button>
+                    <button type="submit" className="px-3 py-1.5 bg-primary text-white rounded-lg hover:bg-teal-800 text-sm">{t('confirmDeposit')}</button>
+                 </div>
+              </form>
+           </div>
         </div>
       )}
 
+      {/* Payment Modal */}
+      {selectedOrderForPayment && (
+         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl w-full max-w-2xl p-0 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+               <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                  <div>
+                     <h3 className="text-lg font-bold text-slate-800">{t('recordPayment')}</h3>
+                     <p className="text-xs text-slate-500">Order #{selectedOrderForPayment.id} • {selectedOrderForPayment.customerName}</p>
+                  </div>
+                  <button onClick={() => setSelectedOrderForPayment(null)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+               </div>
+               
+               <div className="p-4 overflow-y-auto flex-1">
+                  <div className="flex justify-between items-center mb-4 bg-blue-50 p-3 rounded-lg border border-blue-100">
+                     <div className="text-center">
+                        <p className="text-[10px] uppercase text-blue-500 font-bold">{t('total')}</p>
+                        <p className="font-bold text-slate-800">{formatCurrency(selectedOrderForPayment.totalAmount)}</p>
+                     </div>
+                     <div className="text-center">
+                        <p className="text-[10px] uppercase text-green-600 font-bold">{t('paid')}</p>
+                        <p className="font-bold text-green-600">{formatCurrency(selectedOrderForPayment.paidAmount)}</p>
+                     </div>
+                     <div className="text-center">
+                        <p className="text-[10px] uppercase text-red-500 font-bold">{t('remaining')}</p>
+                        <p className="font-bold text-red-500">{formatCurrency(selectedOrderForPayment.totalAmount - selectedOrderForPayment.paidAmount)}</p>
+                     </div>
+                  </div>
+
+                  {isItemDataInconsistent && (
+                     <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-start gap-2">
+                        <AlertTriangle size={16} className="shrink-0 mt-0.5"/>
+                        <div>
+                           <p className="font-bold">Data Inconsistency Detected</p>
+                           <p>The remaining cash balance does not match the sum of remaining items. This usually happens if a previous payment was made as a "Lump Sum" or data was corrupted.</p>
+                           <p className="mt-1">You can only pay a <strong>Lump Sum</strong> for this order.</p>
+                        </div>
+                     </div>
+                  )}
+
+                  {!isItemDataInconsistent && (
+                     <div className="mb-4">
+                        <h4 className="text-xs font-bold text-slate-700 mb-2 uppercase">{t('selectItemsPaid')}</h4>
+                        <div className="border border-slate-200 rounded-lg overflow-hidden">
+                           <table className="w-full text-left text-xs">
+                              <thead className="bg-slate-50 border-b border-slate-200">
+                                 <tr>
+                                    <th className="p-2 w-8"></th>
+                                    <th className="p-2">{t('product')}</th>
+                                    <th className="p-2 text-center">{t('quantity')}</th>
+                                    <th className="p-2 text-center">{t('price')}</th>
+                                    <th className="p-2 text-right">{t('total')}</th>
+                                 </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                 {paymentItems.map(state => {
+                                    const item = selectedOrderForPayment.items[state.index];
+                                    const price = item.quantity > 0 ? item.subtotal / item.quantity : 0;
+                                    const maxQty = Math.max(0, item.quantity - (item.paidQuantity || 0)); // Available to pay
+                                    
+                                    // If item is fully paid, skip rendering or show disabled
+                                    if (maxQty === 0 && state.payQty === 0) return null;
+
+                                    return (
+                                       <tr key={state.index} className={state.selected ? 'bg-blue-50/50' : ''}>
+                                          <td className="p-2 text-center">
+                                             <input 
+                                                type="checkbox" 
+                                                checked={state.selected} 
+                                                onChange={(e) => handlePaymentItemChange(state.index, 'selected', e.target.checked)}
+                                                className="rounded border-slate-300 text-primary focus:ring-primary"
+                                             />
+                                          </td>
+                                          <td className="p-2 font-medium text-slate-700">{item.productName}</td>
+                                          <td className="p-2 text-center">
+                                             <div className="flex items-center justify-center gap-1">
+                                                <input 
+                                                   type="number" 
+                                                   min="0" 
+                                                   max={maxQty} 
+                                                   value={state.payQty}
+                                                   onChange={(e) => handlePaymentItemChange(state.index, 'payQty', e.target.value)}
+                                                   className="w-12 p-1 text-center border rounded border-slate-300 text-xs"
+                                                   disabled={!state.selected}
+                                                />
+                                                <span className="text-slate-400">/ {maxQty}</span>
+                                             </div>
+                                          </td>
+                                          <td className="p-2 text-center text-slate-500">{formatCurrency(price)}</td>
+                                          <td className="p-2 text-right font-medium">
+                                             {formatCurrency(price * state.payQty)}
+                                          </td>
+                                       </tr>
+                                    );
+                                 })}
+                              </tbody>
+                           </table>
+                        </div>
+                     </div>
+                  )}
+
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                     <label className="block text-xs font-bold text-slate-600 mb-1">{t('collectedAmount')}</label>
+                     <div className="flex gap-2 items-center">
+                        <input 
+                           type="number" 
+                           value={actualCollectedAmount} 
+                           onChange={(e) => handleAmountChange(e.target.value)}
+                           className="flex-1 p-2 text-lg font-bold text-green-700 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-green-500"
+                           placeholder="0.00"
+                           autoFocus
+                        />
+                        <input 
+                           type="date"
+                           value={paymentDate}
+                           onChange={(e) => setPaymentDate(e.target.value)}
+                           className="w-32 p-2 border border-slate-300 rounded-lg text-sm outline-none"
+                        />
+                     </div>
+                  </div>
+               </div>
+               
+               <div className="p-4 border-t border-slate-200 flex justify-end gap-2 bg-slate-50">
+                  <button onClick={() => setSelectedOrderForPayment(null)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium">{t('cancel')}</button>
+                  <button 
+                     onClick={handleSavePayment} 
+                     disabled={isPaymentSubmitting}
+                     className="px-4 py-2 bg-green-600 text-white hover:bg-green-700 rounded-lg shadow-lg flex items-center gap-2 text-sm font-medium disabled:opacity-50"
+                  >
+                     {isPaymentSubmitting && <Loader2 className="animate-spin" size={16}/>}
+                     {t('confirmPayment')}
+                  </button>
+               </div>
+            </div>
+         </div>
+      )}
+
+      {/* Expense Modal */}
       {showExpenseModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-5 rounded-xl w-full max-w-sm shadow-2xl">
-            <h3 className="text-lg font-bold mb-2 text-slate-800">{t('addGeneralExpense')}</h3>
-            <p className="text-xs text-slate-500 mb-4">{t('expenseSubtitle')}</p>
-            <form onSubmit={handleSaveExpense}>
-              <div className="mb-3">
-                 <label className="block text-xs font-medium text-slate-700 mb-1">{t('description')}</label>
-                 <input type="text" required value={expenseDesc} onChange={(e) => setExpenseDesc(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm" placeholder="e.g. Office Electricity"/>
-              </div>
-              <div className="mb-3">
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="block text-xs font-medium text-slate-700">{t('providerOptional')}</label>
-                    <button type="button" onClick={() => setShowProviderModal(true)} className="text-[10px] text-primary hover:underline flex items-center gap-1"><Plus size={10}/> {t('new')}</button>
-                  </div>
-                  <select value={expenseProvider} onChange={e => setExpenseProvider(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-primary bg-white text-sm">
-                    <option value="">{t('noneGeneral')}</option>
-                    {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-              </div>
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <div>
-                   <label className="block text-xs font-medium text-slate-700 mb-1">{t('amount')}</label>
-                   <div className="relative">
-                      <span className="absolute left-3 top-2 text-slate-400 text-xs">EGP</span>
-                      <input type="number" step="any" required value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} className="w-full pl-10 p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm"/>
-                   </div>
-                </div>
-                <div>
-                   <label className="block text-xs font-medium text-slate-700 mb-1">{t('date')}</label>
-                   <input type="date" required value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-sm"/>
-                </div>
-              </div>
-              <div className="mb-4">
-                 <label className="block text-xs font-medium text-slate-700 mb-1">{t('paymentMethod')}</label>
-                 <div className="flex gap-3 flex-col sm:flex-row">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                       <input type="radio" name="method" checked={expenseMethod === PaymentMethod.CASH} onChange={() => setExpenseMethod(PaymentMethod.CASH)} className="text-primary focus:ring-primary"/>
-                       <span className="text-xs text-slate-700">{t('cashFromRep')}</span
-                    ></label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                       <input type="radio" name="method" checked={expenseMethod === PaymentMethod.BANK_TRANSFER} onChange={() => setExpenseMethod(PaymentMethod.BANK_TRANSFER)} className="text-primary focus:ring-primary"/>
-                       <span className="text-xs text-slate-700">{t('hqBankTransfer')}</span>
-                    </label>
+           <div className="bg-white rounded-xl w-full max-w-sm p-5 shadow-2xl">
+              <h3 className="text-lg font-bold mb-2">{t('addGeneralExpense')}</h3>
+              <p className="text-xs text-slate-500 mb-4">{t('expenseSubtitle')}</p>
+              
+              <form onSubmit={handleSaveExpense} className="space-y-3">
+                 <div>
+                    <label className="block text-xs font-medium mb-1">{t('description')}</label>
+                    <input type="text" required value={expenseDesc} onChange={e => setExpenseDesc(e.target.value)} placeholder="e.g. Electricity Bill" className="w-full p-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary outline-none" />
                  </div>
-                 {expenseMethod === PaymentMethod.CASH && stats && (
-                    <p className="text-[10px] text-amber-600 mt-1 flex items-center gap-1"><Wallet size={10}/> {t('balance')}: {formatCurrency(stats.repCashOnHand)}</p>
-                 )}
-                 {expenseMethod === PaymentMethod.BANK_TRANSFER && stats && (
-                    <p className="text-[10px] text-blue-600 mt-1 flex items-center gap-1"><Landmark size={10}/> {t('transferredToHQ')}: {formatCurrency(stats.transferredToHQ)}</p>
-                 )}
-              </div>
-              <div className="flex justify-end gap-2">
-                 <button type="button" onClick={() => setShowExpenseModal(false)} className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">{t('cancel')}</button>
-                 <button type="submit" className="px-3 py-1.5 bg-red-600 text-white hover:bg-red-700 rounded-lg shadow-lg shadow-red-500/30 text-sm">{t('recordExpense')}</button>
-              </div>
-            </form>
-          </div>
+                 <div>
+                    <label className="block text-xs font-medium mb-1">{t('amount')}</label>
+                    <input type="number" required min="0" step="any" value={expenseAmount} onChange={e => setExpenseAmount(e.target.value)} className="w-full p-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary outline-none" />
+                 </div>
+                 <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-xs font-medium">{t('providerOptional')}</label>
+                      <button type="button" onClick={() => setShowProviderModal(true)} className="text-[10px] text-primary hover:underline flex items-center gap-1"><Plus size={10}/> {t('new')}</button>
+                    </div>
+                    <select value={expenseProvider} onChange={e => setExpenseProvider(e.target.value)} className="w-full p-2 border rounded-lg text-sm bg-white outline-none">
+                       <option value="">{t('noneGeneral')}</option>
+                       {providers.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                 </div>
+                 <div>
+                    <label className="block text-xs font-medium mb-1">{t('paymentMethod')}</label>
+                    <select value={expenseMethod} onChange={e => setExpenseMethod(e.target.value as PaymentMethod)} className="w-full p-2 border rounded-lg text-sm bg-white outline-none">
+                       <option value={PaymentMethod.CASH}>{t('cashFromRep')}</option>
+                       <option value={PaymentMethod.BANK_TRANSFER}>{t('hqBankTransfer')}</option>
+                    </select>
+                 </div>
+                 <div>
+                    <label className="block text-xs font-medium mb-1">{t('date')}</label>
+                    <input type="date" required value={expenseDate} onChange={e => setExpenseDate(e.target.value)} className="w-full p-2 border rounded-lg text-sm outline-none" />
+                 </div>
+                 <div className="flex justify-end gap-2 pt-2">
+                    <button type="button" onClick={() => setShowExpenseModal(false)} className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">{t('cancel')}</button>
+                    <button type="submit" className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm">{t('recordExpense')}</button>
+                 </div>
+              </form>
+           </div>
         </div>
       )}
 
+      {/* Provider Modal Reuse */}
+      <ProviderModal 
+        isOpen={showProviderModal}
+        onClose={() => setShowProviderModal(false)}
+        onSave={handleSaveNewProvider}
+      />
+      
       {/* Calculator Modal */}
-      <CalculatorModal isOpen={showCalculator} onClose={() => setShowCalculator(false)} />
+      <CalculatorModal 
+        isOpen={showCalculator}
+        onClose={() => setShowCalculator(false)}
+      />
 
-      <ProviderModal isOpen={showProviderModal} onClose={() => setShowProviderModal(false)} onSave={handleSaveNewProvider}/>
+      {/* View Order Details Modal (Read Only) */}
+      {viewOrder && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+           <div className="bg-white rounded-xl w-full max-w-2xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-start mb-4 border-b border-slate-100 pb-2">
+                 <div>
+                    <h3 className="text-lg font-bold text-slate-800">Invoice #{viewOrder.id}</h3>
+                    <p className="text-xs text-slate-500">{viewOrder.customerName} • {formatDate(viewOrder.date)}</p>
+                 </div>
+                 <button onClick={() => setViewOrder(null)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+              </div>
+              
+              <div className="space-y-4">
+                 <div>
+                    <h4 className="text-xs font-bold uppercase text-slate-500 mb-2">Items</h4>
+                    <table className="w-full text-xs text-left">
+                       <thead className="bg-slate-50">
+                          <tr>
+                             <th className="p-2">Product</th>
+                             <th className="p-2 text-center">Qty</th>
+                             <th className="p-2 text-right">Price</th>
+                             <th className="p-2 text-right">Total</th>
+                          </tr>
+                       </thead>
+                       <tbody className="divide-y divide-slate-100">
+                          {viewOrder.items.map((item, idx) => (
+                             <tr key={idx}>
+                                <td className="p-2">{item.productName}</td>
+                                <td className="p-2 text-center">{item.quantity} {item.bonusQuantity > 0 && <span className="text-orange-600">+{item.bonusQuantity}</span>}</td>
+                                <td className="p-2 text-right">{item.unitPrice}</td>
+                                <td className="p-2 text-right font-bold">{item.subtotal.toFixed(2)}</td>
+                             </tr>
+                          ))}
+                       </tbody>
+                    </table>
+                    <div className="text-right mt-2 font-bold text-sm">
+                       Total: {formatCurrency(viewOrder.totalAmount)}
+                    </div>
+                 </div>
+
+                 <div>
+                    <h4 className="text-xs font-bold uppercase text-slate-500 mb-2">Payment History</h4>
+                    {viewOrderTxns.length === 0 ? <p className="text-xs text-slate-400 italic">No payments recorded.</p> : (
+                       <table className="w-full text-xs text-left">
+                          <thead className="bg-slate-50">
+                             <tr>
+                                <th className="p-2">Date</th>
+                                <th className="p-2">Ref</th>
+                                <th className="p-2 text-right">Amount</th>
+                             </tr>
+                          </thead>
+                          <tbody>
+                             {viewOrderTxns.map(t => (
+                                <tr key={t.id}>
+                                   <td className="p-2">{formatDate(t.date)}</td>
+                                   <td className="p-2">{t.id}</td>
+                                   <td className="p-2 text-right font-bold text-green-600">{formatCurrency(t.amount)}</td>
+                                </tr>
+                             ))}
+                          </tbody>
+                       </table>
+                    )}
+                 </div>
+                 
+                 <div className="bg-slate-50 p-3 rounded-lg flex justify-between items-center text-sm font-bold">
+                    <span>Balance Due:</span>
+                    <span className={(viewOrder.totalAmount - viewOrder.paidAmount) > 0 ? "text-red-500" : "text-green-500"}>
+                       {formatCurrency(viewOrder.totalAmount - viewOrder.paidAmount)}
+                    </span>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
+
     </div>
   );
 };

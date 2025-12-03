@@ -128,12 +128,12 @@ const NewOrder = () => {
       {
         productId: product.id,
         productName: product.name,
-        quantity: 1, // Default to 1 for easier entry
+        quantity: 0,
         bonusQuantity: 0,
         unitPrice: product.basePrice,
-        discount: (product.basePrice * 1 * defaultDiscountPercent) / 100, // Initial discount calc
+        discount: 0,
         discountPercent: defaultDiscountPercent,
-        subtotal: product.basePrice - ((product.basePrice * 1 * defaultDiscountPercent) / 100)
+        subtotal: 0
       },
       ...prev
     ]);

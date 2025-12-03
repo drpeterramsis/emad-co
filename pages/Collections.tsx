@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getOrders, addTransaction, getFinancialStats, updateOrder, getTransactions, deleteTransaction, updateTransaction, getProviders, addProvider, updateOrderPaidStatus } from '../utils/storage';
 import { Order, TransactionType, OrderStatus, DashboardStats, Transaction, PaymentMethod, Provider, OrderItem } from '../types';
-import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search, Calendar, CheckSquare, X, History, FileText, Trash2, Edit2, TrendingDown, TrendingUp, Eye, Plus, Printer, Building2, Landmark, ListFilter, Layers } from 'lucide-react';
+import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search, Calendar, CheckSquare, X, History, FileText, Trash2, Edit2, Edit, TrendingDown, TrendingUp, Eye, Plus, Printer, Building2, Landmark, ListFilter, Layers } from 'lucide-react';
 import { formatDate, formatCurrency } from '../utils/helpers';
 import ProviderModal from '../components/ProviderModal';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useNavigate } from 'react-router-dom';
 
 const Collections = () => {
   const { t } = useLanguage();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'pending' | 'history' | 'deposits' | 'statement'>('pending');
 
   const [orders, setOrders] = useState<Order[]>([]);
@@ -846,9 +848,18 @@ const Collections = () => {
                               <td className="p-3 text-green-600 font-medium align-top">{formatCurrency(order.paidAmount)}</td>
                               <td className="p-3 font-bold text-red-500 align-top">{formatCurrency(balance)}</td>
                               <td className="p-3 text-right align-top">
-                                <button onClick={() => openPaymentModal(order)} className="text-[10px] bg-primary text-white px-2 py-1 rounded hover:bg-teal-800 shadow-sm">
-                                  {t('recordPayment')}
-                                </button>
+                                <div className="flex justify-end gap-2 items-center">
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); navigate(`/new-order?id=${order.id}`); }}
+                                        className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                        title={t('edit')}
+                                    >
+                                        <Edit size={14} />
+                                    </button>
+                                    <button onClick={() => openPaymentModal(order)} className="text-[10px] bg-primary text-white px-2 py-1 rounded hover:bg-teal-800 shadow-sm">
+                                      {t('recordPayment')}
+                                    </button>
+                                </div>
                               </td>
                             </tr>
                           );

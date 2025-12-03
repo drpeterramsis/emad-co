@@ -929,7 +929,7 @@ const Collections = () => {
                                         <Edit size={14} />
                                     </button>
                                     <button onClick={() => openPaymentModal(order)} className="text-[10px] bg-primary text-white px-2 py-1 rounded hover:bg-teal-800 shadow-sm">
-                                      {t('recordPayment')}
+                                      {t('pay')}
                                     </button>
                                 </div>
                               </td>

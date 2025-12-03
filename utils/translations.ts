@@ -1,6 +1,7 @@
 
 
 
+
 export const translations = {
   en: {
     // Common
@@ -50,6 +51,7 @@ export const translations = {
     newestFirst: 'Newest First',
     oldestFirst: 'Oldest First',
     optional: 'Optional',
+    pay: 'Pay',
     
     // Dashboard
     dashboardOverview: 'Overview of your sales performance',
@@ -348,6 +350,7 @@ export const translations = {
     newestFirst: 'الأحدث أولاً',
     oldestFirst: 'الأقدم أولاً',
     optional: '(اختياري)',
+    pay: 'دفع',
     
     // Dashboard
     dashboardOverview: 'نظرة عامة على أداء المبيعات',

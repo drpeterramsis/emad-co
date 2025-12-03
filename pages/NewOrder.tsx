@@ -23,6 +23,10 @@ const NewOrder = () => {
   const [loadingOrder, setLoadingOrder] = useState(false);
   const [existingPaidAmount, setExistingPaidAmount] = useState(0);
 
+  // Focus Management for new items
+  const quantityInputRef = useRef<HTMLInputElement>(null);
+  const [shouldFocusNewItem, setShouldFocusNewItem] = useState(false);
+
   // Customer Search State
   const [customerSearch, setCustomerSearch] = useState('');
   const [showCustomerList, setShowCustomerList] = useState(false);
@@ -32,6 +36,7 @@ const NewOrder = () => {
   const [productSearch, setProductSearch] = useState('');
   const [showProductList, setShowProductList] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const productSearchInputRef = useRef<HTMLInputElement>(null);
 
   // New Customer Modal State
   const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
@@ -81,6 +86,29 @@ const NewOrder = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [editOrderId]);
 
+  // Focus effect for new items
+  useEffect(() => {
+    if (shouldFocusNewItem && quantityInputRef.current) {
+      quantityInputRef.current.focus();
+      quantityInputRef.current.select();
+      setShouldFocusNewItem(false);
+    }
+  }, [cart, shouldFocusNewItem]);
+
+  // Shortcut for Complete Order
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        // Trigger submit programmatically
+        const form = document.querySelector('form');
+        if (form) form.requestSubmit();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const getCustomerDefaultDiscount = () => {
     const c = customers.find(x => x.id === selectedCustomer);
     return c?.defaultDiscount || 0;
@@ -95,25 +123,24 @@ const NewOrder = () => {
     // Auto-calculate discount if customer has a default percentage
     const defaultDiscountPercent = getCustomerDefaultDiscount();
     
-    // Initialise with 0 quantity so no cost is added yet
-    // Discount percent is kept for calculation when quantity is added
-    
+    // Add to TOP of list
     setCart(prev => [
-      ...prev,
       {
         productId: product.id,
         productName: product.name,
-        quantity: 0,
+        quantity: 1, // Default to 1 for easier entry
         bonusQuantity: 0,
         unitPrice: product.basePrice,
-        discount: 0,
+        discount: (product.basePrice * 1 * defaultDiscountPercent) / 100, // Initial discount calc
         discountPercent: defaultDiscountPercent,
-        subtotal: 0
-      }
+        subtotal: product.basePrice - ((product.basePrice * 1 * defaultDiscountPercent) / 100)
+      },
+      ...prev
     ]);
     
     setProductSearch('');
     setShowProductList(false);
+    setShouldFocusNewItem(true); // Trigger focus on next render
   };
 
   const updateCartItem = (index: number, field: keyof OrderItem | 'discountPercent', value: any) => {
@@ -181,14 +208,12 @@ const NewOrder = () => {
         // Use existing paidAmount to prevent reset
         await updateOrder({ ...orderData, id: editOrderId, paidAmount: existingPaidAmount } as any);
       } else {
-        // Reverting to legacy ID format as per user request
         const newId = `ORD-${Date.now()}`;
         await saveOrder({ ...orderData, id: newId, paidAmount: 0 } as any);
       }
       navigate('/invoices');
     } catch (error: any) {
       console.error("Failed to save order", error);
-      // Show specific error message for debugging
       const errorDetails = error.message || JSON.stringify(error);
       alert(`Failed to save order: ${errorDetails}`);
     } finally {
@@ -198,7 +223,7 @@ const NewOrder = () => {
 
   const handleQuickAddCustomer = async () => {
     if (!newCustomerName) return;
-    setIsSubmitting(true); // Reusing loading state
+    setIsSubmitting(true); 
     try {
       const newId = `CUST-${Date.now()}`;
       const newCust: Customer = {
@@ -211,14 +236,12 @@ const NewOrder = () => {
       };
       await addCustomer(newCust);
       
-      // Refresh customer list
       const updatedCustomers = await getCustomers();
       setCustomers(updatedCustomers);
-      setSelectedCustomer(newId); // Auto select
-      setCustomerSearch(newCust.name); // Set Search Text
+      setSelectedCustomer(newId);
+      setCustomerSearch(newCust.name);
       
       setShowNewCustomerModal(false);
-      // Reset form
       setNewCustomerName('');
       setNewCustomerAddress('');
       setNewCustomerBrick('');
@@ -238,21 +261,56 @@ const NewOrder = () => {
     setShowCustomerList(false);
   };
 
-  // Filter Logic - Updated to sort by stock DESC (ZA order)
+  // Filter Logic
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
     p.basePrice.toString().includes(productSearch)
   ).sort((a, b) => {
-    // Primary sort: Stock High to Low
     const stockDiff = b.stock - a.stock;
     if (stockDiff !== 0) return stockDiff;
-    // Secondary sort: Name A-Z
     return a.name.localeCompare(b.name);
   });
 
   const filteredCustomers = customers.filter(c => 
     c.name.toLowerCase().includes(customerSearch.toLowerCase())
   );
+
+  // Search Input Key Handler
+  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      // Move focus to the first item in the list if visible
+      const firstBtn = document.getElementById('prod-res-0');
+      if (firstBtn) firstBtn.focus();
+    }
+    if (e.key === 'Tab' && showProductList) {
+       // Explicitly jump focus into the menu (first item) on Tab
+       e.preventDefault();
+       const firstBtn = document.getElementById('prod-res-0');
+       if (firstBtn) firstBtn.focus();
+    }
+  };
+
+  const handleResultKeyDown = (e: React.KeyboardEvent, index: number, product: Product) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextBtn = document.getElementById(`prod-res-${index + 1}`);
+      if (nextBtn) nextBtn.focus();
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (index === 0) {
+        if (productSearchInputRef.current) productSearchInputRef.current.focus();
+      } else {
+        const prevBtn = document.getElementById(`prod-res-${index - 1}`);
+        if (prevBtn) prevBtn.focus();
+      }
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addProductToCart(product);
+    }
+  };
 
   if (loading || loadingOrder) {
     return (
@@ -276,7 +334,6 @@ const NewOrder = () => {
           </p>
         </div>
         
-        {/* Invoice Shortcut */}
         <button
           onClick={() => navigate('/invoices')}
           className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 text-sm font-medium shadow-sm transition-colors"
@@ -302,13 +359,12 @@ const NewOrder = () => {
                     value={customerSearch}
                     onChange={(e) => {
                       setCustomerSearch(e.target.value);
-                      setSelectedCustomer(''); // Clear ID on change to force selection
+                      setSelectedCustomer('');
                       setShowCustomerList(true);
                     }}
                     onFocus={() => setShowCustomerList(true)}
                     className={`w-full pl-9 pr-8 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-primary outline-none ${!selectedCustomer && customerSearch ? 'border-orange-300' : 'border-slate-300'}`}
                   />
-                  {/* Clear or Dropdown Indicator */}
                   {customerSearch || selectedCustomer ? (
                      <button
                        type="button"
@@ -328,7 +384,6 @@ const NewOrder = () => {
                   )}
                 </div>
                 
-                {/* Suggestions Dropdown */}
                 {showCustomerList && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-xl border border-slate-200 max-h-56 overflow-y-auto z-20">
                     {filteredCustomers.length === 0 ? (
@@ -352,8 +407,6 @@ const NewOrder = () => {
                     )}
                   </div>
                 )}
-                
-                {/* Warning if typed but not selected */}
                 {!selectedCustomer && customerSearch && !showCustomerList && (
                    <p className="text-[10px] text-orange-500 mt-1 absolute -bottom-5 left-0">{t('selectCustomerWarning')}</p>
                 )}
@@ -378,7 +431,6 @@ const NewOrder = () => {
               onChange={(e) => setOrderDate(e.target.value)}
               className="w-full rounded-lg border-slate-300 border p-2 text-sm outline-none focus:ring-2 focus:ring-primary"
             />
-            <p className="text-[10px] text-slate-400 mt-0.5 text-right">DD/MM/YYYY</p>
           </div>
         </div>
 
@@ -387,12 +439,12 @@ const NewOrder = () => {
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
             <h3 className="text-base font-semibold">{t('orderItems')}</h3>
             
-            {/* Searchable Product Input */}
             <div className="relative w-full md:w-80" ref={searchContainerRef}>
               <div className="relative">
                 <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
                 <input 
                   type="text"
+                  ref={productSearchInputRef}
                   placeholder={t('searchProductPlaceholder')}
                   value={productSearch}
                   onFocus={() => setShowProductList(true)}
@@ -400,6 +452,7 @@ const NewOrder = () => {
                     setProductSearch(e.target.value);
                     setShowProductList(true);
                   }}
+                  onKeyDown={handleSearchKeyDown}
                   className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-primary outline-none"
                 />
                 {productSearch && (
@@ -408,6 +461,7 @@ const NewOrder = () => {
                     onClick={() => {
                       setProductSearch('');
                       setShowProductList(false);
+                      if (productSearchInputRef.current) productSearchInputRef.current.focus();
                     }}
                     className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
                   >
@@ -416,18 +470,19 @@ const NewOrder = () => {
                 )}
               </div>
 
-              {/* Dropdown Results */}
               {showProductList && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-xl border border-slate-200 max-h-56 overflow-y-auto z-10">
                   {filteredProducts.length === 0 ? (
                     <div className="p-3 text-center text-slate-500 text-xs">{t('noProductsFound')}</div>
                   ) : (
-                    filteredProducts.map(p => (
+                    filteredProducts.map((p, idx) => (
                       <button
                         key={p.id}
+                        id={`prod-res-${idx}`}
                         type="button"
                         onClick={() => addProductToCart(p)}
-                        className="w-full text-left px-3 py-2 hover:bg-slate-50 border-b border-slate-50 last:border-0 flex justify-between items-center group"
+                        onKeyDown={(e) => handleResultKeyDown(e, idx, p)}
+                        className="w-full text-left px-3 py-2 hover:bg-slate-50 border-b border-slate-50 last:border-0 flex justify-between items-center group focus:bg-slate-50 focus:outline-none"
                       >
                         <div>
                           <p className="font-medium text-slate-800 text-sm group-hover:text-primary transition-colors">{p.name}</p>
@@ -472,7 +527,7 @@ const NewOrder = () => {
                     const isOverselling = totalQty > stock;
                     
                     return (
-                      <tr key={index}>
+                      <tr key={index} className={index === 0 ? "bg-slate-50/50" : ""}>
                         <td className="p-2 font-medium text-slate-800 text-xs md:text-sm">
                           {item.productName}
                           {isOverselling && (
@@ -480,6 +535,7 @@ const NewOrder = () => {
                                <AlertTriangle size={10} /> {t('stock')}: {stock}
                             </div>
                           )}
+                          {index === 0 && <span className="text-[9px] text-primary ml-2 font-bold px-1 rounded bg-teal-50">NEW</span>}
                         </td>
                         <td className="p-2">
                           <input
@@ -494,6 +550,7 @@ const NewOrder = () => {
                         </td>
                         <td className="p-2 relative">
                           <input
+                            ref={index === 0 ? quantityInputRef : null}
                             type="number"
                             min="0"
                             value={item.quantity}
@@ -578,6 +635,7 @@ const NewOrder = () => {
             type="submit"
             disabled={cart.length === 0 || isSubmitting || !selectedCustomer}
             className="px-4 py-2 rounded-lg bg-primary text-white hover:bg-teal-800 font-medium shadow-lg shadow-teal-700/30 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            title="Shortcut: Ctrl+Enter"
           >
             {isSubmitting ? <Loader2 className="animate-spin" size={16}/> : <Save size={16} />}
             {isSubmitting ? t('saving') : (editOrderId ? t('updateOrder') : t('completeOrder'))}

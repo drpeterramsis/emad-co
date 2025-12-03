@@ -23,7 +23,7 @@ const AppContent = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   
-  const { dir } = useLanguage();
+  const { dir, t } = useLanguage();
 
   useEffect(() => {
     initStorage();
@@ -115,6 +115,15 @@ const AppContent = () => {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
+        
+        <footer className="py-6 border-t border-slate-200 bg-slate-50 text-center print:hidden mt-auto">
+           <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">
+             {t('salesPortal')} v2.0.089
+           </p>
+           <p className="text-[10px] text-slate-400 mt-1">
+             Developer Dr. Peter Ramsis all rights reserved
+           </p>
+        </footer>
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { Order, TransactionType, OrderStatus, DashboardStats, Transaction, Payme
 import { ArrowRightLeft, DollarSign, Wallet, Loader2, Filter, Search, Calendar, CheckSquare, X, History, FileText, Trash2, Edit2, Edit, TrendingDown, TrendingUp, Eye, Plus, Printer, Building2, Landmark, ListFilter, Layers, AlertTriangle, Calculator } from 'lucide-react';
 import { formatDate, formatCurrency } from '../utils/helpers';
 import ProviderModal from '../components/ProviderModal';
+import CalculatorModal from '../components/CalculatorModal';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -48,6 +49,9 @@ const Collections = () => {
 
   // Provider Modal State for Expenses
   const [showProviderModal, setShowProviderModal] = useState(false);
+  
+  // Calculator State
+  const [showCalculator, setShowCalculator] = useState(false);
   
   // Itemized Payment State
   const [selectedOrderForPayment, setSelectedOrderForPayment] = useState<Order | null>(null);
@@ -672,6 +676,13 @@ const Collections = () => {
         </div>
         
         <div className="flex flex-wrap gap-3">
+           <button 
+             onClick={() => setShowCalculator(true)}
+             className="bg-slate-100 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-200 flex items-center gap-2 text-xs md:text-sm shadow-sm"
+             title="Calculator"
+           >
+              <Calculator size={16}/>
+           </button>
            <button 
              onClick={() => setShowExpenseModal(true)}
              className="bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-100 flex items-center gap-2 text-xs md:text-sm"
@@ -1434,7 +1445,8 @@ const Collections = () => {
                  <div className="flex gap-3 flex-col sm:flex-row">
                     <label className="flex items-center gap-2 cursor-pointer">
                        <input type="radio" name="method" checked={expenseMethod === PaymentMethod.CASH} onChange={() => setExpenseMethod(PaymentMethod.CASH)} className="text-primary focus:ring-primary"/>
-                       <span className="text-xs text-slate-700">{t('cashFromRep')}</span></label>
+                       <span className="text-xs text-slate-700">{t('cashFromRep')}</span
+                    ></label>
                     <label className="flex items-center gap-2 cursor-pointer">
                        <input type="radio" name="method" checked={expenseMethod === PaymentMethod.BANK_TRANSFER} onChange={() => setExpenseMethod(PaymentMethod.BANK_TRANSFER)} className="text-primary focus:ring-primary"/>
                        <span className="text-xs text-slate-700">{t('hqBankTransfer')}</span>
@@ -1455,6 +1467,9 @@ const Collections = () => {
           </div>
         </div>
       )}
+
+      {/* Calculator Modal */}
+      <CalculatorModal isOpen={showCalculator} onClose={() => setShowCalculator(false)} />
 
       <ProviderModal isOpen={showProviderModal} onClose={() => setShowProviderModal(false)} onSave={handleSaveNewProvider}/>
     </div>

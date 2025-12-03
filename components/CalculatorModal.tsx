@@ -102,7 +102,7 @@ const CalculatorModal = ({ isOpen, onClose }: CalculatorModalProps) => {
       } else if (key === '.' || key === ',') {
         e.preventDefault();
         handleDecimal();
-      } else if (key.toLowerCase() === 'c') {
+      } else if (key.toLowerCase() === 'c' || key === 'Delete') {
         e.preventDefault();
         clear();
       }
@@ -120,8 +120,14 @@ const CalculatorModal = ({ isOpen, onClose }: CalculatorModalProps) => {
   const actionBtnClass = `${btnClass} bg-primary text-white hover:bg-teal-700 shadow-md`;
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-      <div className="bg-slate-50 p-5 rounded-2xl shadow-2xl w-full max-w-xs border border-slate-200 animate-in fade-in zoom-in duration-200">
+    <div 
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-slate-50 p-5 rounded-2xl shadow-2xl w-full max-w-xs border border-slate-200 animate-in fade-in zoom-in duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-2 text-slate-600 font-bold">
             <Calculator size={20} />

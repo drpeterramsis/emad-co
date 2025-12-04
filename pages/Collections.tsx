@@ -9,7 +9,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 
 const Collections = () => {
-  const { t } = useLanguage();
+  const { t, dir } = useLanguage();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'pending' | 'history' | 'deposits' | 'statement'>('pending');
 
@@ -284,9 +284,6 @@ const Collections = () => {
             items: updatedItems
         });
 
-        // Use emoji in description here for new transactions if you want, or just rely on statement logic to add it
-        // The user asked to remove "Payment for:" and add emoji in statement view. 
-        // We can store clean description here or clean it later. Let's store descriptive one.
         const description = paidDetails.length > 0 ? `Payment for: ${paidDetails.join(', ')}` : `Payment of ${formatCurrency(amount)}`;
 
         const txnData = {
@@ -684,10 +681,6 @@ const Collections = () => {
         else isDebit = true;
     }
     
-    // NOTE: Because statementTxns is sorted DESC (Newest First) for display in table, 
-    // running balance calculation logic needs to be careful if we want to show row-by-row snapshot.
-    // Usually statement calculation is done ASC (Oldest First).
-    // Let's re-sort ASC for calculation, then reverse for display if needed.
     return { ...txn, isCredit, isDebit, amount };
   });
 
@@ -766,6 +759,148 @@ const Collections = () => {
   
   const report = getMonthlyReport();
 
+  // --- PRINT LOGIC ---
+  const handlePrintStatement = () => {
+    // We create a new window and write a clean HTML document into it
+    const printWindow = window.open('', '_blank', 'width=1000,height=800');
+    if (!printWindow) {
+      alert("Please allow popups to print the statement.");
+      return;
+    }
+    
+    // Construct styles
+    const styles = `
+      <style>
+        body { font-family: sans-serif; padding: 20px; color: #333; -webkit-print-color-adjust: exact; }
+        .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0f766e; padding-bottom: 20px; margin-bottom: 20px; }
+        .company-info h1 { margin: 0; color: #0f766e; font-size: 24px; text-transform: uppercase; }
+        .company-info p { margin: 5px 0 0; font-size: 12px; color: #666; }
+        .report-info { text-align: right; }
+        .report-info h2 { margin: 0; font-size: 18px; color: #1e293b; }
+        .report-info p { margin: 5px 0 0; font-size: 12px; color: #666; }
+        
+        .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 30px; }
+        .summary-box { border: 1px solid #ddd; padding: 10px; border-radius: 5px; text-align: center; background-color: #fff; }
+        .summary-box.bg-slate { background-color: #f8fafc; }
+        .summary-box .label { font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: bold; }
+        .summary-box .value { font-size: 16px; font-weight: bold; margin-top: 5px; color: #0f172a; }
+        
+        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        th { text-align: left; background: #f1f5f9; padding: 8px; border-bottom: 2px solid #cbd5e1; color: #475569; font-weight: bold; }
+        td { padding: 8px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+        tr:nth-child(even) { background-color: #f8fafc; }
+        
+        .text-right { text-align: right; }
+        .text-green { color: #15803d; }
+        .text-red { color: #b91c1c; }
+        .font-bold { font-weight: bold; }
+        .text-xs { font-size: 10px; color: #64748b; }
+        
+        .footer { margin-top: 30px; border-top: 1px solid #ddd; padding-top: 10px; text-align: center; font-size: 10px; color: #999; }
+        
+        @page { margin: 10mm; size: A4; }
+      </style>
+    `;
+
+    // Construct Body
+    const content = `
+      <div class="header" dir="${dir}">
+        <div class="company-info">
+          <h1>Emad Co. Pharmaceutical</h1>
+          <p>Sales & Distribution</p>
+        </div>
+        <div class="report-info">
+          <h2>${t('cashStatementReport')}</h2>
+          <p>${statementAccount === 'CASH' ? 'Cash Account' : statementAccount} • ${statementStart ? formatDate(statementStart) : 'Start'} - ${statementEnd ? formatDate(statementEnd) : 'Present'}</p>
+        </div>
+      </div>
+
+      <div class="summary-grid" dir="${dir}">
+        <div class="summary-box">
+           <div class="label">${t('openingBalance')}</div>
+           <div class="value">${formatCurrency(openingBalance)}</div>
+        </div>
+        <div class="summary-box bg-slate">
+           <div class="label">${t('totalCredits')} (In)</div>
+           <div class="value text-green">${formatCurrency(summaryTotalCredit)}</div>
+        </div>
+        <div class="summary-box bg-slate">
+           <div class="label">${t('totalDebits')} (Out)</div>
+           <div class="value text-red">${formatCurrency(summaryTotalDebit)}</div>
+        </div>
+        <div class="summary-box">
+           <div class="label">${t('closingBalance')}</div>
+           <div class="value">${formatCurrency(closingBalance)}</div>
+        </div>
+      </div>
+
+      <table dir="${dir}">
+        <thead>
+          <tr>
+            <th>${t('date')}</th>
+            <th>${t('refId')}</th>
+            <th style="width: 40%">${t('description')}</th>
+            <th class="text-right">${t('creditIn')}</th>
+            <th class="text-right">${t('debitOut')}</th>
+            <th class="text-right">${t('balance')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Opening Row -->
+          <tr style="background: #f1f5f9; font-style: italic;">
+             <td>${statementStart}</td>
+             <td>-</td>
+             <td>${t('openingBalance')}</td>
+             <td class="text-right">-</td>
+             <td class="text-right">-</td>
+             <td class="text-right font-bold">${formatCurrency(openingBalance)}</td>
+          </tr>
+          ${displayStatementData.length === 0 ? `<tr><td colspan="6" style="text-align: center; padding: 20px;">${t('noTransactionsFound')}</td></tr>` : ''}
+          ${displayStatementData.map(txn => `
+            <tr>
+              <td>${formatDate(txn.date)}</td>
+              <td class="text-xs font-bold">${txn.referenceId || '-'}</td>
+              <td>
+                <div class="font-bold">${txn.mainLabel}</div>
+                <div class="text-xs">${txn.subLabel}</div>
+              </td>
+              <td class="text-right text-green font-bold">
+                 ${txn.isCredit ? formatCurrency(txn.amount) : '-'}
+              </td>
+              <td class="text-right text-red font-bold">
+                 ${txn.isDebit ? formatCurrency(txn.amount) : '-'}
+              </td>
+              <td class="text-right font-bold">
+                 ${formatCurrency(txn.balanceSnapshot)}
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <div class="footer">
+         Generated on ${new Date().toLocaleDateString()} • Emad Co. Sales Portal
+      </div>
+    `;
+
+    // Write to window
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html dir="${dir}">
+      <head><title>Statement Print</title>${styles}</head>
+      <body>${content}</body>
+      </html>
+    `);
+    printWindow.document.close();
+    
+    // Print and Close
+    // Small delay to ensure styles loaded
+    setTimeout(() => {
+       printWindow.focus();
+       printWindow.print();
+    }, 500);
+  };
+
 
   if (loading || !stats) {
     return (
@@ -778,25 +913,6 @@ const Collections = () => {
   return (
     <div className="p-4 md:p-6 pb-20 print:p-0 print:w-full print:bg-white print:h-screen">
       
-      {/* Print Styles Block */}
-      <style>{`
-        @media print {
-          @page { size: auto; margin: 5mm; }
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .no-print { display: none !important; }
-          .print-only { display: block !important; }
-          .print-header-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; border-bottom: 2px solid #334155; padding-bottom: 10px; }
-          .print-summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
-          .print-table { width: 100%; border-collapse: collapse; font-size: 10px; }
-          .print-table th { background-color: #f1f5f9; color: #334155; font-weight: bold; border-bottom: 1px solid #cbd5e1; padding: 4px; text-align: left; }
-          .print-table td { border-bottom: 1px solid #e2e8f0; padding: 4px; color: #1e293b; }
-          /* Clean description text */
-          .print-desc-main { font-weight: bold; font-size: 11px; }
-          .print-desc-sub { font-size: 9px; color: #64748b; }
-        }
-        .print-only { display: none; }
-      `}</style>
-
       {/* Top Header & Report (Hidden on print) */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 print:hidden">
         <div>
@@ -1168,8 +1284,8 @@ const Collections = () => {
       )}
 
       {activeTab === 'statement' && (
-         <div className="space-y-4 print:space-y-0 print:block">
-             <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-3 print:hidden">
+         <div className="space-y-4">
+             <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-3">
                 {/* Filters */}
                 <div className="flex items-center gap-2 border-r border-slate-200 pr-3">
                    <select 
@@ -1196,48 +1312,15 @@ const Collections = () => {
                 </div>
                 
                 <button 
-                  onClick={() => window.print()}
+                  onClick={handlePrintStatement}
                   className="bg-slate-100 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-200 flex items-center gap-2 text-xs"
                 >
                   <Printer size={14}/> {t('print')}
                 </button>
              </div>
 
-             {/* PRINT HEADER SECTION */}
-             <div className="print-only mb-6">
-                <div className="print-header-grid">
-                   <div>
-                      <h1 className="text-xl font-bold uppercase text-slate-800">Emad Co. Pharmaceutical</h1>
-                      <p className="text-sm text-slate-500">Sales & Distribution</p>
-                   </div>
-                   <div className="text-right">
-                      <h2 className="text-lg font-bold text-slate-800">{t('cashStatementReport')}</h2>
-                      <p className="text-xs text-slate-600">{statementAccount === 'CASH' ? 'Cash Account' : statementAccount} • {statementStart ? formatDate(statementStart) : 'Start'} - {statementEnd ? formatDate(statementEnd) : 'Present'}</p>
-                   </div>
-                </div>
-
-                <div className="print-summary-grid text-center text-xs">
-                   <div className="border p-2">
-                      <div className="font-bold text-slate-500 uppercase">Opening Balance</div>
-                      <div className="font-bold text-lg text-slate-800">{formatCurrency(openingBalance)}</div>
-                   </div>
-                   <div className="border p-2 bg-slate-50">
-                      <div className="font-bold text-slate-500 uppercase">Total Credit (In)</div>
-                      <div className="font-bold text-lg text-green-700">{formatCurrency(summaryTotalCredit)}</div>
-                   </div>
-                   <div className="border p-2 bg-slate-50">
-                      <div className="font-bold text-slate-500 uppercase">Total Debit (Out)</div>
-                      <div className="font-bold text-lg text-red-700">{formatCurrency(summaryTotalDebit)}</div>
-                   </div>
-                   <div className="border p-2">
-                      <div className="font-bold text-slate-500 uppercase">Closing Balance</div>
-                      <div className="font-bold text-lg text-slate-900">{formatCurrency(closingBalance)}</div>
-                   </div>
-                </div>
-             </div>
-
              {/* Screen Summary Box */}
-             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 print:hidden">
+             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 <div className="p-3 bg-slate-50 rounded border border-slate-200">
                    <p className="text-xs text-slate-500 uppercase font-bold">{t('openingBalance')}</p>
                    <p className="text-lg font-bold text-slate-700">{formatCurrency(openingBalance)}</p>
@@ -1257,8 +1340,8 @@ const Collections = () => {
              </div>
 
              {/* Statement Table */}
-             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden print:shadow-none print:border-none print:w-full">
-                <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center print:hidden">
+             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
                    <div>
                       <h3 className="font-bold text-lg text-slate-800">{t('cashStatementReport')}</h3>
                       <p className="text-xs text-slate-500">{statementAccount} Account • {statementStart || 'Start'} to {statementEnd || 'Present'}</p>
@@ -1268,8 +1351,8 @@ const Collections = () => {
                       <p className={`text-xl font-bold ${closingBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(closingBalance)}</p>
                    </div>
                 </div>
-                <div className="overflow-x-auto print:overflow-visible">
-                   <table className="w-full text-left text-xs print-table">
+                <div className="overflow-x-auto">
+                   <table className="w-full text-left text-xs">
                       <thead className="bg-slate-50 border-b border-slate-200">
                          <tr>
                             <th className="p-3 font-medium text-slate-600">{t('date')}</th>
@@ -1280,9 +1363,9 @@ const Collections = () => {
                             <th className="p-3 font-medium text-slate-600 text-right">{t('balance')}</th>
                          </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100 print:divide-slate-200">
+                      <tbody className="divide-y divide-slate-100">
                          {/* Opening Balance Row */}
-                         <tr className="bg-slate-50/50 italic print:bg-transparent">
+                         <tr className="bg-slate-50/50 italic">
                             <td className="p-3 text-slate-500">{statementStart}</td>
                             <td className="p-3 text-slate-500">-</td>
                             <td className="p-3 text-slate-500">{t('openingBalance')}</td>
@@ -1294,12 +1377,12 @@ const Collections = () => {
                             <tr><td colSpan={6} className="p-6 text-center text-slate-400">{t('noTransactionsFound')}</td></tr>
                          )}
                          {displayStatementData.map((txn, idx) => (
-                            <tr key={txn.id} className="hover:bg-slate-50 print:hover:bg-transparent">
+                            <tr key={txn.id} className="hover:bg-slate-50">
                                <td className="p-3 text-slate-600 whitespace-nowrap">{formatDate(txn.date)}</td>
                                <td className="p-3 font-mono text-[10px] text-slate-500">{txn.referenceId || '-'}</td>
                                <td className="p-3">
-                                  <div className="font-medium text-slate-800 print-desc-main">{txn.mainLabel}</div>
-                                  <div className="text-[10px] text-slate-500 print-desc-sub">{txn.subLabel}</div>
+                                  <div className="font-medium text-slate-800">{txn.mainLabel}</div>
+                                  <div className="text-[10px] text-slate-500">{txn.subLabel}</div>
                                </td>
                                <td className="p-3 text-right font-medium text-green-600">
                                   {txn.isCredit ? formatCurrency(txn.amount) : '-'}
@@ -1315,11 +1398,6 @@ const Collections = () => {
                       </tbody>
                    </table>
                 </div>
-             </div>
-
-             {/* Print Footer */}
-             <div className="print-only mt-6 pt-4 border-t border-slate-300 text-center text-[9px] text-slate-500">
-                Printed on {new Date().toLocaleDateString()} • Emad Co. Pharmaceutical Sales Portal
              </div>
          </div>
       )}

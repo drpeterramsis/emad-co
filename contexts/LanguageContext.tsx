@@ -1,35 +1,31 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { translations, Language } from '../utils/translations';
+import React, { createContext, useContext, useState, PropsWithChildren } from 'react';
+import { Language, Translation } from '../types';
+import { en, ar } from '../locales/translations';
 
 interface LanguageContextType {
-  language: Language;
-  setLanguage: (lang: Language) => void;
-  t: (key: keyof typeof translations['en']) => string;
-  dir: 'ltr' | 'rtl';
+  lang: Language;
+  t: Translation;
+  toggleLanguage: () => void;
+  isRTL: boolean;
 }
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
-export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [language, setLanguage] = useState<Language>(() => {
-    return (localStorage.getItem('emad_lang') as Language) || 'en';
-  });
+export const LanguageProvider = ({ children }: PropsWithChildren<{}>) => {
+  const [lang, setLang] = useState<Language>('en');
 
-  useEffect(() => {
-    localStorage.setItem('emad_lang', language);
-    document.documentElement.dir = language === 'ar' ? 'rtl' : 'ltr';
-    document.documentElement.lang = language;
-  }, [language]);
-
-  const t = (key: keyof typeof translations['en']) => {
-    return translations[language][key] || key;
+  const toggleLanguage = () => {
+    setLang((prev) => (prev === 'en' ? 'ar' : 'en'));
   };
 
-  const dir = language === 'ar' ? 'rtl' : 'ltr';
+  const t = lang === 'en' ? en : ar;
+  const isRTL = lang === 'ar';
 
   return (
-    <LanguageContext.Provider value={{ language, setLanguage, t, dir }}>
-      {children}
+    <LanguageContext.Provider value={{ lang, t, toggleLanguage, isRTL }}>
+      <div dir={isRTL ? 'rtl' : 'ltr'} className={isRTL ? 'font-arabic' : 'font-sans'}>
+        {children}
+      </div>
     </LanguageContext.Provider>
   );
 };

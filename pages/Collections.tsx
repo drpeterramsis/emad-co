@@ -29,8 +29,7 @@ const Collections = () => {
   const [statementEnd, setStatementEnd] = useState('');
   const [statementAccount, setStatementAccount] = useState<'CASH' | 'HQ' | 'ALL'>('CASH');
   const [statementFilterType, setStatementFilterType] = useState<'ALL' | 'CREDIT' | 'DEBIT'>('ALL');
-  const [viewTxn, setViewTxn] = useState<Transaction | null>(null);
-
+  
   // HQ Transfer State
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferAmount, setTransferAmount] = useState('');
@@ -185,7 +184,6 @@ const Collections = () => {
       const newItems = paymentItems.map(state => {
           const item = selectedOrderForPayment.items[state.index];
           const itemPrice = item.quantity > 0 ? item.subtotal / item.quantity : 0;
-          // When editing, available maxQty might be higher because we reversed the current txn
           const maxQty = Math.max(0, item.quantity - (item.paidQuantity || 0));
           
           if (remaining <= 0.01 || maxQty <= 0 || itemPrice <= 0) {
@@ -198,10 +196,7 @@ const Collections = () => {
               remaining -= costForMax;
               return { ...state, payQty: maxQty, selected: true };
           } else {
-              // Partial
               const affordableQty = Math.floor(remaining / itemPrice);
-              // Ensure we pay at least 1 if affordable, or fraction if we support it. 
-              // Assuming integer quantities for now.
               const actualPay = affordableQty;
               const cost = actualPay * itemPrice;
               remaining -= cost;
@@ -226,7 +221,6 @@ const Collections = () => {
 
     if (field === 'selected') {
       itemState.selected = value;
-      // If selected and payQty is 0, default to max
       if (value && itemState.payQty === 0 && selectedOrderForPayment) {
           const item = selectedOrderForPayment.items[index];
           itemState.payQty = Math.max(0, item.quantity - (item.paidQuantity || 0));
@@ -239,7 +233,6 @@ const Collections = () => {
     setPaymentItems(newItems);
     if (selectedOrderForPayment) {
       const suggested = calculateSuggestedAmount(selectedOrderForPayment, newItems);
-      // Update amount without triggering distribution
       setActualCollectedAmount(suggested.toFixed(2));
     }
   };
@@ -260,7 +253,6 @@ const Collections = () => {
         const newPaidAmount = (selectedOrderForPayment.paidAmount || 0) + amount;
         
         let newStatus = selectedOrderForPayment.status;
-        // Use tolerance for float comparison
         if (newPaidAmount >= selectedOrderForPayment.totalAmount - 0.5) {
             newStatus = OrderStatus.PAID;
         } else if (newPaidAmount > 0) {
@@ -271,7 +263,6 @@ const Collections = () => {
         const paidItemsMetadata: { productId: string, quantity: number }[] = [];
         const paidDetails: string[] = [];
 
-        // Only update items if data is consistent
         if (!isItemDataInconsistent) {
             paymentItems.forEach(state => {
                 if (state.selected && state.payQty > 0) {
@@ -283,10 +274,9 @@ const Collections = () => {
                 }
             });
         } else {
-            paidDetails.push("Lump Sum (Balance Correction)");
+            paidDetails.push("Lump Sum");
         }
 
-        // Apply Final State to Order
         await updateOrderPaidStatus({
             ...selectedOrderForPayment,
             paidAmount: newPaidAmount,
@@ -294,6 +284,9 @@ const Collections = () => {
             items: updatedItems
         });
 
+        // Use emoji in description here for new transactions if you want, or just rely on statement logic to add it
+        // The user asked to remove "Payment for:" and add emoji in statement view. 
+        // We can store clean description here or clean it later. Let's store descriptive one.
         const description = paidDetails.length > 0 ? `Payment for: ${paidDetails.join(', ')}` : `Payment of ${formatCurrency(amount)}`;
 
         const txnData = {
@@ -305,7 +298,7 @@ const Collections = () => {
           description: description,
           metadata: { 
              paidItems: paidItemsMetadata,
-             skipOrderUpdate: true // IMPORTANT: We handled order update manually above
+             skipOrderUpdate: true
           }
         };
 
@@ -419,7 +412,6 @@ const Collections = () => {
       return;
     }
 
-    // Determine what was paid in this transaction to reverse it (in memory only)
     let paidItemsMap: Record<string, number> = {};
     
     if (txn.metadata?.paidItems) {
@@ -427,7 +419,6 @@ const Collections = () => {
           paidItemsMap[pi.productId] = pi.quantity;
        });
     } else if (txn.description.startsWith('Payment for:')) {
-       // Legacy parsing
        const details = txn.description.replace('Payment for: ', '');
        const parts = details.split(', ');
        parts.forEach(part => {
@@ -441,7 +432,6 @@ const Collections = () => {
        });
     }
 
-    // Create Pre-Transaction Order State (Revert effects of this payment)
     const reducedItems = order.items.map(item => {
         const paidInTxn = paidItemsMap[item.productId] || 0;
         return {
@@ -456,33 +446,29 @@ const Collections = () => {
         ...order,
         paidAmount: preTxnPaidAmount,
         items: reducedItems,
-        // Approximate status for the modal view
         status: preTxnPaidAmount > 0 ? OrderStatus.PARTIAL : OrderStatus.PENDING 
     };
 
-    // Open Modal with Pre-State
     setSelectedOrderForPayment(preTxnOrder);
     setPaymentDate(new Date(txn.date).toISOString().split('T')[0]);
     setActualCollectedAmount(txn.amount.toString());
     setEditingPaymentTxnId(txn.id);
     setIsPaymentSubmitting(false);
 
-    // Setup Items State for Modal
     const initItems = preTxnOrder.items.map((item, idx) => {
        const txQty = paidItemsMap[item.productId] || 0;
        return {
          index: idx,
-         payQty: txQty, // Pre-fill with what was paid in this txn
+         payQty: txQty,
          selected: txQty > 0
        };
     });
     setPaymentItems(initItems);
 
-    // Check Consistency on Pre-State
     const remainingBalance = preTxnOrder.totalAmount - preTxnOrder.paidAmount;
     const totalItemRemainingValue = initItems.reduce((sum, state) => {
         const item = preTxnOrder.items[state.index];
-        const remainingQty = item.quantity - (item.paidQuantity || 0); // "Available"
+        const remainingQty = item.quantity - (item.paidQuantity || 0);
         const price = item.quantity > 0 ? item.subtotal / item.quantity : 0;
         return sum + (remainingQty * price);
     }, 0);
@@ -618,18 +604,26 @@ const Collections = () => {
   let statementTxns = allTxnsForStatement;
   let openingBalance = 0;
 
-  // Helper to normalize date boundaries
-  const getStartOfDay = (dateStr: string) => {
-    const d = new Date(dateStr);
-    d.setHours(0, 0, 0, 0);
-    return d.getTime();
-  };
-  
+  // STRICT DATE LOGIC FIX
+  const parseDateLocal = (dateStr: string) => {
+    if(!dateStr) return null;
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, m-1, d); // Local midnight
+  }
+ 
   const getEndOfDay = (dateStr: string) => {
-    const d = new Date(dateStr);
+    const d = parseDateLocal(dateStr);
+    if (!d) return 0;
     d.setHours(23, 59, 59, 999);
     return d.getTime();
-  };
+  }
+
+  const getStartOfDay = (dateStr: string) => {
+    const d = parseDateLocal(dateStr);
+    if(!d) return 0;
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }
 
   if (statementStart) {
     const start = getStartOfDay(statementStart);
@@ -649,8 +643,9 @@ const Collections = () => {
     statementTxns = allTxnsForStatement.filter(t => {
        const d = new Date(t.date).getTime();
        let matchEnd = true;
-       // Strict end of day comparison
-       if (statementEnd) matchEnd = d <= getEndOfDay(statementEnd);
+       if (statementEnd) {
+          matchEnd = d <= getEndOfDay(statementEnd);
+       }
        return d >= start && matchEnd;
     });
   } else if (statementEnd) {
@@ -689,45 +684,58 @@ const Collections = () => {
         else isDebit = true;
     }
     
-    if (isCredit) summaryTotalCredit += amount;
-    else if (isDebit) summaryTotalDebit += amount;
+    // NOTE: Because statementTxns is sorted DESC (Newest First) for display in table, 
+    // running balance calculation logic needs to be careful if we want to show row-by-row snapshot.
+    // Usually statement calculation is done ASC (Oldest First).
+    // Let's re-sort ASC for calculation, then reverse for display if needed.
+    return { ...txn, isCredit, isDebit, amount };
+  });
 
-    if (isCredit) runningBalance += amount;
-    else if (isDebit) runningBalance -= amount;
-
-    let mainLabel = '';
-    let subLabel = txn.description;
-    
-    if (txn.type === TransactionType.PAYMENT_RECEIVED) {
-      mainLabel = txn.referenceId && orderLookup[txn.referenceId] ? orderLookup[txn.referenceId] : 'Customer Payment';
-      // Clean up description
-      let details = txn.description.replace(/^Payment for:\s*/i, '').replace(/^Payment for\s*/i, '');
-      // Format details with emojis
-      if (details.includes(',')) {
-          subLabel = details.split(',').map(s => `🔹 ${s.trim()}`).join('  ');
-      } else {
-          subLabel = `🔹 ${details}`;
+  // Sort ASC for proper running balance calculation
+  filteredStatementData.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  
+  const calculatedStatementData = filteredStatementData.map(txn => {
+      if (txn.isCredit) {
+         runningBalance += txn.amount;
+         summaryTotalCredit += txn.amount;
+      } else if (txn.isDebit) {
+         runningBalance -= txn.amount;
+         summaryTotalDebit += txn.amount;
       }
-    } else if (txn.type === TransactionType.EXPENSE) {
-      if (txn.metadata?.quantity && txn.metadata?.productId) {
-         mainLabel = txn.providerName || 'Stock Purchase';
-         if (!subLabel.includes('Stock Purchase')) subLabel = `${txn.metadata.quantity}x items - ${txn.description}`;
-      } else {
-         mainLabel = txn.providerName ? txn.providerName : 'Expense';
+      
+      let mainLabel = '';
+      let subLabel = txn.description;
+      
+      if (txn.type === TransactionType.PAYMENT_RECEIVED) {
+        mainLabel = txn.referenceId && orderLookup[txn.referenceId] ? orderLookup[txn.referenceId] : 'Customer Payment';
+        // Remove "Payment for:" and add emojis
+        let details = txn.description.replace(/^Payment for:\s*/i, '').replace(/^Payment for\s*/i, '');
+        if (details.includes(',')) {
+            subLabel = details.split(',').map(s => `🔹 ${s.trim()}`).join('  ');
+        } else {
+            subLabel = `🔹 ${details}`;
+        }
+      } else if (txn.type === TransactionType.EXPENSE) {
+        if (txn.metadata?.quantity && txn.metadata?.productId) {
+           mainLabel = txn.providerName || 'Stock Purchase';
+           if (!subLabel.includes('Stock Purchase')) subLabel = `${txn.metadata.quantity}x items - ${txn.description}`;
+        } else {
+           mainLabel = txn.providerName ? txn.providerName : 'Expense';
+        }
+      } else if (txn.type === TransactionType.DEPOSIT_TO_HQ) {
+        mainLabel = 'Deposit to HQ';
       }
-    } else if (txn.type === TransactionType.DEPOSIT_TO_HQ) {
-      mainLabel = 'Deposit to HQ';
-    }
 
-    return {
-      ...txn,
-      balanceSnapshot: runningBalance,
-      mainLabel,
-      subLabel,
-      isCredit,
-      isDebit
-    };
-  }).filter(txn => {
+      return {
+          ...txn,
+          balanceSnapshot: runningBalance,
+          mainLabel,
+          subLabel
+      };
+  });
+
+  // Sort DESC for Display
+  const displayStatementData = [...calculatedStatementData].reverse().filter(txn => {
       if (statementFilterType === 'CREDIT' && !txn.isCredit) return false;
       if (statementFilterType === 'DEBIT' && !txn.isDebit) return false;
       
@@ -739,8 +747,6 @@ const Collections = () => {
         formatDate(txn.date).includes(search)
       );
   });
-  
-  filteredStatementData = filteredStatementData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   
   const closingBalance = openingBalance + summaryTotalCredit - summaryTotalDebit;
 
@@ -770,8 +776,28 @@ const Collections = () => {
   }
 
   return (
-    <div className="p-4 md:p-6 pb-20 print:p-0 print:w-full">
-      {/* Top Header & Report (Hidden on print for better layout) */}
+    <div className="p-4 md:p-6 pb-20 print:p-0 print:w-full print:bg-white print:h-screen">
+      
+      {/* Print Styles Block */}
+      <style>{`
+        @media print {
+          @page { size: auto; margin: 5mm; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .no-print { display: none !important; }
+          .print-only { display: block !important; }
+          .print-header-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; border-bottom: 2px solid #334155; padding-bottom: 10px; }
+          .print-summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+          .print-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+          .print-table th { background-color: #f1f5f9; color: #334155; font-weight: bold; border-bottom: 1px solid #cbd5e1; padding: 4px; text-align: left; }
+          .print-table td { border-bottom: 1px solid #e2e8f0; padding: 4px; color: #1e293b; }
+          /* Clean description text */
+          .print-desc-main { font-weight: bold; font-size: 11px; }
+          .print-desc-sub { font-size: 9px; color: #64748b; }
+        }
+        .print-only { display: none; }
+      `}</style>
+
+      {/* Top Header & Report (Hidden on print) */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 print:hidden">
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-slate-800">{t('collectionsTitle')}</h2>
@@ -863,7 +889,8 @@ const Collections = () => {
       </div>
 
       {activeTab === 'pending' && (
-        <div className="space-y-4">
+        <div className="space-y-4 print:hidden">
+           {/* ... pending content ... */}
            <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-3 items-center">
               <div className="relative flex-1 min-w-[150px] w-full">
                 <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
@@ -910,8 +937,6 @@ const Collections = () => {
                <span>{t('paid')}: <span className="text-green-600 font-bold">{formatCurrency(unpaidSummary.paid)}</span></span>
                <span className="w-px h-3 bg-slate-300 hidden sm:block"></span>
                <span>{t('balance')}: <span className="text-red-600 font-bold">{formatCurrency(unpaidSummary.balance)}</span></span>
-               <span className="w-px h-3 bg-slate-300 hidden sm:block"></span>
-               <span>{t('quantity')}: <span className="text-slate-800 font-bold">{unpaidSummary.units}</span></span>
            </div>
 
            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -954,8 +979,6 @@ const Collections = () => {
                         {(groupOrders as Order[]).map(order => {
                           const balance = order.totalAmount - order.paidAmount;
                           const totalDiscount = order.items.reduce((s, i) => s + (i.discount || 0), 0);
-                          const grossTotal = order.totalAmount + totalDiscount;
-                          const effectiveDiscountPercent = grossTotal > 0 ? (totalDiscount / grossTotal) * 100 : 0;
                           
                           return (
                             <tr key={order.id} className="hover:bg-slate-50 transition-colors">
@@ -973,12 +996,6 @@ const Collections = () => {
                                        </div>
                                      </div>
                                    ))}
-                                   {totalDiscount > 0 && (
-                                     <div className="mt-1 pt-0.5 border-t border-slate-200 text-blue-600 font-medium flex justify-between bg-blue-50 px-1.5 py-0.5 rounded">
-                                        <span>Disc:</span>
-                                        <span>{formatCurrency(totalDiscount)} ({effectiveDiscountPercent.toFixed(1)}%)</span>
-                                     </div>
-                                   )}
                                 </div>
                               </td>
                               <td className="p-3 align-top">{formatCurrency(order.totalAmount)}</td>
@@ -994,14 +1011,12 @@ const Collections = () => {
                                     <button
                                         onClick={(e) => { e.stopPropagation(); handleViewOrder(order); }}
                                         className="p-1 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded transition-colors"
-                                        title={t('viewDetails')} // Note: Ensure key exists or fallback
                                     >
                                         <Eye size={14} />
                                     </button>
                                     <button
                                         onClick={(e) => { e.stopPropagation(); navigate(`/new-order?id=${order.id}`); }}
                                         className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                        title={t('edit')}
                                     >
                                         <Edit size={14} />
                                     </button>
@@ -1025,8 +1040,8 @@ const Collections = () => {
 
       {/* History, Deposits, Statement Tabs */}
       {activeTab === 'history' && (
-         <div className="space-y-4">
-           {/* ... search bars ... */}
+         <div className="space-y-4 print:hidden">
+           {/* ... history content ... */}
            <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-3 items-center">
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
@@ -1042,7 +1057,6 @@ const Collections = () => {
                  <input type="month" value={historyMonth} onChange={(e) => setHistoryMonth(e.target.value)} className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg" />
               </div>
            </div>
-           <div className="text-xs text-slate-500 font-medium">{t('totalRecords')}: {collectionHistory.length}</div>
            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
              <div className="overflow-x-auto">
                <table className="w-full text-left text-xs md:text-sm">
@@ -1077,14 +1091,12 @@ const Collections = () => {
                                    <button 
                                      onClick={() => handleEditHistoryPayment(txn)}
                                      className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-                                     title={t('edit')}
                                    >
                                        <Edit2 size={14}/>
                                    </button>
                                    <button 
                                      onClick={() => handleDeletePayment(txn.id)}
                                      className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
-                                     title={t('delete')}
                                    >
                                        <Trash2 size={14}/>
                                    </button>
@@ -1102,7 +1114,8 @@ const Collections = () => {
       )}
       
       {activeTab === 'deposits' && (
-         <div className="space-y-4">
+         <div className="space-y-4 print:hidden">
+           {/* ... deposits content ... */}
            <div className="flex justify-end">
               <button 
                 onClick={() => openDepositModal()}
@@ -1155,7 +1168,7 @@ const Collections = () => {
       )}
 
       {activeTab === 'statement' && (
-         <div className="space-y-4 print:space-y-0">
+         <div className="space-y-4 print:space-y-0 print:block">
              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-3 print:hidden">
                 {/* Filters */}
                 <div className="flex items-center gap-2 border-r border-slate-200 pr-3">
@@ -1190,30 +1203,54 @@ const Collections = () => {
                 </button>
              </div>
 
-             {/* Print Header - Visible only in print */}
-             <div className="hidden print:block mb-6 text-center pt-4">
-                <h1 className="text-2xl font-bold text-slate-900">EMAD CO. PHARMACEUTICAL</h1>
-                <h2 className="text-lg text-slate-700 mt-1">{t('cashStatementReport')}</h2>
-                <p className="text-sm text-slate-500 mt-1">
-                   {statementAccount} Account • {statementStart || 'Start'} to {statementEnd || 'Present'}
-                </p>
+             {/* PRINT HEADER SECTION */}
+             <div className="print-only mb-6">
+                <div className="print-header-grid">
+                   <div>
+                      <h1 className="text-xl font-bold uppercase text-slate-800">Emad Co. Pharmaceutical</h1>
+                      <p className="text-sm text-slate-500">Sales & Distribution</p>
+                   </div>
+                   <div className="text-right">
+                      <h2 className="text-lg font-bold text-slate-800">{t('cashStatementReport')}</h2>
+                      <p className="text-xs text-slate-600">{statementAccount === 'CASH' ? 'Cash Account' : statementAccount} • {statementStart ? formatDate(statementStart) : 'Start'} - {statementEnd ? formatDate(statementEnd) : 'Present'}</p>
+                   </div>
+                </div>
+
+                <div className="print-summary-grid text-center text-xs">
+                   <div className="border p-2">
+                      <div className="font-bold text-slate-500 uppercase">Opening Balance</div>
+                      <div className="font-bold text-lg text-slate-800">{formatCurrency(openingBalance)}</div>
+                   </div>
+                   <div className="border p-2 bg-slate-50">
+                      <div className="font-bold text-slate-500 uppercase">Total Credit (In)</div>
+                      <div className="font-bold text-lg text-green-700">{formatCurrency(summaryTotalCredit)}</div>
+                   </div>
+                   <div className="border p-2 bg-slate-50">
+                      <div className="font-bold text-slate-500 uppercase">Total Debit (Out)</div>
+                      <div className="font-bold text-lg text-red-700">{formatCurrency(summaryTotalDebit)}</div>
+                   </div>
+                   <div className="border p-2">
+                      <div className="font-bold text-slate-500 uppercase">Closing Balance</div>
+                      <div className="font-bold text-lg text-slate-900">{formatCurrency(closingBalance)}</div>
+                   </div>
+                </div>
              </div>
 
-             {/* Summary Box for Screen and Print */}
-             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 print:grid-cols-4 print:gap-2 print:mb-6">
-                <div className="p-3 bg-slate-50 rounded border border-slate-200 print:border-slate-300 print:bg-white">
+             {/* Screen Summary Box */}
+             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 print:hidden">
+                <div className="p-3 bg-slate-50 rounded border border-slate-200">
                    <p className="text-xs text-slate-500 uppercase font-bold">{t('openingBalance')}</p>
                    <p className="text-lg font-bold text-slate-700">{formatCurrency(openingBalance)}</p>
                 </div>
-                <div className="p-3 bg-green-50 rounded border border-green-100 print:bg-white print:border-slate-300">
+                <div className="p-3 bg-green-50 rounded border border-green-100">
                    <p className="text-xs text-green-700 uppercase font-bold">{t('totalCredits')}</p>
                    <p className="text-lg font-bold text-green-700">{formatCurrency(summaryTotalCredit)}</p>
                 </div>
-                <div className="p-3 bg-red-50 rounded border border-red-100 print:bg-white print:border-slate-300">
+                <div className="p-3 bg-red-50 rounded border border-red-100">
                    <p className="text-xs text-red-700 uppercase font-bold">{t('totalDebits')}</p>
                    <p className="text-lg font-bold text-red-700">{formatCurrency(summaryTotalDebit)}</p>
                 </div>
-                <div className="p-3 bg-slate-100 rounded border border-slate-200 print:bg-white print:border-black print:border-2">
+                <div className="p-3 bg-slate-100 rounded border border-slate-200">
                    <p className="text-xs text-slate-800 uppercase font-bold">{t('closingBalance')}</p>
                    <p className={`text-lg font-bold ${closingBalance >= 0 ? 'text-slate-900' : 'text-red-600'}`}>{formatCurrency(closingBalance)}</p>
                 </div>
@@ -1232,12 +1269,12 @@ const Collections = () => {
                    </div>
                 </div>
                 <div className="overflow-x-auto print:overflow-visible">
-                   <table className="w-full text-left text-xs print:text-[10px] print:w-full">
-                      <thead className="bg-slate-50 border-b border-slate-200 print:bg-white print:border-black print:border-b-2">
+                   <table className="w-full text-left text-xs print-table">
+                      <thead className="bg-slate-50 border-b border-slate-200">
                          <tr>
                             <th className="p-3 font-medium text-slate-600">{t('date')}</th>
                             <th className="p-3 font-medium text-slate-600">{t('refId')}</th>
-                            <th className="p-3 font-medium text-slate-600">{t('description')}</th>
+                            <th className="p-3 font-medium text-slate-600 w-1/3">{t('description')}</th>
                             <th className="p-3 font-medium text-slate-600 text-right text-green-700">{t('creditIn')}</th>
                             <th className="p-3 font-medium text-slate-600 text-right text-red-700">{t('debitOut')}</th>
                             <th className="p-3 font-medium text-slate-600 text-right">{t('balance')}</th>
@@ -1253,16 +1290,16 @@ const Collections = () => {
                             <td className="p-3 text-right text-slate-400">-</td>
                             <td className="p-3 text-right font-bold text-slate-600">{formatCurrency(openingBalance)}</td>
                          </tr>
-                         {filteredStatementData.length === 0 && (
+                         {displayStatementData.length === 0 && (
                             <tr><td colSpan={6} className="p-6 text-center text-slate-400">{t('noTransactionsFound')}</td></tr>
                          )}
-                         {filteredStatementData.map((txn, idx) => (
+                         {displayStatementData.map((txn, idx) => (
                             <tr key={txn.id} className="hover:bg-slate-50 print:hover:bg-transparent">
                                <td className="p-3 text-slate-600 whitespace-nowrap">{formatDate(txn.date)}</td>
                                <td className="p-3 font-mono text-[10px] text-slate-500">{txn.referenceId || '-'}</td>
                                <td className="p-3">
-                                  <div className="font-medium text-slate-800">{txn.mainLabel}</div>
-                                  <div className="text-[10px] text-slate-500 print:text-slate-600">{txn.subLabel}</div>
+                                  <div className="font-medium text-slate-800 print-desc-main">{txn.mainLabel}</div>
+                                  <div className="text-[10px] text-slate-500 print-desc-sub">{txn.subLabel}</div>
                                </td>
                                <td className="p-3 text-right font-medium text-green-600">
                                   {txn.isCredit ? formatCurrency(txn.amount) : '-'}
@@ -1278,6 +1315,11 @@ const Collections = () => {
                       </tbody>
                    </table>
                 </div>
+             </div>
+
+             {/* Print Footer */}
+             <div className="print-only mt-6 pt-4 border-t border-slate-300 text-center text-[9px] text-slate-500">
+                Printed on {new Date().toLocaleDateString()} • Emad Co. Pharmaceutical Sales Portal
              </div>
          </div>
       )}

@@ -74,7 +74,7 @@ const AppContent = () => {
   }
 
   return (
-    <div className="flex bg-slate-50 min-h-screen font-sans text-slate-900" dir={dir}>
+    <div className="flex bg-slate-50 h-screen overflow-hidden font-sans text-slate-900" dir={dir}>
       <Sidebar 
         user={user} 
         onLogout={handleLogout} 
@@ -84,7 +84,7 @@ const AppContent = () => {
       />
       
       <div 
-        className={`flex-1 flex flex-col transition-all duration-300 ${
+        className={`flex-1 flex flex-col transition-all duration-300 h-full ${
           isMobile 
             ? 'ml-0 w-full' 
             : (isSidebarCollapsed ? (dir === 'rtl' ? 'mr-16' : 'ml-16') : (dir === 'rtl' ? 'mr-60' : 'ml-60'))
@@ -92,7 +92,7 @@ const AppContent = () => {
       >
         {/* Mobile Header */}
         {isMobile && (
-          <div className="bg-slate-900 text-white p-4 flex justify-between items-center sticky top-0 z-30 shadow-md">
+          <div className="bg-slate-900 text-white p-3 flex justify-between items-center shrink-0 z-30 shadow-md">
              <div className="font-bold text-lg">Emad Co.</div>
              <button onClick={toggleSidebar} className="p-1">
                <Menu size={24} />
@@ -100,7 +100,7 @@ const AppContent = () => {
           </div>
         )}
 
-        <main className="flex-1 overflow-x-hidden">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden relative">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/new-order" element={<NewOrder />} />
@@ -116,9 +116,9 @@ const AppContent = () => {
           </Routes>
         </main>
         
-        <footer className="py-2 border-t border-slate-200 bg-slate-50 text-center print:hidden mt-auto flex justify-center items-center gap-2">
-           <p className="text-[10px] text-slate-400">
-             {t('salesPortal')} v2.0.090 • Developer Dr. Peter Ramsis • All rights reserved
+        <footer className="py-1 border-t border-slate-200 bg-slate-50 text-center print:hidden shrink-0 z-20 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+           <p className="text-[10px] text-slate-400 font-medium">
+             {t('salesPortal')} v2.0.090 • Emad Co. Pharmaceutical • All rights reserved
            </p>
         </footer>
       </div>

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { getFinancialStats, getOrders, getCustomers, getProducts } from '../utils/storage';
-import { Order, DashboardStats, Product } from '../types';
-import { DollarSign, TrendingUp, AlertCircle, Loader2, Wallet, Users, Package, Coins, Landmark, Layers, Calendar, BarChart3 } from 'lucide-react';
+import { getFinancialStats, getOrders, getCustomers, getProducts, getTransactions } from '../utils/storage';
+import { Order, DashboardStats, Product, TransactionType } from '../types';
+import { DollarSign, TrendingUp, AlertCircle, Loader2, Wallet, Users, Package, Coins, Landmark, Layers, Calendar, BarChart3, ArrowRightLeft } from 'lucide-react';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNavigate } from 'react-router-dom';
@@ -18,10 +18,9 @@ const Dashboard = () => {
   const [sumAllCapitals, setSumAllCapitals] = useState(0);
   
   // Table Data
-  const [monthlyData, setMonthlyData] = useState<any[]>([]);
   const [productStats, setProductStats] = useState<any[]>([]);
   const [rawOrders, setRawOrders] = useState<Order[]>([]);
-  const [rawProducts, setRawProducts] = useState<Product[]>([]);
+  const [analysisData, setAnalysisData] = useState<any[]>([]); // New Data Table
 
   useEffect(() => {
     loadDashboardData();
@@ -29,16 +28,16 @@ const Dashboard = () => {
 
   const loadDashboardData = async () => {
     setLoadingData(true);
-    const [fetchedStats, fetchedOrders, fetchedCustomers, fetchedProducts] = await Promise.all([
+    const [fetchedStats, fetchedOrders, fetchedCustomers, fetchedProducts, fetchedTransactions] = await Promise.all([
       getFinancialStats(),
       getOrders(),
       getCustomers(),
-      getProducts()
+      getProducts(),
+      getTransactions()
     ]);
     
     setStats(fetchedStats);
     setRawOrders(fetchedOrders);
-    setRawProducts(fetchedProducts);
 
     // Calculate Inventory Stats
     const savedSettings = localStorage.getItem('emad_inventory_settings');
@@ -57,41 +56,17 @@ const Dashboard = () => {
     const outstanding = fetchedStats.totalSales - fetchedStats.totalCollected;
     setSumAllCapitals(outstanding + fetchedStats.transferredToHQ + totalPharm);
 
-    // Prepare Table Data (Group by Month of Order)
-    const activeOrders = fetchedOrders.filter(o => !o.isDraft);
-    const monthMap: Record<string, { month: string, cashCollected: number, cashOutstanding: number, unitsCollected: number, unitsOutstanding: number }> = {};
-
     // Product Stats Map
     const prodStatsMap: Record<string, { id: string, name: string, sold: number, revenue: number, stock: number }> = {};
     fetchedProducts.forEach(p => {
         prodStatsMap[p.id] = { id: p.id, name: p.name, sold: 0, revenue: 0, stock: p.stock };
     });
 
-    activeOrders.forEach(order => {
-       const month = order.date.substring(0, 7); // YYYY-MM
-       if (!monthMap[month]) {
-          monthMap[month] = { 
-            month, 
-            cashCollected: 0, 
-            cashOutstanding: 0, 
-            unitsCollected: 0, 
-            unitsOutstanding: 0 
-          };
-       }
-       
-       // Cash
-       monthMap[month].cashCollected += order.paidAmount;
-       monthMap[month].cashOutstanding += (order.totalAmount - order.paidAmount);
+    const activeOrders = fetchedOrders.filter(o => !o.isDraft);
 
+    activeOrders.forEach(order => {
        // Items Logic
        order.items.forEach(item => {
-           const paid = item.paidQuantity || 0;
-           const totalQty = item.quantity;
-           const remaining = Math.max(0, totalQty - paid);
-           
-           monthMap[month].unitsCollected += paid;
-           monthMap[month].unitsOutstanding += remaining;
-
            // Product Stats Aggregation
            if (prodStatsMap[item.productId]) {
                prodStatsMap[item.productId].sold += item.quantity;
@@ -100,11 +75,36 @@ const Dashboard = () => {
        });
     });
 
-    const sortedMonths = Object.values(monthMap).sort((a, b) => b.month.localeCompare(a.month)); // Newest first
-    setMonthlyData(sortedMonths);
-
     const sortedProductStats = Object.values(prodStatsMap).sort((a, b) => b.revenue - a.revenue);
     setProductStats(sortedProductStats);
+
+    // Calculate Analysis Data (Sales vs Collected by Month) - Replacing old Cash Analysis
+    const analysisStats: Record<string, { sales: number; collected: number }> = {};
+    
+    // Process Sales (Orders)
+    activeOrders.forEach(order => {
+        const month = order.date.substring(0, 7);
+        if(!analysisStats[month]) analysisStats[month] = { sales: 0, collected: 0 };
+        analysisStats[month].sales += order.totalAmount;
+    });
+
+    // Process Collections (Transactions)
+    fetchedTransactions.forEach(txn => {
+        if(txn.type === TransactionType.PAYMENT_RECEIVED) {
+            const month = txn.date.substring(0, 7);
+            if(!analysisStats[month]) analysisStats[month] = { sales: 0, collected: 0 };
+            analysisStats[month].collected += txn.amount;
+        }
+    });
+
+    const calculatedAnalysisData = Object.keys(analysisStats).map(month => ({
+        month,
+        sales: analysisStats[month].sales,
+        collected: analysisStats[month].collected,
+        difference: analysisStats[month].sales - analysisStats[month].collected
+    })).sort((a, b) => b.month.localeCompare(a.month)); // Newest first
+
+    setAnalysisData(calculatedAnalysisData);
 
     setLoadingData(false);
   };
@@ -316,44 +316,36 @@ const Dashboard = () => {
          </div>
       </div>
 
-      {/* Monthly Cash Analysis Table */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-        <h3 className="text-base font-semibold mb-3 text-slate-800 border-b pb-2 flex items-center gap-2">
-           <DollarSign size={18} className="text-primary"/> Monthly Cash Analysis
-        </h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs md:text-sm">
-            <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
-              <tr>
-                <th className="p-3">Month</th>
-                <th className="p-3 text-right">Collected</th>
-                <th className="p-3 text-right">Outstanding</th>
-                <th className="p-3 text-right">Total Flow</th>
-                <th className="p-3 text-center">Collection %</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {monthlyData.map((row, idx) => {
-                 const total = row.cashCollected + row.cashOutstanding;
-                 const percent = total > 0 ? (row.cashCollected / total) * 100 : 0;
-                 return (
-                  <tr key={idx} className="hover:bg-slate-50">
-                    <td className="p-3 font-medium text-slate-700">{formatDate(row.month + '-01').substring(3)}</td>
-                    <td className="p-3 text-right text-green-600 font-medium">{formatCurrency(row.cashCollected)}</td>
-                    <td className="p-3 text-right text-red-500 font-medium">{formatCurrency(row.cashOutstanding)}</td>
-                    <td className="p-3 text-right text-slate-800 font-bold">{formatCurrency(total)}</td>
-                    <td className="p-3 text-center">
-                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${percent >= 80 ? 'bg-green-100 text-green-700' : percent >= 50 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
-                          {percent.toFixed(1)}%
-                       </span>
-                    </td>
-                  </tr>
-                );
-              })}
-              {monthlyData.length === 0 && <tr><td colSpan={5} className="p-4 text-center text-slate-400">No data available</td></tr>}
-            </tbody>
-          </table>
-        </div>
+      {/* NEW: Performance Data Table (Replaces Monthly Cash Analysis) */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+             <h3 className="font-bold text-slate-800 mb-3 text-base border-b pb-2 flex items-center gap-2">
+               <ArrowRightLeft size={18} className="text-primary"/> {t('dataTable')}
+             </h3>
+             <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                   <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                         <th className="p-3 font-medium text-slate-600">{t('month')}</th>
+                         <th className="p-3 font-medium text-slate-600 text-right">{t('sales')}</th>
+                         <th className="p-3 font-medium text-slate-600 text-right">{t('collected')}</th>
+                         <th className="p-3 font-medium text-slate-600 text-right">{t('difference')}</th>
+                      </tr>
+                   </thead>
+                   <tbody className="divide-y divide-slate-100">
+                      {analysisData.map(row => (
+                         <tr key={row.month} className="hover:bg-slate-50">
+                            <td className="p-3 font-medium text-slate-800">{formatDate(row.month + '-01').substring(3)}</td>
+                            <td className="p-3 text-right text-slate-600 font-medium">{formatCurrency(row.sales)}</td>
+                            <td className="p-3 text-right text-green-600 font-medium">{formatCurrency(row.collected)}</td>
+                            <td className={`p-3 text-right font-bold ${row.difference > 0 ? 'text-red-500' : 'text-blue-500'}`}>
+                               {formatCurrency(row.difference)}
+                            </td>
+                         </tr>
+                      ))}
+                      {analysisData.length === 0 && <tr><td colSpan={4} className="p-6 text-center text-slate-400">No data available</td></tr>}
+                   </tbody>
+                </table>
+             </div>
       </div>
 
     </div>

@@ -618,8 +618,21 @@ const Collections = () => {
   let statementTxns = allTxnsForStatement;
   let openingBalance = 0;
 
+  // Helper to normalize date boundaries
+  const getStartOfDay = (dateStr: string) => {
+    const d = new Date(dateStr);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  };
+  
+  const getEndOfDay = (dateStr: string) => {
+    const d = new Date(dateStr);
+    d.setHours(23, 59, 59, 999);
+    return d.getTime();
+  };
+
   if (statementStart) {
-    const start = new Date(statementStart).getTime();
+    const start = getStartOfDay(statementStart);
     const preTxns = allTxnsForStatement.filter(t => new Date(t.date).getTime() < start);
     
     preTxns.forEach(t => {
@@ -636,11 +649,12 @@ const Collections = () => {
     statementTxns = allTxnsForStatement.filter(t => {
        const d = new Date(t.date).getTime();
        let matchEnd = true;
-       if (statementEnd) matchEnd = d <= new Date(statementEnd).getTime() + 86400000;
+       // Strict end of day comparison
+       if (statementEnd) matchEnd = d <= getEndOfDay(statementEnd);
        return d >= start && matchEnd;
     });
   } else if (statementEnd) {
-     statementTxns = allTxnsForStatement.filter(t => new Date(t.date).getTime() <= new Date(statementEnd).getTime());
+     statementTxns = allTxnsForStatement.filter(t => new Date(t.date).getTime() <= getEndOfDay(statementEnd));
   }
 
   let runningBalance = openingBalance;
@@ -686,6 +700,14 @@ const Collections = () => {
     
     if (txn.type === TransactionType.PAYMENT_RECEIVED) {
       mainLabel = txn.referenceId && orderLookup[txn.referenceId] ? orderLookup[txn.referenceId] : 'Customer Payment';
+      // Clean up description
+      let details = txn.description.replace(/^Payment for:\s*/i, '').replace(/^Payment for\s*/i, '');
+      // Format details with emojis
+      if (details.includes(',')) {
+          subLabel = details.split(',').map(s => `🔹 ${s.trim()}`).join('  ');
+      } else {
+          subLabel = `🔹 ${details}`;
+      }
     } else if (txn.type === TransactionType.EXPENSE) {
       if (txn.metadata?.quantity && txn.metadata?.productId) {
          mainLabel = txn.providerName || 'Stock Purchase';
@@ -748,8 +770,8 @@ const Collections = () => {
   }
 
   return (
-    <div className="p-4 md:p-6 pb-20">
-      {/* Top Header & Report */}
+    <div className="p-4 md:p-6 pb-20 print:p-0 print:w-full">
+      {/* Top Header & Report (Hidden on print for better layout) */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 print:hidden">
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-slate-800">{t('collectionsTitle')}</h2>
@@ -1133,8 +1155,8 @@ const Collections = () => {
       )}
 
       {activeTab === 'statement' && (
-         <div className="space-y-4">
-             <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-3">
+         <div className="space-y-4 print:space-y-0">
+             <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-3 print:hidden">
                 {/* Filters */}
                 <div className="flex items-center gap-2 border-r border-slate-200 pr-3">
                    <select 
@@ -1168,9 +1190,38 @@ const Collections = () => {
                 </button>
              </div>
 
+             {/* Print Header - Visible only in print */}
+             <div className="hidden print:block mb-6 text-center pt-4">
+                <h1 className="text-2xl font-bold text-slate-900">EMAD CO. PHARMACEUTICAL</h1>
+                <h2 className="text-lg text-slate-700 mt-1">{t('cashStatementReport')}</h2>
+                <p className="text-sm text-slate-500 mt-1">
+                   {statementAccount} Account • {statementStart || 'Start'} to {statementEnd || 'Present'}
+                </p>
+             </div>
+
+             {/* Summary Box for Screen and Print */}
+             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 print:grid-cols-4 print:gap-2 print:mb-6">
+                <div className="p-3 bg-slate-50 rounded border border-slate-200 print:border-slate-300 print:bg-white">
+                   <p className="text-xs text-slate-500 uppercase font-bold">{t('openingBalance')}</p>
+                   <p className="text-lg font-bold text-slate-700">{formatCurrency(openingBalance)}</p>
+                </div>
+                <div className="p-3 bg-green-50 rounded border border-green-100 print:bg-white print:border-slate-300">
+                   <p className="text-xs text-green-700 uppercase font-bold">{t('totalCredits')}</p>
+                   <p className="text-lg font-bold text-green-700">{formatCurrency(summaryTotalCredit)}</p>
+                </div>
+                <div className="p-3 bg-red-50 rounded border border-red-100 print:bg-white print:border-slate-300">
+                   <p className="text-xs text-red-700 uppercase font-bold">{t('totalDebits')}</p>
+                   <p className="text-lg font-bold text-red-700">{formatCurrency(summaryTotalDebit)}</p>
+                </div>
+                <div className="p-3 bg-slate-100 rounded border border-slate-200 print:bg-white print:border-black print:border-2">
+                   <p className="text-xs text-slate-800 uppercase font-bold">{t('closingBalance')}</p>
+                   <p className={`text-lg font-bold ${closingBalance >= 0 ? 'text-slate-900' : 'text-red-600'}`}>{formatCurrency(closingBalance)}</p>
+                </div>
+             </div>
+
              {/* Statement Table */}
-             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden print:shadow-none print:border-none">
-                <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center print:bg-white print:border-b-2 print:border-black">
+             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden print:shadow-none print:border-none print:w-full">
+                <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center print:hidden">
                    <div>
                       <h3 className="font-bold text-lg text-slate-800">{t('cashStatementReport')}</h3>
                       <p className="text-xs text-slate-500">{statementAccount} Account • {statementStart || 'Start'} to {statementEnd || 'Present'}</p>
@@ -1180,9 +1231,9 @@ const Collections = () => {
                       <p className={`text-xl font-bold ${closingBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(closingBalance)}</p>
                    </div>
                 </div>
-                <div className="overflow-x-auto">
-                   <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-50 border-b border-slate-200">
+                <div className="overflow-x-auto print:overflow-visible">
+                   <table className="w-full text-left text-xs print:text-[10px] print:w-full">
+                      <thead className="bg-slate-50 border-b border-slate-200 print:bg-white print:border-black print:border-b-2">
                          <tr>
                             <th className="p-3 font-medium text-slate-600">{t('date')}</th>
                             <th className="p-3 font-medium text-slate-600">{t('refId')}</th>
@@ -1192,9 +1243,9 @@ const Collections = () => {
                             <th className="p-3 font-medium text-slate-600 text-right">{t('balance')}</th>
                          </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100">
+                      <tbody className="divide-y divide-slate-100 print:divide-slate-200">
                          {/* Opening Balance Row */}
-                         <tr className="bg-slate-50/50 italic">
+                         <tr className="bg-slate-50/50 italic print:bg-transparent">
                             <td className="p-3 text-slate-500">{statementStart}</td>
                             <td className="p-3 text-slate-500">-</td>
                             <td className="p-3 text-slate-500">{t('openingBalance')}</td>
@@ -1206,12 +1257,12 @@ const Collections = () => {
                             <tr><td colSpan={6} className="p-6 text-center text-slate-400">{t('noTransactionsFound')}</td></tr>
                          )}
                          {filteredStatementData.map((txn, idx) => (
-                            <tr key={txn.id} className="hover:bg-slate-50">
+                            <tr key={txn.id} className="hover:bg-slate-50 print:hover:bg-transparent">
                                <td className="p-3 text-slate-600 whitespace-nowrap">{formatDate(txn.date)}</td>
                                <td className="p-3 font-mono text-[10px] text-slate-500">{txn.referenceId || '-'}</td>
                                <td className="p-3">
                                   <div className="font-medium text-slate-800">{txn.mainLabel}</div>
-                                  <div className="text-[10px] text-slate-500">{txn.subLabel}</div>
+                                  <div className="text-[10px] text-slate-500 print:text-slate-600">{txn.subLabel}</div>
                                </td>
                                <td className="p-3 text-right font-medium text-green-600">
                                   {txn.isCredit ? formatCurrency(txn.amount) : '-'}

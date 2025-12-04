@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { getFinancialStats, getOrders, getCustomers, getProducts, getTransactions } from '../utils/storage';
-import { Order, DashboardStats, Product, TransactionType } from '../types';
-import { DollarSign, TrendingUp, AlertCircle, Loader2, Wallet, Users, Package, Coins, Landmark, Layers, Calendar, BarChart3, ArrowRightLeft } from 'lucide-react';
+import { Order, DashboardStats, Product, TransactionType, Transaction } from '../types';
+import { DollarSign, TrendingUp, AlertCircle, Loader2, Wallet, Users, Package, Coins, Landmark, Layers, Calendar, BarChart3, ArrowRightLeft, CheckCircle2 } from 'lucide-react';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNavigate } from 'react-router-dom';
@@ -20,6 +20,8 @@ const Dashboard = () => {
   // Table Data
   const [productStats, setProductStats] = useState<any[]>([]);
   const [rawOrders, setRawOrders] = useState<Order[]>([]);
+  const [rawTransactions, setRawTransactions] = useState<Transaction[]>([]);
+  const [rawProducts, setRawProducts] = useState<Product[]>([]);
   const [analysisData, setAnalysisData] = useState<any[]>([]); // New Data Table
 
   useEffect(() => {
@@ -38,6 +40,8 @@ const Dashboard = () => {
     
     setStats(fetchedStats);
     setRawOrders(fetchedOrders);
+    setRawTransactions(fetchedTransactions);
+    setRawProducts(fetchedProducts);
 
     // Calculate Inventory Stats
     const savedSettings = localStorage.getItem('emad_inventory_settings');
@@ -109,7 +113,7 @@ const Dashboard = () => {
     setLoadingData(false);
   };
   
-  // Calculate Pivot Table for Units
+  // Calculate Pivot Table for SOLD Units (Invoices)
   const pivotData = useMemo(() => {
     const activeOrders = rawOrders.filter(o => !o.isDraft);
     const pData: Record<string, { name: string, total: number, months: Record<string, number> }> = {};
@@ -147,6 +151,79 @@ const Dashboard = () => {
 
     return { months, rows, monthTotals };
   }, [rawOrders]);
+
+
+  // Calculate Pivot Table for COLLECTED Units (Transactions)
+  const collectedPivotData = useMemo(() => {
+    const pData: Record<string, { name: string, total: number, months: Record<string, number> }> = {};
+    const monthsSet = new Set<string>();
+    const monthTotals: Record<string, number> = {};
+
+    // Helper map for legacy description parsing (Name -> ID)
+    const nameToIdMap: Record<string, string> = {};
+    rawProducts.forEach(p => nameToIdMap[p.name] = p.id);
+    const idToNameMap: Record<string, string> = {};
+    rawProducts.forEach(p => idToNameMap[p.id] = p.name);
+
+    rawTransactions.forEach(txn => {
+       if (txn.type !== TransactionType.PAYMENT_RECEIVED) return;
+       
+       const month = txn.date.substring(0, 7);
+       monthsSet.add(month);
+
+       const itemsCollected: { productId: string, quantity: number }[] = [];
+
+       // 1. Check Metadata (New System)
+       if (txn.metadata?.paidItems && Array.isArray(txn.metadata.paidItems)) {
+           txn.metadata.paidItems.forEach((pi: any) => {
+               itemsCollected.push({ productId: pi.productId, quantity: pi.quantity });
+           });
+       } 
+       // 2. Parse Description (Legacy System)
+       else if (txn.description.startsWith('Payment for:')) {
+           const details = txn.description.replace(/^Payment for:\s*/i, '');
+           const parts = details.split(', ');
+           parts.forEach(part => {
+               // Regex to match "5x Product Name"
+               const match = part.match(/^(\d+)x (.+)$/);
+               if (match) {
+                   const qty = parseInt(match[1]);
+                   const name = match[2].trim();
+                   const pid = nameToIdMap[name] || `LEGACY-${name}`; // Fallback if name not found in current products
+                   // If legacy, we need to ensure name map has it for display
+                   if (!idToNameMap[pid]) idToNameMap[pid] = name;
+                   
+                   itemsCollected.push({ productId: pid, quantity: qty });
+               }
+           });
+       }
+
+       // Aggregate
+       itemsCollected.forEach(item => {
+           if (!pData[item.productId]) {
+               pData[item.productId] = {
+                   name: idToNameMap[item.productId] || 'Unknown Product',
+                   total: 0,
+                   months: {}
+               };
+           }
+           if (!pData[item.productId].months[month]) {
+               pData[item.productId].months[month] = 0;
+           }
+           if (!monthTotals[month]) monthTotals[month] = 0;
+
+           pData[item.productId].months[month] += item.quantity;
+           pData[item.productId].total += item.quantity;
+           monthTotals[month] += item.quantity;
+       });
+    });
+
+    const months = Array.from(monthsSet).sort().reverse();
+    const rows = Object.values(pData).sort((a, b) => b.total - a.total);
+
+    return { months, rows, monthTotals };
+  }, [rawTransactions, rawProducts]);
+
 
   if (loadingData || !stats) {
     return (
@@ -262,10 +339,10 @@ const Dashboard = () => {
          </div>
       </div>
 
-      {/* Monthly Units Analysis (Pivot Table) */}
+      {/* Monthly SOLD Units Analysis (Invoices) */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 overflow-hidden">
          <h3 className="text-base font-semibold mb-3 text-slate-800 border-b pb-2 flex items-center gap-2">
-            <Calendar size={18} className="text-primary"/> Monthly Units Analysis (Pivot)
+            <Calendar size={18} className="text-primary"/> Monthly Sold Units (Invoices)
          </h3>
          <div className="overflow-x-auto">
             <table className="w-full text-left text-xs whitespace-nowrap">
@@ -316,7 +393,61 @@ const Dashboard = () => {
          </div>
       </div>
 
-      {/* NEW: Performance Data Table (Replaces Monthly Cash Analysis) */}
+       {/* Monthly COLLECTED Units Analysis (Cash) */}
+       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+         <h3 className="text-base font-semibold mb-3 text-slate-800 border-b pb-2 flex items-center gap-2">
+            <CheckCircle2 size={18} className="text-emerald-600"/> Monthly Collected Units (Analysis)
+         </h3>
+         <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs whitespace-nowrap">
+               <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                  <tr>
+                     <th className="p-3 min-w-[150px] sticky left-0 bg-slate-50 z-10 border-r border-slate-200">Product \ Month</th>
+                     {collectedPivotData.months.map(m => (
+                        <th key={m} className="p-3 text-center min-w-[80px]">{formatDate(m + '-01').substring(3)}</th>
+                     ))}
+                     <th className="p-3 text-center min-w-[80px] bg-slate-100 font-extrabold text-slate-800 border-l border-slate-200">TOTAL</th>
+                  </tr>
+               </thead>
+               <tbody className="divide-y divide-slate-100">
+                  {collectedPivotData.rows.length === 0 ? (
+                      <tr><td colSpan={collectedPivotData.months.length + 2} className="p-4 text-center text-slate-400">No collection data available</td></tr>
+                  ) : (
+                      <>
+                        {collectedPivotData.rows.map((row, idx) => (
+                           <tr key={idx} className="hover:bg-slate-50">
+                              <td className="p-3 font-medium text-slate-700 sticky left-0 bg-white z-10 border-r border-slate-200">{row.name}</td>
+                              {collectedPivotData.months.map(m => {
+                                 const val = row.months[m] || 0;
+                                 return (
+                                   <td key={m} className={`p-3 text-center ${val > 0 ? 'text-emerald-600 font-bold' : 'text-slate-300'}`}>
+                                      {val > 0 ? val : '-'}
+                                   </td>
+                                 );
+                              })}
+                              <td className="p-3 text-center font-bold text-slate-900 bg-slate-50 border-l border-slate-200">{row.total}</td>
+                           </tr>
+                        ))}
+                        {/* Column Totals */}
+                        <tr className="bg-slate-100 font-bold border-t-2 border-slate-200">
+                           <td className="p-3 text-slate-800 sticky left-0 bg-slate-100 z-10 border-r border-slate-200">MONTHLY TOTAL</td>
+                           {collectedPivotData.months.map(m => (
+                              <td key={m} className="p-3 text-center text-slate-800">
+                                 {collectedPivotData.monthTotals[m] || 0}
+                              </td>
+                           ))}
+                           <td className="p-3 text-center text-slate-900 bg-slate-200 border-l border-slate-300">
+                              {collectedPivotData.rows.reduce((s, r) => s + r.total, 0)}
+                           </td>
+                        </tr>
+                      </>
+                  )}
+               </tbody>
+            </table>
+         </div>
+      </div>
+
+      {/* Performance Data Table (Sales vs Collected) */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 overflow-hidden">
              <h3 className="font-bold text-slate-800 mb-3 text-base border-b pb-2 flex items-center gap-2">
                <ArrowRightLeft size={18} className="text-primary"/> {t('dataTable')}

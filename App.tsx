@@ -118,7 +118,7 @@ const AppContent = () => {
         
         <footer className="py-1 border-t border-slate-200 bg-slate-50 text-center print:hidden shrink-0 z-20 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
            <p className="text-[10px] text-slate-400 font-medium">
-             {t('salesPortal')} v2.0.092 • Emad Co. Pharmaceutical • All rights reserved
+             {t('salesPortal')} v2.0.093 • Emad Co. Pharmaceutical • All rights reserved
            </p>
         </footer>
       </div>
